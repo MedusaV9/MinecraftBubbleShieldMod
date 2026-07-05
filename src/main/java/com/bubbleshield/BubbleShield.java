@@ -1,5 +1,7 @@
 package com.bubbleshield;
 
+import com.bubbleshield.net.ServerNet;
+import com.bubbleshield.net.ShieldPayloads;
 import com.bubbleshield.registry.ModBlockEntities;
 import com.bubbleshield.registry.ModBlocks;
 import com.bubbleshield.registry.ModItems;
@@ -23,6 +25,9 @@ public class BubbleShield implements ModInitializer {
 		ModBlocks.init();
 		ModItems.init();
 		ModBlockEntities.init();
+
+		ShieldPayloads.registerTypes();
+		ServerNet.register();
 	}
 
 	public static Identifier id(String path) {

@@ -1,5 +1,6 @@
 package com.bubbleshield.block;
 
+import com.bubbleshield.net.ServerNet;
 import com.bubbleshield.registry.ModBlockEntities;
 import com.bubbleshield.shield.FuelMap;
 import com.bubbleshield.shield.ShieldLogic;
@@ -15,6 +16,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -101,6 +103,27 @@ public class BubbleShieldBlockEntity extends BlockEntity {
 	}
 
 	/**
+	 * Applies validated settings from the client: diameter (converted to radius) and effect id.
+	 */
+	public void setSettings(int diameter, int effectId) {
+		this.shieldState.targetRadius = diameter / 2.0F;
+		this.shieldState.effectId = effectId;
+		this.markUpdated();
+	}
+
+	/**
+	 * Activates (subject to fuel/cooldown) or deactivates the shield.
+	 */
+	public void setActive(boolean active) {
+		if (active) {
+			this.tryActivate();
+		} else if (this.shieldState.active) {
+			this.shieldState.active = false;
+			this.markUpdated();
+		}
+	}
+
+	/**
 	 * Adds a player name to the whitelist, also recording the UUID if the player is online.
 	 */
 	public void whitelistAdd(MinecraftServer server, String name) {
@@ -124,6 +147,36 @@ public class BubbleShieldBlockEntity extends BlockEntity {
 			BlockState state = this.getBlockState();
 			this.level.sendBlockUpdated(this.worldPosition, state, state, Block.UPDATE_NEIGHBORS | Block.UPDATE_CLIENTS);
 		}
+
+		if (this.level instanceof ServerLevel) {
+			ServerNet.syncShield(this);
+		}
+	}
+
+	@Override
+	public void setLevel(Level level) {
+		super.setLevel(level);
+		if (level instanceof ServerLevel) {
+			ServerNet.trackShield(this);
+		}
+	}
+
+	@Override
+	public void clearRemoved() {
+		super.clearRemoved();
+		if (this.level instanceof ServerLevel) {
+			ServerNet.trackShield(this);
+		}
+	}
+
+	@Override
+	public void setRemoved() {
+		if (this.level instanceof ServerLevel) {
+			ServerNet.untrackShield(this);
+			ServerNet.broadcastRemove(this);
+		}
+
+		super.setRemoved();
 	}
 
 	@Override
