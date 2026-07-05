@@ -20,6 +20,9 @@
 		],
 		"client": [
 			"com.bubbleshield.client.BubbleShieldClient"
+		],
+		"fabric-gametest": [
+			"com.bubbleshield.gametest.ShieldGameTests"
 		]
 	},
 	"mixins": [

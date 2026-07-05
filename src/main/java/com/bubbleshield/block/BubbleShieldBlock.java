@@ -1,5 +1,6 @@
 package com.bubbleshield.block;
 
+import com.bubbleshield.registry.ModBlockEntities;
 import com.mojang.serialization.MapCodec;
 
 import net.minecraft.core.BlockPos;
@@ -32,7 +33,10 @@ public class BubbleShieldBlock extends BaseEntityBlock {
 
 	@Override
 	public <T extends BlockEntity> @Nullable BlockEntityTicker<T> getTicker(Level level, BlockState blockState, BlockEntityType<T> type) {
-		// No shield logic yet.
-		return null;
+		if (level.isClientSide()) {
+			return null;
+		}
+
+		return createTickerHelper(type, ModBlockEntities.BUBBLE_SHIELD_PROJECTOR, (lvl, pos, st, be) -> be.serverTick());
 	}
 }
