@@ -51,7 +51,9 @@ public final class ShieldRenderer {
 	}
 
 	private static void collectSubmits(LevelRenderContext context) {
-		if (ClientShieldManager.shields().isEmpty()) {
+		// Only shields in the camera's current dimension; other dimensions would be ghosts.
+		List<ClientShieldManager.ClientShield> shields = ClientShieldManager.currentDimensionShields();
+		if (shields.isEmpty()) {
 			return;
 		}
 
@@ -65,7 +67,7 @@ public final class ShieldRenderer {
 		Vec3 camera = cameraPos;
 		float seconds = timeSeconds;
 
-		for (ClientShieldManager.ClientShield shield : ClientShieldManager.shields().values()) {
+		for (ClientShieldManager.ClientShield shield : shields) {
 			float radius = shield.currentRadius();
 			if (!shield.active() || radius < MIN_VISIBLE_RADIUS) {
 				continue;
@@ -94,17 +96,18 @@ public final class ShieldRenderer {
 	}
 
 	/**
-	 * Positions (relative to the shield center) of whitelisted players close enough to
-	 * the surface that it should dissolve around them.
+	 * Positions (relative to the shield center) of whitelisted players and the shield's
+	 * owner close enough to the surface that it should dissolve around them.
 	 */
 	private static List<Vec3> collectDissolveCenters(ClientLevel level, ClientShieldManager.ClientShield shield, Vec3 center, float radius) {
-		if (shield.whitelist().isEmpty()) {
+		if (shield.whitelist().isEmpty() && shield.ownerUuid().isEmpty()) {
 			return List.of();
 		}
 
 		List<Vec3> centers = new ArrayList<>();
 		for (AbstractClientPlayer player : level.players()) {
-			if (!shield.whitelist().contains(player.getUUID())) {
+			boolean isOwner = shield.ownerUuid().map(player.getUUID()::equals).orElse(false);
+			if (!isOwner && !shield.whitelist().contains(player.getUUID())) {
 				continue;
 			}
 

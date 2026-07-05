@@ -12,6 +12,8 @@ import com.bubbleshield.block.BubbleShieldBlockEntity;
 import com.bubbleshield.shield.ShieldLogic;
 import com.bubbleshield.shield.ShieldState;
 
+import net.fabricmc.fabric.api.entity.event.v1.ServerEntityLevelChangeEvents;
+import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLevelEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
@@ -94,24 +96,36 @@ public final class ServerNet {
 
 		ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
 			backfillWhitelistUuid(handler.player);
-
-			ServerLevel level = handler.player.level();
-			Set<BubbleShieldBlockEntity> shields = LOADED_SHIELDS.get(level);
-			if (shields == null) {
-				return;
-			}
-
-			for (BubbleShieldBlockEntity shield : shields) {
-				if (shield.getShieldState().active) {
-					ServerPlayNetworking.send(handler.player, syncPayload(shield));
-				}
-			}
+			syncLevelShields(handler.player, handler.player.level());
 		});
+
+		// The client clears its shield replica whenever it gets a new ClientLevel, so every
+		// server-side path that moves a player to a (new) level must re-send the snapshots.
+		ServerEntityLevelChangeEvents.AFTER_PLAYER_CHANGE_LEVEL.register(
+			(player, origin, destination) -> syncLevelShields(player, destination));
+		ServerPlayerEvents.AFTER_RESPAWN.register(
+			(oldPlayer, newPlayer, alive) -> syncLevelShields(newPlayer, newPlayer.level()));
 
 		// LOADED_SHIELDS holds ServerLevel keys; clear on unload/stop so integrated-server
 		// restarts do not leak levels or stale block entities.
 		ServerLevelEvents.UNLOAD.register((server, level) -> LOADED_SHIELDS.remove(level));
 		ServerLifecycleEvents.SERVER_STOPPED.register(server -> LOADED_SHIELDS.clear());
+	}
+
+	/**
+	 * Sends the given player a snapshot of every loaded shield in {@code level}. Inactive
+	 * shields are included on purpose: their whitelist backs the owner GUI after a relog,
+	 * and the renderer/screen effects already skip shields whose active flag is false.
+	 */
+	private static void syncLevelShields(ServerPlayer player, ServerLevel level) {
+		Set<BubbleShieldBlockEntity> shields = LOADED_SHIELDS.get(level);
+		if (shields == null) {
+			return;
+		}
+
+		for (BubbleShieldBlockEntity shield : shields) {
+			ServerPlayNetworking.send(player, syncPayload(shield, level));
+		}
 	}
 
 	/**
@@ -152,7 +166,7 @@ public final class ServerNet {
 			return;
 		}
 
-		ShieldPayloads.ShieldSyncS2C payload = syncPayload(shield);
+		ShieldPayloads.ShieldSyncS2C payload = syncPayload(shield, level);
 		for (ServerPlayer player : PlayerLookup.level(level)) {
 			ServerPlayNetworking.send(player, payload);
 		}
@@ -164,7 +178,7 @@ public final class ServerNet {
 			return;
 		}
 
-		ShieldPayloads.ShieldRemoveS2C payload = new ShieldPayloads.ShieldRemoveS2C(shield.getBlockPos());
+		ShieldPayloads.ShieldRemoveS2C payload = new ShieldPayloads.ShieldRemoveS2C(shield.getBlockPos(), level.dimension());
 		for (ServerPlayer player : PlayerLookup.level(level)) {
 			ServerPlayNetworking.send(player, payload);
 		}
@@ -190,13 +204,13 @@ public final class ServerNet {
 		}
 	}
 
-	private static ShieldPayloads.ShieldSyncS2C syncPayload(BubbleShieldBlockEntity shield) {
+	private static ShieldPayloads.ShieldSyncS2C syncPayload(BubbleShieldBlockEntity shield, ServerLevel level) {
 		ShieldState state = shield.getShieldState();
-		long gameTime = shield.getLevel() != null ? shield.getLevel().getGameTime() : 0L;
-		long cooldownTicks = Math.max(0L, state.cooldownUntil - gameTime);
+		long cooldownTicks = Math.max(0L, state.cooldownUntil - level.getGameTime());
 		float healthFrac = state.maxHealth > 0.0F ? state.health / state.maxHealth : 0.0F;
 		return new ShieldPayloads.ShieldSyncS2C(
 			shield.getBlockPos(),
+			level.dimension(),
 			state.active,
 			state.effectId,
 			state.targetRadius,

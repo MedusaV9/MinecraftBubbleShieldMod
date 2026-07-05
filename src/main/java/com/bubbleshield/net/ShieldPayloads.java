@@ -10,10 +10,13 @@ import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.UUIDUtil;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
 
 /**
  * Custom payloads for shield settings (C2S) and client-side shield replication (S2C).
@@ -74,10 +77,12 @@ public final class ShieldPayloads {
 	 * Full shield snapshot for the client-side replica.
 	 *
 	 * <p>{@link StreamCodec#composite} supports up to 12 fields in this Minecraft version,
-	 * so the 10 fields fit in a single composite.
+	 * so the 11 fields fit in a single composite. The dimension travels with the snapshot
+	 * so clients never render "ghost" shields synced from another dimension.
 	 */
 	public record ShieldSyncS2C(
 		BlockPos pos,
+		ResourceKey<Level> dimension,
 		boolean active,
 		int effectId,
 		float targetRadius,
@@ -91,6 +96,7 @@ public final class ShieldPayloads {
 		public static final CustomPacketPayload.Type<ShieldSyncS2C> TYPE = new CustomPacketPayload.Type<>(BubbleShield.id("shield_sync"));
 		public static final StreamCodec<RegistryFriendlyByteBuf, ShieldSyncS2C> CODEC = StreamCodec.composite(
 			BlockPos.STREAM_CODEC, ShieldSyncS2C::pos,
+			ResourceKey.streamCodec(Registries.DIMENSION), ShieldSyncS2C::dimension,
 			ByteBufCodecs.BOOL, ShieldSyncS2C::active,
 			ByteBufCodecs.VAR_INT, ShieldSyncS2C::effectId,
 			ByteBufCodecs.FLOAT, ShieldSyncS2C::targetRadius,
@@ -109,11 +115,12 @@ public final class ShieldPayloads {
 		}
 	}
 
-	/** Tells clients that the shield at {@code pos} no longer exists. */
-	public record ShieldRemoveS2C(BlockPos pos) implements CustomPacketPayload {
+	/** Tells clients that the shield at {@code pos} in {@code dimension} no longer exists. */
+	public record ShieldRemoveS2C(BlockPos pos, ResourceKey<Level> dimension) implements CustomPacketPayload {
 		public static final CustomPacketPayload.Type<ShieldRemoveS2C> TYPE = new CustomPacketPayload.Type<>(BubbleShield.id("shield_remove"));
 		public static final StreamCodec<RegistryFriendlyByteBuf, ShieldRemoveS2C> CODEC = StreamCodec.composite(
 			BlockPos.STREAM_CODEC, ShieldRemoveS2C::pos,
+			ResourceKey.streamCodec(Registries.DIMENSION), ShieldRemoveS2C::dimension,
 			ShieldRemoveS2C::new
 		);
 

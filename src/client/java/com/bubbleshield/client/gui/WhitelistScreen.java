@@ -67,7 +67,7 @@ public class WhitelistScreen extends Screen {
 	}
 
 	private List<String> whitelistNames() {
-		ClientShieldManager.ClientShield shield = ClientShieldManager.shields().get(this.pos);
+		ClientShieldManager.ClientShield shield = ClientShieldManager.get(this.pos);
 		return shield != null ? shield.whitelistNames() : List.of();
 	}
 

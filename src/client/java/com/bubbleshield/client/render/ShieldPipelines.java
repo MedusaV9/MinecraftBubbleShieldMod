@@ -11,6 +11,7 @@ import com.mojang.blaze3d.pipeline.BlendFunction;
 import com.mojang.blaze3d.pipeline.ColorTargetState;
 import com.mojang.blaze3d.pipeline.DepthStencilState;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.platform.CompareOp;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 
 import net.minecraft.client.renderer.BindGroupLayouts;
@@ -22,10 +23,11 @@ import net.minecraft.client.renderer.rendertype.RenderType;
  * One {@link RenderPipeline} + {@link RenderType} per {@link SurfaceTemplate}.
  *
  * <p>The snippet is modeled on vanilla's {@code RenderPipelines.END_PORTAL_SNIPPET}
- * (GLOBALS + MATRICES_PROJECTION + FOG bind groups, QUADS, default depth state), with
- * the sampler layouts dropped (the bubble shaders are purely procedural), the vertex
- * binding switched to {@code POSITION_TEX_COLOR} and the translucent blend + no-cull
- * state copied from vanilla's translucent pipelines (e.g. {@code ENTITY_TRANSLUCENT}).
+ * (GLOBALS + MATRICES_PROJECTION + FOG bind groups, QUADS), with the sampler layouts
+ * dropped (the bubble shaders are purely procedural), the vertex binding switched to
+ * {@code POSITION_TEX_COLOR} and the translucent blend + no-cull + non-depth-writing
+ * depth state copied from vanilla's translucent pipelines (e.g.
+ * {@code BEACON_BEAM_TRANSLUCENT}).
  *
  * <p>All five pipelines share one vertex shader ({@code bubbleshield:bubble/surface});
  * only the fragment shader differs. They are registered through
@@ -41,7 +43,10 @@ public final class ShieldPipelines {
 			.withPrimitiveTopology(PrimitiveTopology.QUADS)
 			.withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
 			.withCull(false)
-			.withDepthStencilState(DepthStencilState.DEFAULT)
+			// Depth-test but never depth-write, matching vanilla translucent pipelines
+			// (BEACON_BEAM_TRANSLUCENT / ENTITY_TRANSLUCENT_EMISSIVE): a depth-writing dome
+			// would occlude translucent world content and the mod's own inside particles.
+			.withDepthStencilState(new DepthStencilState(CompareOp.GREATER_THAN_OR_EQUAL, false))
 			.buildSnippet();
 
 	private static final Map<SurfaceTemplate, RenderType> RENDER_TYPES = buildRenderTypes();
