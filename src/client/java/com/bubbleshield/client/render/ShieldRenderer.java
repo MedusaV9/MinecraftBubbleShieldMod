@@ -1,0 +1,119 @@
+package com.bubbleshield.client.render;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import com.bubbleshield.client.ClientShieldManager;
+import com.bubbleshield.effect.EffectDefinition;
+import com.bubbleshield.effect.EffectRegistry;
+import com.mojang.blaze3d.vertex.PoseStack;
+
+import net.fabricmc.fabric.api.client.rendering.v1.level.LevelExtractionEvents;
+import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext;
+import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
+
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.player.AbstractClientPlayer;
+import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.world.phys.Vec3;
+
+/**
+ * Draws every synced shield as a translucent procedural sphere through the 26.2
+ * submit-based level renderer ({@code LevelRenderEvents.COLLECT_SUBMITS} +
+ * {@code SubmitNodeCollector.submitCustomGeometry}).
+ *
+ * <p>The camera position and animation clock are captured during extraction
+ * ({@code LevelExtractionEvents.END_EXTRACTION}); the submit callback then translates
+ * the pose by {@code shieldCenter - cameraPos} and emits the cached {@link SphereMesh}.
+ * Effect params are pre-baked CPU-side (no custom uniforms): paramA scales the UVs,
+ * paramB scrolls them over time, and the primary/secondary colors plus the dissolve
+ * alpha ride in the vertex color channel.
+ */
+public final class ShieldRenderer {
+	private static final SphereMesh SPHERE = new SphereMesh(48, 32);
+	private static final float MIN_VISIBLE_RADIUS = 0.05F;
+
+	private static volatile Vec3 cameraPos = Vec3.ZERO;
+	private static volatile float timeSeconds;
+
+	private ShieldRenderer() {
+	}
+
+	public static void register() {
+		LevelExtractionEvents.END_EXTRACTION.register(context -> {
+			cameraPos = context.camera().position();
+			// Wraps once per day cycle, matching the GameTime shader global.
+			timeSeconds = ((context.level().getGameTime() % 24000L) + context.deltaTracker().getGameTimeDeltaPartialTick(false)) / 20.0F;
+		});
+		LevelRenderEvents.COLLECT_SUBMITS.register(ShieldRenderer::collectSubmits);
+	}
+
+	private static void collectSubmits(LevelRenderContext context) {
+		if (ClientShieldManager.shields().isEmpty()) {
+			return;
+		}
+
+		ClientLevel level = Minecraft.getInstance().level;
+		if (level == null) {
+			return;
+		}
+
+		PoseStack poseStack = context.poseStack();
+		SubmitNodeCollector collector = context.submitNodeCollector();
+		Vec3 camera = cameraPos;
+		float seconds = timeSeconds;
+
+		for (ClientShieldManager.ClientShield shield : ClientShieldManager.shields().values()) {
+			float radius = shield.currentRadius();
+			if (!shield.active() || radius < MIN_VISIBLE_RADIUS) {
+				continue;
+			}
+
+			EffectDefinition def = EffectRegistry.get(shield.effectId());
+			RenderType renderType = ShieldPipelines.renderType(def.surface());
+			Vec3 center = Vec3.atCenterOf(shield.pos());
+			List<Vec3> dissolveCenters = collectDissolveCenters(level, shield, center, radius);
+
+			// Weaker shields render fainter.
+			float alphaBase = 0.25F + 0.5F * shield.healthFrac();
+			// paramA = pattern scale, paramB = scroll speed; both pre-baked into the UVs.
+			float uvScale = def.paramA();
+			float uvOffsetU = seconds * def.paramB() * 0.05F;
+			float uvOffsetV = seconds * def.paramB() * 0.02F;
+
+			poseStack.pushPose();
+			poseStack.translate(center.x - camera.x, center.y - camera.y, center.z - camera.z);
+			// The pose stays unscaled: SphereMesh scales positions by radius CPU-side so the
+			// dissolve distances (per-vertex alpha) are computed in world units.
+			collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
+					SPHERE.emit(pose, buffer, radius, def.argbPrimary(), def.argbSecondary(), alphaBase, dissolveCenters, uvScale, uvOffsetU, uvOffsetV));
+			poseStack.popPose();
+		}
+	}
+
+	/**
+	 * Positions (relative to the shield center) of whitelisted players close enough to
+	 * the surface that it should dissolve around them.
+	 */
+	private static List<Vec3> collectDissolveCenters(ClientLevel level, ClientShieldManager.ClientShield shield, Vec3 center, float radius) {
+		if (shield.whitelist().isEmpty()) {
+			return List.of();
+		}
+
+		List<Vec3> centers = new ArrayList<>();
+		for (AbstractClientPlayer player : level.players()) {
+			if (!shield.whitelist().contains(player.getUUID())) {
+				continue;
+			}
+
+			Vec3 relative = player.position().add(0.0, player.getBbHeight() * 0.5, 0.0).subtract(center);
+			if (relative.length() <= radius + SphereMesh.DISSOLVE_RANGE) {
+				centers.add(relative);
+			}
+		}
+
+		return centers;
+	}
+}
