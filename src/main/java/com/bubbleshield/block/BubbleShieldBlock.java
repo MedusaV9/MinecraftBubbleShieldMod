@@ -1,0 +1,63 @@
+package com.bubbleshield.block;
+
+import com.bubbleshield.registry.ModBlockEntities;
+import com.mojang.serialization.MapCodec;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.BaseEntityBlock;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityTicker;
+import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.minecraft.world.level.block.state.BlockBehaviour;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.BlockHitResult;
+
+import org.jspecify.annotations.Nullable;
+
+public class BubbleShieldBlock extends BaseEntityBlock {
+	public static final MapCodec<BubbleShieldBlock> CODEC = simpleCodec(BubbleShieldBlock::new);
+
+	public BubbleShieldBlock(BlockBehaviour.Properties properties) {
+		super(properties);
+	}
+
+	@Override
+	protected MapCodec<? extends BaseEntityBlock> codec() {
+		return CODEC;
+	}
+
+	@Override
+	public @Nullable BlockEntity newBlockEntity(BlockPos worldPosition, BlockState blockState) {
+		return new BubbleShieldBlockEntity(worldPosition, blockState);
+	}
+
+	@Override
+	public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer, ItemStack itemStack) {
+		if (!level.isClientSide() && placer instanceof Player player && level.getBlockEntity(pos) instanceof BubbleShieldBlockEntity blockEntity) {
+			blockEntity.setOwner(player);
+		}
+	}
+
+	@Override
+	protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hitResult) {
+		if (!level.isClientSide() && level.getBlockEntity(pos) instanceof BubbleShieldBlockEntity blockEntity) {
+			player.openMenu(blockEntity);
+		}
+
+		return InteractionResult.SUCCESS;
+	}
+
+	@Override
+	public <T extends BlockEntity> @Nullable BlockEntityTicker<T> getTicker(Level level, BlockState blockState, BlockEntityType<T> type) {
+		if (level.isClientSide()) {
+			return null;
+		}
+
+		return createTickerHelper(type, ModBlockEntities.BUBBLE_SHIELD_PROJECTOR, (lvl, pos, st, be) -> be.serverTick());
+	}
+}

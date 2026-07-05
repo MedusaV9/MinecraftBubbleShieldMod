@@ -1,0 +1,41 @@
+{
+	"schemaVersion": 1,
+	"id": "bubbleshield",
+	"version": "${version}",
+	"name": "Bubble Shield",
+	"description": "Deployable bubble shields that protect what matters.",
+	"authors": [
+		"Bubble Shield Team"
+	],
+	"contact": {
+		"homepage": "https://github.com/MedusaV9/MinecraftBubbleShieldMod",
+		"sources": "https://github.com/MedusaV9/MinecraftBubbleShieldMod"
+	},
+	"license": "CC0-1.0",
+	"icon": "assets/bubbleshield/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"com.bubbleshield.BubbleShield"
+		],
+		"client": [
+			"com.bubbleshield.client.BubbleShieldClient"
+		],
+		"fabric-gametest": [
+			"com.bubbleshield.gametest.ShieldGameTests"
+		]
+	},
+	"mixins": [
+		"bubbleshield.mixins.json",
+		{
+			"config": "bubbleshield.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.19.3",
+		"minecraft": "~26.2",
+		"java": ">=25",
+		"fabric-api": "*"
+	}
+}
