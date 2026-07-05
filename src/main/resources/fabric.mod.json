@@ -5,11 +5,11 @@
 	"name": "Bubble Shield",
 	"description": "Deployable bubble shields that protect what matters.",
 	"authors": [
-		"Me!"
+		"Bubble Shield Team"
 	],
 	"contact": {
-		"homepage": "https://fabricmc.net/",
-		"sources": "https://github.com/FabricMC/fabric-example-mod"
+		"homepage": "https://github.com/MedusaV9/MinecraftBubbleShieldMod",
+		"sources": "https://github.com/MedusaV9/MinecraftBubbleShieldMod"
 	},
 	"license": "CC0-1.0",
 	"icon": "assets/bubbleshield/icon.png",

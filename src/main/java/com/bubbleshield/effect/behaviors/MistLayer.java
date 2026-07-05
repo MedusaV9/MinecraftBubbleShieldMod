@@ -5,6 +5,7 @@ import com.bubbleshield.effect.InsideEffectBehavior;
 
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -19,10 +20,14 @@ public final class MistLayer implements InsideEffectBehavior {
 			return;
 		}
 
+		// Scale the cloud count with the bubble size and override the 32-block send
+		// limiter so players deep inside a large bubble (radius up to 100) still see them.
+		int count = Mth.clamp((int) (radius * 2.0F), 16, 128);
 		level.sendParticles(
 				ParticleTypes.CLOUD,
+				true, false,
 				center.x, center.y + 0.2, center.z,
-				16,
+				count,
 				radius * 0.6, 0.15, radius * 0.6,
 				0.005
 		);

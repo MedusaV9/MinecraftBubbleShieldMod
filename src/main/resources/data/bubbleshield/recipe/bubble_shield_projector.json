@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "key": {
+    "G": "minecraft:glass",
+    "A": "minecraft:amethyst_shard",
+    "D": "minecraft:diamond",
+    "R": "minecraft:redstone"
+  },
+  "pattern": [
+    "GAG",
+    "ADA",
+    "RRR"
+  ],
+  "result": {
+    "count": 1,
+    "id": "bubbleshield:bubble_shield_projector"
+  }
+}

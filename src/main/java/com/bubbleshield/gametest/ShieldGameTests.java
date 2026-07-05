@@ -232,7 +232,7 @@ public class ShieldGameTests {
 	@GameTest
 	public void postEffectAssetsExist(GameTestHelper helper) {
 		for (int i = 0; i < EffectRegistry.COUNT; i++) {
-			String jsonPath = "/assets/bubbleshield/post_effect/effect_%02d.json".formatted(i);
+			String jsonPath = String.format(java.util.Locale.ROOT, "/assets/bubbleshield/post_effect/effect_%02d.json", i);
 			JsonObject config;
 			try (InputStream in = ShieldGameTests.class.getResourceAsStream(jsonPath)) {
 				helper.assertTrue(in != null, "missing post effect asset: " + jsonPath);
@@ -263,6 +263,53 @@ public class ShieldGameTests {
 		}
 
 		helper.succeed();
+	}
+
+	@GameTest
+	public void dataPackAssetsExist(GameTestHelper helper) {
+		JsonObject lootTable = readJsonResource(helper, "/data/bubbleshield/loot_table/blocks/bubble_shield_projector.json");
+		helper.assertTrue("minecraft:block".equals(lootTable.get("type").getAsString()), "loot table should be of type minecraft:block");
+		helper.assertTrue(
+				lootTable.getAsJsonArray("pools") != null && !lootTable.getAsJsonArray("pools").isEmpty(),
+				"loot table should declare at least one pool");
+
+		JsonObject recipe = readJsonResource(helper, "/data/bubbleshield/recipe/bubble_shield_projector.json");
+		helper.assertTrue("minecraft:crafting_shaped".equals(recipe.get("type").getAsString()), "recipe should be minecraft:crafting_shaped");
+		helper.assertTrue(
+				"bubbleshield:bubble_shield_projector".equals(recipe.getAsJsonObject("result").get("id").getAsString()),
+				"recipe should produce the projector item");
+
+		// The vanilla jar ships the same tag paths, so check every classpath copy:
+		// the mod's copy must exist and list the projector (tag JSONs merge at runtime).
+		for (String tagPath : new String[] {"data/minecraft/tags/block/mineable/pickaxe.json", "data/minecraft/tags/block/needs_iron_tool.json"}) {
+			boolean containsProjector = false;
+			try {
+				var resources = ShieldGameTests.class.getClassLoader().getResources(tagPath);
+				while (resources.hasMoreElements() && !containsProjector) {
+					try (InputStream in = resources.nextElement().openStream()) {
+						JsonObject tag = JsonParser.parseReader(new InputStreamReader(in, StandardCharsets.UTF_8)).getAsJsonObject();
+						JsonArray values = tag.getAsJsonArray("values");
+						containsProjector = values != null && values.asList().stream()
+								.anyMatch(value -> value.isJsonPrimitive() && "bubbleshield:bubble_shield_projector".equals(value.getAsString()));
+					}
+				}
+			} catch (Exception e) {
+				throw helper.assertionException("failed to read/parse " + tagPath + ": " + e);
+			}
+
+			helper.assertTrue(containsProjector, tagPath + " should list bubbleshield:bubble_shield_projector");
+		}
+
+		helper.succeed();
+	}
+
+	private static JsonObject readJsonResource(GameTestHelper helper, String path) {
+		try (InputStream in = ShieldGameTests.class.getResourceAsStream(path)) {
+			helper.assertTrue(in != null, "missing data pack resource: " + path);
+			return JsonParser.parseReader(new InputStreamReader(in, StandardCharsets.UTF_8)).getAsJsonObject();
+		} catch (Exception e) {
+			throw helper.assertionException("failed to read/parse " + path + ": " + e);
+		}
 	}
 
 	@GameTest(maxTicks = 100, padding = 16)

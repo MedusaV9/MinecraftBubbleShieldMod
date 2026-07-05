@@ -1,5 +1,7 @@
 package com.bubbleshield.effect;
 
+import java.util.Locale;
+
 /**
  * Immutable description of one selectable shield effect.
  *
@@ -25,14 +27,14 @@ public record EffectDefinition(
 	public static EffectDefinition of(int id, int argbPrimary, int argbSecondary, SurfaceTemplate surface, float paramA, float paramB, String insideBehaviorId) {
 		return new EffectDefinition(
 				id,
-				"effect.bubbleshield.%02d".formatted(id),
+				String.format(Locale.ROOT, "effect.bubbleshield.%02d", id),
 				argbPrimary,
 				argbSecondary,
 				surface,
 				paramA,
 				paramB,
 				insideBehaviorId,
-				"effect_%02d".formatted(id)
+				String.format(Locale.ROOT, "effect_%02d", id)
 		);
 	}
 }

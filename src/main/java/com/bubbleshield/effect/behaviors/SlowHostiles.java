@@ -6,7 +6,8 @@ import com.bubbleshield.effect.InsideEffectBehavior;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
-import net.minecraft.world.entity.monster.Monster;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
@@ -23,10 +24,13 @@ public final class SlowHostiles implements InsideEffectBehavior {
 			return;
 		}
 
+		// Query Mob + Enemy instead of Monster: hostiles like Ghast, Phantom, Slime,
+		// MagmaCube, Hoglin, Shulker and the Ender Dragon implement Enemy but do not
+		// extend Monster.
 		AABB box = AABB.ofSize(center, radius * 2.0, radius * 2.0, radius * 2.0);
-		for (Monster monster : level.getEntitiesOfClass(Monster.class, box)) {
-			if (monster.position().distanceTo(center) <= radius) {
-				monster.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, DURATION_TICKS, 1));
+		for (Mob mob : level.getEntitiesOfClass(Mob.class, box, e -> e instanceof Enemy)) {
+			if (mob.position().distanceTo(center) <= radius) {
+				mob.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, DURATION_TICKS, 1));
 			}
 		}
 	}

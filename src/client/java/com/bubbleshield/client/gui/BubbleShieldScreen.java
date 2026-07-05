@@ -29,6 +29,7 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 	public static final int MAX_DIAMETER = 200;
 
 	private Button activateButton;
+	private DiameterSlider diameterSlider;
 
 	public BubbleShieldScreen(BubbleShieldMenu menu, Inventory inventory, Component title) {
 		super(menu, inventory, title, 176, 166);
@@ -48,7 +49,7 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 				.build()
 		);
 
-		this.addRenderableWidget(new DiameterSlider(x, this.topPos + 28, width, 14, this.menu));
+		this.diameterSlider = this.addRenderableWidget(new DiameterSlider(x, this.topPos + 28, width, 14, this.menu));
 
 		this.addRenderableWidget(
 			Button.builder(Component.translatable("gui.bubbleshield.effects"), button ->
@@ -76,6 +77,9 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 		super.containerTick();
 		// The active flag is server-authoritative and arrives via data slots.
 		this.activateButton.setMessage(this.activateLabel());
+		// ContainerData arrives after init(), so the slider must re-sync once the
+		// real diameter shows up (and whenever the server changes it).
+		this.diameterSlider.syncFromMenu();
 	}
 
 	@Override
@@ -95,10 +99,14 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 	/** Diameter slider [8..200]; sends the chosen value (keeping the current effect) on mouse release. */
 	private static class DiameterSlider extends AbstractSliderButton {
 		private final BubbleShieldMenu menu;
+		/** AbstractSliderButton keeps its dragging flag private, so track our own. */
+		private boolean dragging;
+		private int lastSyncedDiameter;
 
 		DiameterSlider(int x, int y, int width, int height, BubbleShieldMenu menu) {
 			super(x, y, width, height, Component.empty(), toSliderValue(menu.diameter()));
 			this.menu = menu;
+			this.lastSyncedDiameter = menu.diameter();
 			this.updateMessage();
 		}
 
@@ -108,6 +116,16 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 
 		private int diameter() {
 			return MIN_DIAMETER + (int) Math.round(this.value * (MAX_DIAMETER - MIN_DIAMETER));
+		}
+
+		/** Re-syncs from the server-authoritative ContainerData value unless the user is dragging. */
+		void syncFromMenu() {
+			int synced = this.menu.diameter();
+			if (!this.dragging && synced != this.lastSyncedDiameter) {
+				this.lastSyncedDiameter = synced;
+				this.value = toSliderValue(synced);
+				this.updateMessage();
+			}
 		}
 
 		@Override
@@ -121,7 +139,14 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 		}
 
 		@Override
+		public void onClick(MouseButtonEvent event, boolean doubleClick) {
+			this.dragging = true;
+			super.onClick(event, doubleClick);
+		}
+
+		@Override
 		public void onRelease(MouseButtonEvent event) {
+			this.dragging = false;
 			super.onRelease(event);
 			ClientPlayNetworking.send(new ShieldPayloads.SetSettingsC2S(this.menu.pos(), this.diameter(), this.menu.effectId()));
 		}

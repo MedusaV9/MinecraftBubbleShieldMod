@@ -5,6 +5,7 @@ import com.bubbleshield.effect.InsideEffectBehavior;
 
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -19,10 +20,14 @@ public final class Snowfall implements InsideEffectBehavior {
 			return;
 		}
 
+		// Scale the flake count with the bubble size and override the 32-block send
+		// limiter so players deep inside a large bubble (radius up to 100) still see them.
+		int count = Mth.clamp((int) (radius * 3.0F), 24, 128);
 		level.sendParticles(
 				ParticleTypes.SNOWFLAKE,
+				true, false,
 				center.x, center.y + radius * 0.6, center.z,
-				24,
+				count,
 				radius * 0.6, radius * 0.3, radius * 0.6,
 				0.01
 		);

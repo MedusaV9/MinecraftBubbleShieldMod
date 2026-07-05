@@ -1,5 +1,7 @@
 package com.bubbleshield.client.gui;
 
+import java.util.Locale;
+
 import com.bubbleshield.net.ShieldPayloads;
 
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
@@ -52,7 +54,7 @@ public class EffectPickerScreen extends Screen {
 			int y = startY + (cell / COLUMNS) * (BUTTON_HEIGHT + SPACING);
 			int chosenId = effectId;
 			Button button = this.addRenderableWidget(
-				Button.builder(Component.translatable("effect.bubbleshield." + String.format("%02d", effectId)), b -> this.pick(chosenId))
+				Button.builder(Component.translatable("effect.bubbleshield." + String.format(Locale.ROOT, "%02d", effectId)), b -> this.pick(chosenId))
 					.bounds(x, y, BUTTON_WIDTH, BUTTON_HEIGHT)
 					.build()
 			);
