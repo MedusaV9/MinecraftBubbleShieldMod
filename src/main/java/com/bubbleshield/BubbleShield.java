@@ -1,5 +1,8 @@
 package com.bubbleshield;
 
+import com.bubbleshield.effect.EffectRegistry;
+import com.bubbleshield.effect.InsideEffectBehavior;
+import com.bubbleshield.effect.behaviors.EffectBehaviors;
 import com.bubbleshield.net.ServerNet;
 import com.bubbleshield.net.ShieldPayloads;
 import com.bubbleshield.registry.ModBlockEntities;
@@ -30,6 +33,10 @@ public class BubbleShield implements ModInitializer {
 
 		ShieldPayloads.registerTypes();
 		ServerNet.register();
+
+		EffectBehaviors.registerAll();
+		EffectRegistry.validate();
+		LOGGER.info("Registered {} shield effects backed by {} inside behaviors", EffectRegistry.COUNT, InsideEffectBehavior.REGISTRY.size());
 	}
 
 	public static Identifier id(String path) {

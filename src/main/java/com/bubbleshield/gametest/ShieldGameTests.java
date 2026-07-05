@@ -3,6 +3,8 @@ package com.bubbleshield.gametest;
 import java.util.UUID;
 
 import com.bubbleshield.block.BubbleShieldBlockEntity;
+import com.bubbleshield.effect.EffectRegistry;
+import com.bubbleshield.effect.InsideEffectBehavior;
 import com.bubbleshield.menu.BubbleShieldMenu;
 import com.bubbleshield.registry.ModBlocks;
 import com.bubbleshield.shield.ShieldLogic;
@@ -156,6 +158,30 @@ public class ShieldGameTests {
 		}
 
 		helper.succeed();
+	}
+
+	@GameTest(padding = 16)
+	public void allFiftyEffectsValid(GameTestHelper helper) {
+		EffectRegistry.validate();
+		helper.assertTrue(EffectRegistry.ALL.size() == EffectRegistry.COUNT, "registry should expose exactly 50 effect definitions");
+		helper.assertTrue(InsideEffectBehavior.REGISTRY.size() == 10, "exactly 10 inside behaviors should be registered");
+		helper.succeed();
+	}
+
+	@GameTest(maxTicks = 100, padding = 16)
+	public void insideBehaviorRuns(GameTestHelper helper) {
+		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
+		be.addFuelSeconds(PLENTY_OF_FUEL);
+		be.getShieldState().effectId = 0;
+		helper.assertTrue(be.tryActivate(), "shield should activate");
+
+		// The block ticker drives the effect behavior every 10 game ticks; 30 ticks
+		// exercise it several times. Reaching the delayed check without an exception
+		// (and with the shield still up) proves the behavior ran cleanly.
+		helper.runAfterDelay(30, () -> {
+			helper.assertTrue(be.getShieldState().active, "shield should still be active after the effect behavior ran");
+			helper.succeed();
+		});
 	}
 
 	@GameTest

@@ -2,6 +2,10 @@ package com.bubbleshield.shield;
 
 import java.util.UUID;
 
+import com.bubbleshield.effect.EffectDefinition;
+import com.bubbleshield.effect.EffectRegistry;
+import com.bubbleshield.effect.InsideEffectBehavior;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
@@ -129,9 +133,28 @@ public final class ShieldLogic {
 					changed = true;
 				}
 			}
+
+			tickInsideEffect(level, center, currentRadius(state), state.effectId, gameTime);
 		}
 
 		return changed;
+	}
+
+	/**
+	 * Runs the selected effect's ambient inside behaviour (particles, auras, sounds).
+	 */
+	private static void tickInsideEffect(ServerLevel level, Vec3 center, float radius, int effectId, long gameTime) {
+		EffectDefinition def = EffectRegistry.get(effectId);
+		if (def == null) {
+			return;
+		}
+
+		InsideEffectBehavior behavior = InsideEffectBehavior.get(def.insideBehaviorId());
+		if (behavior == null) {
+			return;
+		}
+
+		behavior.tick(level, center, radius, def, gameTime);
 	}
 
 	private static boolean interceptProjectiles(ServerLevel level, BlockPos pos, Vec3 center, double radius, ShieldState state, AABB area) {
