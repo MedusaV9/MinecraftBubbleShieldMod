@@ -1,5 +1,9 @@
 package com.bubbleshield;
 
+import com.bubbleshield.registry.ModBlockEntities;
+import com.bubbleshield.registry.ModBlocks;
+import com.bubbleshield.registry.ModItems;
+
 import net.fabricmc.api.ModInitializer;
 
 import net.minecraft.resources.Identifier;
@@ -15,6 +19,10 @@ public class BubbleShield implements ModInitializer {
 	@Override
 	public void onInitialize() {
 		LOGGER.info("Hello from Bubble Shield!");
+
+		ModBlocks.init();
+		ModItems.init();
+		ModBlockEntities.init();
 	}
 
 	public static Identifier id(String path) {
