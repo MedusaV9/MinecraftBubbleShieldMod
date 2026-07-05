@@ -2,7 +2,9 @@
 	"required": true,
 	"package": "com.bubbleshield.client.mixin",
 	"compatibilityLevel": "JAVA_25",
-	"client": [],
+	"client": [
+		"GameRendererInvoker"
+	],
 	"injectors": {
 		"defaultRequire": 1
 	},

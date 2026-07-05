@@ -1,5 +1,8 @@
 package com.bubbleshield.gametest;
 
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 import com.bubbleshield.block.BubbleShieldBlockEntity;
@@ -9,6 +12,9 @@ import com.bubbleshield.menu.BubbleShieldMenu;
 import com.bubbleshield.registry.ModBlocks;
 import com.bubbleshield.shield.ShieldLogic;
 import com.bubbleshield.shield.ShieldState;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 
@@ -165,6 +171,42 @@ public class ShieldGameTests {
 		EffectRegistry.validate();
 		helper.assertTrue(EffectRegistry.ALL.size() == EffectRegistry.COUNT, "registry should expose exactly 50 effect definitions");
 		helper.assertTrue(InsideEffectBehavior.REGISTRY.size() == 10, "exactly 10 inside behaviors should be registered");
+		helper.succeed();
+	}
+
+	@GameTest
+	public void postEffectAssetsExist(GameTestHelper helper) {
+		for (int i = 0; i < EffectRegistry.COUNT; i++) {
+			String jsonPath = "/assets/bubbleshield/post_effect/effect_%02d.json".formatted(i);
+			JsonObject config;
+			try (InputStream in = ShieldGameTests.class.getResourceAsStream(jsonPath)) {
+				helper.assertTrue(in != null, "missing post effect asset: " + jsonPath);
+				config = JsonParser.parseReader(new InputStreamReader(in, StandardCharsets.UTF_8)).getAsJsonObject();
+			} catch (Exception e) {
+				throw helper.assertionException("failed to read/parse " + jsonPath + ": " + e);
+			}
+
+			JsonArray passes = config.getAsJsonArray("passes");
+			helper.assertTrue(passes != null && !passes.isEmpty(), jsonPath + " should declare at least one pass");
+
+			for (var passElement : passes) {
+				String fragmentShader = passElement.getAsJsonObject().get("fragment_shader").getAsString();
+				if (!fragmentShader.startsWith("bubbleshield:")) {
+					continue; // vanilla shader (e.g. minecraft:post/blit)
+				}
+
+				String shaderPath = "/assets/bubbleshield/shaders/" + fragmentShader.substring("bubbleshield:".length()) + ".fsh";
+				helper.assertTrue(
+						shaderPath.startsWith("/assets/bubbleshield/shaders/screenfx/"),
+						jsonPath + " should only reference screenfx shaders, got " + fragmentShader);
+				try (InputStream shader = ShieldGameTests.class.getResourceAsStream(shaderPath)) {
+					helper.assertTrue(shader != null, jsonPath + " references missing shader: " + shaderPath);
+				} catch (Exception e) {
+					throw helper.assertionException("failed to read " + shaderPath + ": " + e);
+				}
+			}
+		}
+
 		helper.succeed();
 	}
 

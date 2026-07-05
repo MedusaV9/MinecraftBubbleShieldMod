@@ -1,5 +1,6 @@
 package com.bubbleshield.client;
 
+import com.bubbleshield.client.fx.ScreenEffectManager;
 import com.bubbleshield.client.gui.BubbleShieldScreen;
 import com.bubbleshield.client.render.ShieldPipelines;
 import com.bubbleshield.client.render.ShieldRenderer;
@@ -15,6 +16,7 @@ public class BubbleShieldClient implements ClientModInitializer {
 		ClientShieldManager.register();
 		ShieldPipelines.bootstrap();
 		ShieldRenderer.register();
+		ScreenEffectManager.register();
 		MenuScreens.register(ModMenus.BUBBLE_SHIELD, BubbleShieldScreen::new);
 	}
 }
