@@ -1,6 +1,7 @@
 package com.bubbleshield.net;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import com.bubbleshield.BubbleShield;
@@ -42,7 +43,8 @@ public final class ShieldPayloads {
 		public static final CustomPacketPayload.Type<WhitelistModifyC2S> TYPE = new CustomPacketPayload.Type<>(BubbleShield.id("whitelist_modify"));
 		public static final StreamCodec<RegistryFriendlyByteBuf, WhitelistModifyC2S> CODEC = StreamCodec.composite(
 			BlockPos.STREAM_CODEC, WhitelistModifyC2S::pos,
-			ByteBufCodecs.STRING_UTF8, WhitelistModifyC2S::name,
+			// Player names are at most 16 characters; a bounded codec rejects oversized payloads at decode time.
+			ByteBufCodecs.stringUtf8(16), WhitelistModifyC2S::name,
 			ByteBufCodecs.BOOL, WhitelistModifyC2S::add,
 			WhitelistModifyC2S::new
 		);
@@ -72,7 +74,7 @@ public final class ShieldPayloads {
 	 * Full shield snapshot for the client-side replica.
 	 *
 	 * <p>{@link StreamCodec#composite} supports up to 12 fields in this Minecraft version,
-	 * so the 9 fields fit in a single composite.
+	 * so the 10 fields fit in a single composite.
 	 */
 	public record ShieldSyncS2C(
 		BlockPos pos,
@@ -83,7 +85,8 @@ public final class ShieldPayloads {
 		float healthFrac,
 		List<UUID> whitelist,
 		List<String> whitelistNames,
-		int cooldownSeconds
+		int cooldownSeconds,
+		Optional<UUID> ownerUuid
 	) implements CustomPacketPayload {
 		public static final CustomPacketPayload.Type<ShieldSyncS2C> TYPE = new CustomPacketPayload.Type<>(BubbleShield.id("shield_sync"));
 		public static final StreamCodec<RegistryFriendlyByteBuf, ShieldSyncS2C> CODEC = StreamCodec.composite(
@@ -96,6 +99,7 @@ public final class ShieldPayloads {
 			UUIDUtil.STREAM_CODEC.apply(ByteBufCodecs.list()), ShieldSyncS2C::whitelist,
 			ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()), ShieldSyncS2C::whitelistNames,
 			ByteBufCodecs.VAR_INT, ShieldSyncS2C::cooldownSeconds,
+			ByteBufCodecs.optional(UUIDUtil.STREAM_CODEC), ShieldSyncS2C::ownerUuid,
 			ShieldSyncS2C::new
 		);
 

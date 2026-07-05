@@ -3,6 +3,7 @@ package com.bubbleshield.client;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import com.bubbleshield.net.ShieldPayloads;
@@ -26,7 +27,8 @@ public final class ClientShieldManager {
 		float healthFrac,
 		List<UUID> whitelist,
 		List<String> whitelistNames,
-		int cooldownSeconds
+		int cooldownSeconds,
+		Optional<UUID> ownerUuid
 	) {
 	}
 
@@ -52,7 +54,8 @@ public final class ClientShieldManager {
 				payload.healthFrac(),
 				payload.whitelist(),
 				payload.whitelistNames(),
-				payload.cooldownSeconds()
+				payload.cooldownSeconds(),
+				payload.ownerUuid()
 			))
 		));
 

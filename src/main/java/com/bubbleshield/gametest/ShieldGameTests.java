@@ -16,16 +16,21 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
+import com.bubbleshield.registry.ModItems;
+
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.ProblemReporter;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.arrow.Arrow;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.TagValueOutput;
@@ -138,6 +143,56 @@ public class ShieldGameTests {
 
 		helper.assertTrue(!ShieldLogic.applyPlayerBarrier(center, radius, shield, friend), "a whitelisted player should not be pushed");
 		helper.assertTrue(friend.position().distanceTo(center) <= radius, "the whitelisted player should stay inside");
+		helper.succeed();
+	}
+
+	@GameTest(padding = 16)
+	public void ownerSetOnPlace(GameTestHelper helper) {
+		// Place the projector through a real BlockItem interaction (BlockItem.place ->
+		// Block.setPlacedBy) so the owner assignment path is exercised end to end.
+		// Note: no snapTo here; the mock ServerPlayer has no connection and BlockItem.place
+		// performs no reach check, so the player's position is irrelevant.
+		Player player = helper.makeMockServerPlayer(GameType.SURVIVAL);
+		ItemStack stack = new ItemStack(ModItems.BUBBLE_SHIELD_PROJECTOR);
+		player.setItemInHand(InteractionHand.MAIN_HAND, stack);
+
+		// placeAt clicks the face-adjacent position, so click UP on the block below the target.
+		helper.placeAt(player, stack, PROJECTOR_POS.below(), Direction.UP);
+
+		BubbleShieldBlockEntity be = helper.getBlockEntity(PROJECTOR_POS, BubbleShieldBlockEntity.class);
+		ShieldState state = be.getShieldState();
+		helper.assertTrue(player.getUUID().equals(state.ownerUuid), "placing the projector should record the placer as owner");
+		helper.assertTrue(state.whitelistUuids.contains(player.getUUID()), "the owner's UUID should be whitelisted on placement");
+		helper.assertTrue(
+			state.whitelistNames.stream().anyMatch(name -> name.equalsIgnoreCase(player.getGameProfile().name())),
+			"the owner's name should be whitelisted on placement");
+		helper.succeed();
+	}
+
+	@GameTest(padding = 16)
+	public void whitelistRemoveRevokesUuid(GameTestHelper helper) {
+		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
+		ShieldState state = be.getShieldState();
+
+		// An online (PlayerList-registered) player so whitelistAdd/Remove can resolve name -> UUID.
+		ServerPlayer player = helper.makeMockServerPlayerInLevel();
+		try {
+			UUID uuid = player.getUUID();
+			String name = player.getGameProfile().name();
+
+			// Add with different casing on purpose; resolution must be case-insensitive.
+			be.whitelistAdd(helper.getLevel().getServer(), name.toUpperCase(java.util.Locale.ROOT));
+			helper.assertTrue(state.whitelistUuids.contains(uuid), "adding an online player should record their UUID");
+			helper.assertTrue(!ShieldLogic.shouldBlock(state, null, uuid, false), "the whitelisted player should be admitted by UUID");
+
+			be.whitelistRemove(helper.getLevel().getServer(), name);
+			helper.assertTrue(!state.whitelistUuids.contains(uuid), "removing the name should also revoke the recorded UUID");
+			helper.assertTrue(ShieldLogic.shouldBlock(state, null, uuid, false), "the removed player's UUID should no longer be admitted");
+			helper.assertTrue(ShieldLogic.shouldBlock(state, name, uuid, false), "the removed player should be blocked by name and UUID");
+		} finally {
+			helper.getLevel().getServer().getPlayerList().remove(player);
+		}
+
 		helper.succeed();
 	}
 

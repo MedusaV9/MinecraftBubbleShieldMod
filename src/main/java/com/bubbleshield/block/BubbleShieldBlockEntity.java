@@ -7,6 +7,9 @@ import com.bubbleshield.shield.FuelMap;
 import com.bubbleshield.shield.ShieldLogic;
 import com.bubbleshield.shield.ShieldState;
 
+import java.util.Set;
+import java.util.UUID;
+
 import net.fabricmc.fabric.api.menu.v1.ExtendedMenuProvider;
 
 import net.minecraft.core.BlockPos;
@@ -19,6 +22,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.Containers;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
@@ -32,6 +36,8 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
+
+import org.jspecify.annotations.Nullable;
 
 public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenuProvider<BlockPos> {
 	private final ShieldState shieldState = new ShieldState();
@@ -63,6 +69,9 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 			return BubbleShieldMenu.DATA_COUNT;
 		}
 	};
+
+	/** Last replicated snapshot; a new sync payload is only broadcast when this changes. */
+	private @Nullable ReplicatedState lastSentState;
 
 	public BubbleShieldBlockEntity(BlockPos worldPosition, BlockState blockState) {
 		super(ModBlockEntities.BUBBLE_SHIELD_PROJECTOR, worldPosition, blockState);
@@ -152,9 +161,24 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		if (!this.shieldState.active) {
 			this.shieldState.active = true;
 			this.markUpdated();
+			// Expel non-whitelisted players already standing inside the freshly raised barrier.
+			if (this.level instanceof ServerLevel serverLevel) {
+				ShieldLogic.expelBlockedPlayers(serverLevel, this.worldPosition, this.shieldState);
+			}
 		}
 
 		return true;
+	}
+
+	/**
+	 * Records the given player as the shield's owner and whitelists them.
+	 * Called on placement and when the first player interacts with an ownerless shield.
+	 */
+	public void setOwner(Player player) {
+		this.shieldState.ownerUuid = player.getUUID();
+		this.shieldState.whitelistUuids.add(player.getUUID());
+		addNameIfAbsent(this.shieldState.whitelistNames, player.getGameProfile().name());
+		this.markUpdated();
 	}
 
 	/**
@@ -192,11 +216,17 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	}
 
 	/**
-	 * Adds a player name to the whitelist, also recording the UUID if the player is online.
+	 * Adds a player name to the whitelist (case-insensitively deduplicated), also
+	 * recording the UUID if the player is online.
 	 */
 	public void whitelistAdd(MinecraftServer server, String name) {
-		this.shieldState.whitelistNames.add(name);
-		ServerPlayer online = server.getPlayerList().getPlayerByName(name);
+		String trimmed = name.trim();
+		if (trimmed.isEmpty()) {
+			return;
+		}
+
+		addNameIfAbsent(this.shieldState.whitelistNames, trimmed);
+		ServerPlayer online = server.getPlayerList().getPlayerByName(trimmed);
 		if (online != null) {
 			this.shieldState.whitelistUuids.add(online.getUUID());
 		}
@@ -204,21 +234,82 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		this.markUpdated();
 	}
 
-	public void whitelistRemove(String name) {
-		this.shieldState.whitelistNames.removeIf(existing -> existing.equalsIgnoreCase(name));
+	/**
+	 * Removes a name from the whitelist and revokes the matching UUID(s), resolving the
+	 * name via the online player list and the server's name-to-id cache.
+	 */
+	public void whitelistRemove(MinecraftServer server, String name) {
+		String trimmed = name.trim();
+		this.shieldState.whitelistNames.removeIf(existing -> existing.equalsIgnoreCase(trimmed));
+
+		ServerPlayer online = server.getPlayerList().getPlayerByName(trimmed);
+		if (online != null) {
+			this.shieldState.whitelistUuids.remove(online.getUUID());
+		}
+
+		server.services().nameToIdCache().get(trimmed).ifPresent(nameAndId -> this.shieldState.whitelistUuids.remove(nameAndId.id()));
 		this.markUpdated();
 	}
 
-	private void markUpdated() {
-		this.setChanged();
-		if (this.level != null) {
-			BlockState state = this.getBlockState();
-			this.level.sendBlockUpdated(this.worldPosition, state, state, Block.UPDATE_NEIGHBORS | Block.UPDATE_CLIENTS);
+	/** Adds {@code name} unless an equal name (ignoring case) is already present. */
+	private static void addNameIfAbsent(Set<String> names, String name) {
+		for (String existing : names) {
+			if (existing.equalsIgnoreCase(name)) {
+				return;
+			}
 		}
 
-		if (this.level instanceof ServerLevel) {
-			ServerNet.syncShield(this);
+		names.add(name);
+	}
+
+	/**
+	 * Marks the shield dirty for persistence and, if any replicated field changed since
+	 * the last broadcast, replicates the new state to clients.
+	 */
+	public void markUpdated() {
+		this.setChanged();
+		if (!(this.level instanceof ServerLevel)) {
+			return;
 		}
+
+		ReplicatedState snapshot = this.buildReplicatedState();
+		if (snapshot.equals(this.lastSentState)) {
+			return;
+		}
+
+		this.lastSentState = snapshot;
+		BlockState state = this.getBlockState();
+		this.level.sendBlockUpdated(this.worldPosition, state, state, Block.UPDATE_CLIENTS);
+		ServerNet.syncShield(this);
+	}
+
+	/** The client-visible fields mirrored by {@code ShieldSyncS2C}; used to skip redundant broadcasts. */
+	private record ReplicatedState(
+		boolean active,
+		int effectId,
+		float targetRadius,
+		float currentRadius,
+		float healthFrac,
+		Set<UUID> whitelistUuids,
+		Set<String> whitelistNames,
+		int cooldownSeconds,
+		@Nullable UUID ownerUuid
+	) {
+	}
+
+	private ReplicatedState buildReplicatedState() {
+		ShieldState state = this.shieldState;
+		return new ReplicatedState(
+			state.active,
+			state.effectId,
+			state.targetRadius,
+			ShieldLogic.currentRadius(state),
+			state.maxHealth > 0.0F ? state.health / state.maxHealth : 0.0F,
+			Set.copyOf(state.whitelistUuids),
+			Set.copyOf(state.whitelistNames),
+			(int) (this.cooldownTicksLeft() / ShieldLogic.TICKS_PER_FUEL_SECOND),
+			state.ownerUuid
+		);
 	}
 
 	@Override
@@ -245,6 +336,20 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		}
 
 		super.setRemoved();
+	}
+
+	/**
+	 * Drops the fuel slot contents when the block is destroyed. This is the 26.2 removal
+	 * hook vanilla container block entities use ({@code Containers.dropContents} runs here
+	 * because the block entity is already detached by the time the block's
+	 * {@code affectNeighborsAfterRemoval} fires).
+	 */
+	@Override
+	public void preRemoveSideEffects(BlockPos pos, BlockState state) {
+		super.preRemoveSideEffects(pos, state);
+		if (this.level != null) {
+			Containers.dropContents(this.level, pos, this.fuelContainer);
+		}
 	}
 
 	// --- ExtendedMenuProvider<BlockPos> ---

@@ -11,6 +11,7 @@ import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.Projectile;
@@ -193,32 +194,63 @@ public final class ShieldLogic {
 	}
 
 	/**
-	 * Pushes a non-whitelisted player back out when they cross into the shield.
-	 * Leaving is always allowed.
+	 * Pushes any non-whitelisted, non-owner player currently inside the shield back out,
+	 * regardless of how they got in (walking, teleporting, riding, or pre-existing).
+	 * Leaving is always allowed. Spectators are ignored.
 	 *
 	 * @return true if the player was pushed back.
 	 */
 	public static boolean applyPlayerBarrier(Vec3 center, double radius, ShieldState state, Player player) {
+		if (player.isSpectator()) {
+			return false;
+		}
+
 		UUID uuid = player.getUUID();
 		boolean isOwner = uuid.equals(state.ownerUuid);
 		if (!shouldBlock(state, player.getGameProfile().name(), uuid, isOwner)) {
 			return false;
 		}
 
-		Vec3 prev = new Vec3(player.xo, player.yo, player.zo);
 		Vec3 current = player.position();
-		double prevDist = prev.distanceTo(center);
-		double curDist = current.distanceTo(center);
-		if (!(prevDist > radius && curDist <= radius)) {
+		if (current.distanceTo(center) > radius) {
 			return false;
 		}
 
+		// Push mostly horizontally so players are not flung into the sky or the ground.
 		Vec3 direction = current.subtract(center);
-		direction = direction.lengthSqr() < 1.0E-6 ? new Vec3(1.0, 0.0, 0.0) : direction.normalize();
-		Vec3 target = center.add(direction.scale(radius + PUSHBACK_MARGIN));
-		player.teleportTo(target.x, target.y, target.z);
+		Vec3 horizontal = new Vec3(direction.x, 0.0, direction.z);
+		horizontal = horizontal.lengthSqr() < 1.0E-6 ? new Vec3(1.0, 0.0, 0.0) : horizontal.normalize();
+		Vec3 target = center.add(horizontal.scale(radius + PUSHBACK_MARGIN));
+
+		// Riding players are moved via their root vehicle so the whole stack leaves the shield.
+		Entity mover = player.getRootVehicle();
+		double targetY = Mth.clamp(mover.getY(), player.level().getMinY(), player.level().getMaxY());
+		mover.teleportTo(target.x, targetY, target.z);
+		mover.setDeltaMovement(Vec3.ZERO);
 		player.setDeltaMovement(Vec3.ZERO);
 		return true;
+	}
+
+	/**
+	 * Runs one barrier pass over all players near the projector, expelling any
+	 * non-whitelisted player standing inside. Used right after activation.
+	 *
+	 * @return true if at least one player was pushed out.
+	 */
+	public static boolean expelBlockedPlayers(ServerLevel level, BlockPos pos, ShieldState state) {
+		Vec3 center = Vec3.atCenterOf(pos);
+		double radius = currentRadius(state);
+		double areaSize = 2.0 * radius + 8.0;
+		AABB area = AABB.ofSize(center, areaSize, areaSize, areaSize);
+
+		boolean pushed = false;
+		for (Player player : level.getEntitiesOfClass(Player.class, area)) {
+			if (applyPlayerBarrier(center, radius, state, player)) {
+				pushed = true;
+			}
+		}
+
+		return pushed;
 	}
 
 	private static @Nullable String ownerName(Entity owner) {

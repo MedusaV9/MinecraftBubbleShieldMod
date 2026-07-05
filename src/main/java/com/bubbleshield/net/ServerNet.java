@@ -4,6 +4,7 @@ import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -11,6 +12,8 @@ import com.bubbleshield.block.BubbleShieldBlockEntity;
 import com.bubbleshield.shield.ShieldLogic;
 import com.bubbleshield.shield.ShieldState;
 
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLevelEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
@@ -19,6 +22,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
+import net.minecraft.util.StringUtil;
 import net.minecraft.world.phys.Vec3;
 
 import org.jspecify.annotations.Nullable;
@@ -33,6 +37,8 @@ public final class ServerNet {
 	public static final int MAX_DIAMETER = 200;
 	public static final int MIN_EFFECT_ID = 0;
 	public static final int MAX_EFFECT_ID = 49;
+	/** Hard cap on whitelist entries to keep payloads and NBT bounded. */
+	public static final int MAX_WHITELIST_SIZE = 64;
 
 	/**
 	 * Loaded shield projectors per level, used to sync existing shields to joining players.
@@ -46,7 +52,7 @@ public final class ServerNet {
 	public static void register() {
 		ServerPlayNetworking.registerGlobalReceiver(ShieldPayloads.SetSettingsC2S.TYPE, (payload, ctx) -> {
 			BubbleShieldBlockEntity shield = validatedShield(ctx.player(), payload.pos());
-			if (shield == null) {
+			if (shield == null || !isOwner(ctx.player(), shield)) {
 				return;
 			}
 
@@ -61,16 +67,25 @@ public final class ServerNet {
 				return;
 			}
 
+			String name = payload.name().trim();
+			if (name.isEmpty() || !StringUtil.isValidPlayerName(name)) {
+				return;
+			}
+
 			if (payload.add()) {
-				shield.whitelistAdd(ctx.server(), payload.name());
+				if (shield.getShieldState().whitelistNames.size() >= MAX_WHITELIST_SIZE) {
+					return;
+				}
+
+				shield.whitelistAdd(ctx.server(), name);
 			} else {
-				shield.whitelistRemove(payload.name());
+				shield.whitelistRemove(ctx.server(), name);
 			}
 		});
 
 		ServerPlayNetworking.registerGlobalReceiver(ShieldPayloads.SetActiveC2S.TYPE, (payload, ctx) -> {
 			BubbleShieldBlockEntity shield = validatedShield(ctx.player(), payload.pos());
-			if (shield == null) {
+			if (shield == null || !isOwner(ctx.player(), shield)) {
 				return;
 			}
 
@@ -78,6 +93,8 @@ public final class ServerNet {
 		});
 
 		ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
+			backfillWhitelistUuid(handler.player);
+
 			ServerLevel level = handler.player.level();
 			Set<BubbleShieldBlockEntity> shields = LOADED_SHIELDS.get(level);
 			if (shields == null) {
@@ -90,6 +107,40 @@ public final class ServerNet {
 				}
 			}
 		});
+
+		// LOADED_SHIELDS holds ServerLevel keys; clear on unload/stop so integrated-server
+		// restarts do not leak levels or stale block entities.
+		ServerLevelEvents.UNLOAD.register((server, level) -> LOADED_SHIELDS.remove(level));
+		ServerLifecycleEvents.SERVER_STOPPED.register(server -> LOADED_SHIELDS.clear());
+	}
+
+	/**
+	 * Resolves name-only whitelist entries for a joining player: any loaded shield whose
+	 * whitelist contains the player's name (case-insensitively) but not their UUID gets
+	 * the UUID backfilled, so the barrier and client edge-dissolve recognise them.
+	 */
+	private static void backfillWhitelistUuid(ServerPlayer player) {
+		String name = player.getGameProfile().name();
+		UUID uuid = player.getUUID();
+		for (Set<BubbleShieldBlockEntity> shields : LOADED_SHIELDS.values()) {
+			for (BubbleShieldBlockEntity shield : shields) {
+				ShieldState state = shield.getShieldState();
+				if (!state.whitelistUuids.contains(uuid) && containsIgnoreCase(state.whitelistNames, name)) {
+					state.whitelistUuids.add(uuid);
+					shield.markUpdated();
+				}
+			}
+		}
+	}
+
+	private static boolean containsIgnoreCase(Set<String> names, String name) {
+		for (String existing : names) {
+			if (existing.equalsIgnoreCase(name)) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
@@ -153,28 +204,44 @@ public final class ServerNet {
 			healthFrac,
 			List.copyOf(state.whitelistUuids),
 			List.copyOf(state.whitelistNames),
-			(int) (cooldownTicks / ShieldLogic.TICKS_PER_FUEL_SECOND)
+			(int) (cooldownTicks / ShieldLogic.TICKS_PER_FUEL_SECOND),
+			Optional.ofNullable(state.ownerUuid)
 		);
 	}
 
 	/**
-	 * @return the shield block entity at {@code pos} if it exists and the player is close enough, otherwise null.
+	 * @return the shield block entity at {@code pos} if the chunk is already loaded and the
+	 * player is close enough, otherwise null. Distance and load checks run BEFORE the
+	 * block entity lookup so a client-supplied position can never force a chunk load.
 	 */
 	private static @Nullable BubbleShieldBlockEntity validatedShield(ServerPlayer player, BlockPos pos) {
-		if (!(player.level().getBlockEntity(pos) instanceof BubbleShieldBlockEntity shield)) {
+		if (player.position().distanceTo(Vec3.atCenterOf(pos)) > MAX_INTERACT_DISTANCE) {
 			return null;
 		}
 
-		if (player.position().distanceTo(Vec3.atCenterOf(pos)) > MAX_INTERACT_DISTANCE) {
+		if (!player.level().isLoaded(pos)) {
+			return null;
+		}
+
+		if (!(player.level().getBlockEntity(pos) instanceof BubbleShieldBlockEntity shield)) {
 			return null;
 		}
 
 		return shield;
 	}
 
-	/** Whitelist edits are owner-only; a shield without a recorded owner accepts edits from anyone nearby. */
+	/**
+	 * Mutating requests are owner-only. A shield without a recorded owner (e.g. placed
+	 * before this rule existed) is claimed by the first interacting player; afterwards
+	 * only an exact UUID match is accepted.
+	 */
 	private static boolean isOwner(ServerPlayer player, BubbleShieldBlockEntity shield) {
 		UUID owner = shield.getShieldState().ownerUuid;
-		return owner == null || owner.equals(player.getUUID());
+		if (owner == null) {
+			shield.setOwner(player);
+			return true;
+		}
+
+		return owner.equals(player.getUUID());
 	}
 }
