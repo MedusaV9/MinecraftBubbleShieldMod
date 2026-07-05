@@ -1,21 +1,31 @@
 package com.bubbleshield.block;
 
+import com.bubbleshield.menu.BubbleShieldMenu;
 import com.bubbleshield.net.ServerNet;
 import com.bubbleshield.registry.ModBlockEntities;
 import com.bubbleshield.shield.FuelMap;
 import com.bubbleshield.shield.ShieldLogic;
 import com.bubbleshield.shield.ShieldState;
 
+import net.fabricmc.fabric.api.menu.v1.ExtendedMenuProvider;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.SimpleContainer;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.ContainerData;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ItemStackTemplate;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -23,8 +33,36 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
 
-public class BubbleShieldBlockEntity extends BlockEntity {
+public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenuProvider<BlockPos> {
 	private final ShieldState shieldState = new ShieldState();
+	/** One-slot fuel inventory shown in the projector menu; consumed into fuel-seconds each tick. */
+	private final SimpleContainer fuelContainer = new SimpleContainer(1);
+	/** Live server-side snapshot for the menu; values in SECONDS (data slots sync 16-bit signed). */
+	private final ContainerData menuData = new ContainerData() {
+		@Override
+		public int get(int dataId) {
+			ShieldState state = BubbleShieldBlockEntity.this.shieldState;
+			return switch (dataId) {
+				case BubbleShieldMenu.DATA_FUEL_SECONDS -> Math.min(state.fuelSeconds, Short.MAX_VALUE);
+				case BubbleShieldMenu.DATA_HEALTH_TIMES_10 -> Math.round(state.health * 10.0F);
+				case BubbleShieldMenu.DATA_DIAMETER -> Math.round(state.targetRadius * 2.0F);
+				case BubbleShieldMenu.DATA_EFFECT_ID -> state.effectId;
+				case BubbleShieldMenu.DATA_ACTIVE -> state.active ? 1 : 0;
+				case BubbleShieldMenu.DATA_COOLDOWN_SECONDS -> (int) Math.min(Short.MAX_VALUE, BubbleShieldBlockEntity.this.cooldownTicksLeft() / ShieldLogic.TICKS_PER_FUEL_SECOND);
+				default -> 0;
+			};
+		}
+
+		@Override
+		public void set(int dataId, int value) {
+			// Server-authoritative; clients change settings via payloads, not data slots.
+		}
+
+		@Override
+		public int getCount() {
+			return BubbleShieldMenu.DATA_COUNT;
+		}
+	};
 
 	public BubbleShieldBlockEntity(BlockPos worldPosition, BlockState blockState) {
 		super(ModBlockEntities.BUBBLE_SHIELD_PROJECTOR, worldPosition, blockState);
@@ -32,6 +70,19 @@ public class BubbleShieldBlockEntity extends BlockEntity {
 
 	public ShieldState getShieldState() {
 		return this.shieldState;
+	}
+
+	public SimpleContainer getFuelContainer() {
+		return this.fuelContainer;
+	}
+
+	public ContainerData getMenuData() {
+		return this.menuData;
+	}
+
+	private long cooldownTicksLeft() {
+		long gameTime = this.level != null ? this.level.getGameTime() : 0L;
+		return Math.max(0L, this.shieldState.cooldownUntil - gameTime);
 	}
 
 	public float currentRadius() {
@@ -42,9 +93,26 @@ public class BubbleShieldBlockEntity extends BlockEntity {
 	 * Runs one server tick of shield logic. Invoked by the block ticker on the server only.
 	 */
 	public void serverTick() {
+		this.consumeFuelSlot();
 		if (this.level instanceof ServerLevel serverLevel && ShieldLogic.serverTick(serverLevel, this.worldPosition, this.shieldState)) {
 			this.markUpdated();
 		}
+	}
+
+	/**
+	 * Converts any fuel items sitting in the menu's fuel slot into stored fuel-seconds,
+	 * leaving crafting remainders (e.g. empty buckets) behind.
+	 */
+	private void consumeFuelSlot() {
+		ItemStack stack = this.fuelContainer.getItem(0);
+		int seconds = FuelMap.fuelSeconds(stack);
+		if (seconds <= 0) {
+			return;
+		}
+
+		ItemStackTemplate remainder = stack.getItem().getCraftingRemainder();
+		this.fuelContainer.setItem(0, remainder != null ? remainder.withCount(stack.getCount()).create() : ItemStack.EMPTY);
+		this.addFuelSeconds(seconds);
 	}
 
 	/**
@@ -179,16 +247,35 @@ public class BubbleShieldBlockEntity extends BlockEntity {
 		super.setRemoved();
 	}
 
+	// --- ExtendedMenuProvider<BlockPos> ---
+
+	@Override
+	public BlockPos getScreenOpeningData(ServerPlayer player) {
+		return this.worldPosition;
+	}
+
+	@Override
+	public Component getDisplayName() {
+		return Component.translatable("gui.bubbleshield.title");
+	}
+
+	@Override
+	public AbstractContainerMenu createMenu(int containerId, Inventory inventory, Player player) {
+		return new BubbleShieldMenu(containerId, inventory, this);
+	}
+
 	@Override
 	protected void saveAdditional(ValueOutput output) {
 		super.saveAdditional(output);
 		this.shieldState.save(output);
+		this.fuelContainer.storeAsItemList(output.list("fuel_items", ItemStack.CODEC));
 	}
 
 	@Override
 	protected void loadAdditional(ValueInput input) {
 		super.loadAdditional(input);
 		this.shieldState.load(input);
+		this.fuelContainer.fromItemList(input.listOrEmpty("fuel_items", ItemStack.CODEC));
 	}
 
 	@Override

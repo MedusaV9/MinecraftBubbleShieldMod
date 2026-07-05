@@ -3,6 +3,7 @@ package com.bubbleshield.gametest;
 import java.util.UUID;
 
 import com.bubbleshield.block.BubbleShieldBlockEntity;
+import com.bubbleshield.menu.BubbleShieldMenu;
 import com.bubbleshield.registry.ModBlocks;
 import com.bubbleshield.shield.ShieldLogic;
 import com.bubbleshield.shield.ShieldState;
@@ -12,6 +13,7 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.player.Player;
@@ -128,6 +130,31 @@ public class ShieldGameTests {
 
 		helper.assertTrue(!ShieldLogic.applyPlayerBarrier(center, radius, shield, friend), "a whitelisted player should not be pushed");
 		helper.assertTrue(friend.position().distanceTo(center) <= radius, "the whitelisted player should stay inside");
+		helper.succeed();
+	}
+
+	@GameTest(padding = 16)
+	public void menuOpens(GameTestHelper helper) {
+		placeProjector(helper, 4.0F);
+
+		// makeMockPlayer(GameType) returns a bare Player whose openMenu() is a no-op, so a
+		// ServerPlayer placed in the level (with a working connection) is required to observe
+		// containerMenu changing when the block is used.
+		ServerPlayer player = helper.makeMockServerPlayerInLevel();
+		try {
+			Vec3 center = Vec3.atCenterOf(helper.absolutePos(PROJECTOR_POS));
+			player.snapTo(center.x + 1.5, center.y - 0.5, center.z);
+
+			helper.useBlock(PROJECTOR_POS, player);
+
+			helper.assertTrue(player.containerMenu instanceof BubbleShieldMenu, "using the projector should open a BubbleShieldMenu");
+			BubbleShieldMenu menu = (BubbleShieldMenu) player.containerMenu;
+			helper.assertTrue(menu.pos().equals(helper.absolutePos(PROJECTOR_POS)), "the menu should know the projector position");
+			helper.assertTrue(menu.stillValid(player), "the menu should be valid for a player next to the projector");
+		} finally {
+			helper.getLevel().getServer().getPlayerList().remove(player);
+		}
+
 		helper.succeed();
 	}
 

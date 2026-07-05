@@ -25,6 +25,7 @@ public final class ClientShieldManager {
 		float currentRadius,
 		float healthFrac,
 		List<UUID> whitelist,
+		List<String> whitelistNames,
 		int cooldownSeconds
 	) {
 	}
@@ -50,6 +51,7 @@ public final class ClientShieldManager {
 				payload.currentRadius(),
 				payload.healthFrac(),
 				payload.whitelist(),
+				payload.whitelistNames(),
 				payload.cooldownSeconds()
 			))
 		));

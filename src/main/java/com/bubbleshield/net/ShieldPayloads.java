@@ -72,7 +72,7 @@ public final class ShieldPayloads {
 	 * Full shield snapshot for the client-side replica.
 	 *
 	 * <p>{@link StreamCodec#composite} supports up to 12 fields in this Minecraft version,
-	 * so the 8 fields fit in a single composite.
+	 * so the 9 fields fit in a single composite.
 	 */
 	public record ShieldSyncS2C(
 		BlockPos pos,
@@ -82,6 +82,7 @@ public final class ShieldPayloads {
 		float currentRadius,
 		float healthFrac,
 		List<UUID> whitelist,
+		List<String> whitelistNames,
 		int cooldownSeconds
 	) implements CustomPacketPayload {
 		public static final CustomPacketPayload.Type<ShieldSyncS2C> TYPE = new CustomPacketPayload.Type<>(BubbleShield.id("shield_sync"));
@@ -93,6 +94,7 @@ public final class ShieldPayloads {
 			ByteBufCodecs.FLOAT, ShieldSyncS2C::currentRadius,
 			ByteBufCodecs.FLOAT, ShieldSyncS2C::healthFrac,
 			UUIDUtil.STREAM_CODEC.apply(ByteBufCodecs.list()), ShieldSyncS2C::whitelist,
+			ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()), ShieldSyncS2C::whitelistNames,
 			ByteBufCodecs.VAR_INT, ShieldSyncS2C::cooldownSeconds,
 			ShieldSyncS2C::new
 		);

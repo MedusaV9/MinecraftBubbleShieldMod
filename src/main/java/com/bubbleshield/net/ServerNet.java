@@ -152,6 +152,7 @@ public final class ServerNet {
 			ShieldLogic.currentRadius(state),
 			healthFrac,
 			List.copyOf(state.whitelistUuids),
+			List.copyOf(state.whitelistNames),
 			(int) (cooldownTicks / ShieldLogic.TICKS_PER_FUEL_SECOND)
 		);
 	}
