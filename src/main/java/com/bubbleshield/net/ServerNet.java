@@ -82,7 +82,7 @@ public final class ServerNet {
 					return;
 				}
 
-				shield.whitelistAdd(ctx.server(), name);
+				shield.whitelistAdd(ctx.server(), name, ctx.player());
 			} else {
 				shield.whitelistRemove(ctx.server(), name);
 			}
@@ -94,7 +94,12 @@ public final class ServerNet {
 				return;
 			}
 
-			shield.setActive(payload.active());
+			if (payload.active()) {
+				// Credit the requesting player with the shield_activated criterion on success.
+				shield.tryActivate(ctx.player());
+			} else {
+				shield.setActive(false);
+			}
 		});
 
 		ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {

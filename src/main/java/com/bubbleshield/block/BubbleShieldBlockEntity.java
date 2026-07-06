@@ -1,5 +1,6 @@
 package com.bubbleshield.block;
 
+import com.bubbleshield.advancements.ModCriteria;
 import com.bubbleshield.menu.BubbleShieldMenu;
 import com.bubbleshield.net.ServerNet;
 import com.bubbleshield.net.ShieldPayloads;
@@ -205,6 +206,17 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	 * @return true if the shield is active after this call.
 	 */
 	public boolean tryActivate() {
+		return this.tryActivate(null);
+	}
+
+	/**
+	 * Attempts to activate the shield, crediting {@code initiator} (when given) with the
+	 * {@code bubbleshield:shield_activated} advancement criterion on success.
+	 *
+	 * @param initiator the player who requested the activation, or null for redstone/tests.
+	 * @return true if the shield is active after this call.
+	 */
+	public boolean tryActivate(@Nullable ServerPlayer initiator) {
 		if (this.level == null || !ShieldLogic.canActivate(this.shieldState, this.level.getGameTime())) {
 			return false;
 		}
@@ -216,6 +228,10 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 			if (this.level instanceof ServerLevel serverLevel) {
 				ShieldLogic.expelBlockedPlayers(serverLevel, this.worldPosition, this.shieldState);
 			}
+		}
+
+		if (initiator != null) {
+			ModCriteria.SHIELD_ACTIVATED.trigger(initiator, Math.round(this.shieldState.targetRadius * 2.0F), this.shieldState.effectId);
 		}
 
 		return true;
@@ -241,6 +257,7 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		boolean broke = ShieldLogic.applyDamage(this.shieldState, amount, gameTime, ShieldLogic.breakCooldownTicks(this.tier()));
 		if (broke && this.level instanceof ServerLevel serverLevel) {
 			serverLevel.playSound(null, this.worldPosition, SoundEvents.SHIELD_BREAK.value(), SoundSource.BLOCKS, 1.0F, 1.0F);
+			ModCriteria.fireShieldBroken(serverLevel, this.shieldState.ownerUuid);
 		}
 
 		this.markUpdated();
@@ -294,6 +311,15 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	 * recording the UUID if the player is online.
 	 */
 	public void whitelistAdd(MinecraftServer server, String name) {
+		this.whitelistAdd(server, name, null);
+	}
+
+	/**
+	 * Adds a player name to the whitelist (case-insensitively deduplicated), also
+	 * recording the UUID if the player is online. When {@code actor} is given, they
+	 * are credited with the {@code bubbleshield:player_whitelisted} criterion.
+	 */
+	public void whitelistAdd(MinecraftServer server, String name, @Nullable ServerPlayer actor) {
 		String trimmed = name.trim();
 		if (trimmed.isEmpty()) {
 			return;
@@ -303,6 +329,10 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		ServerPlayer online = server.getPlayerList().getPlayerByName(trimmed);
 		if (online != null) {
 			this.shieldState.whitelistUuids.add(online.getUUID());
+		}
+
+		if (actor != null) {
+			ModCriteria.PLAYER_WHITELISTED.trigger(actor);
 		}
 
 		this.markUpdated();

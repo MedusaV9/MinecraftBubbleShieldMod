@@ -1,0 +1,25 @@
+{
+  "parent": "bubbleshield:root",
+  "criteria": {
+    "player_whitelisted": {
+      "trigger": "bubbleshield:player_whitelisted"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancements.bubbleshield.friend_zone.description"
+    },
+    "icon": {
+      "id": "minecraft:golden_apple"
+    },
+    "title": {
+      "translate": "advancements.bubbleshield.friend_zone.title"
+    }
+  },
+  "requirements": [
+    [
+      "player_whitelisted"
+    ]
+  ],
+  "sends_telemetry_event": false
+}

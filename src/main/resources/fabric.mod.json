@@ -26,7 +26,8 @@
 			"com.bubbleshield.gametest.EffectCatalogGameTests",
 			"com.bubbleshield.gametest.GuardContextGameTests",
 			"com.bubbleshield.gametest.TierGameTests",
-			"com.bubbleshield.gametest.ControlShapeGameTests"
+			"com.bubbleshield.gametest.ControlShapeGameTests",
+			"com.bubbleshield.gametest.AdvancementGameTests"
 		]
 	},
 	"mixins": [

@@ -2,6 +2,7 @@ package com.bubbleshield.shield;
 
 import java.util.UUID;
 
+import com.bubbleshield.advancements.ModCriteria;
 import com.bubbleshield.effect.ContextModifier;
 import com.bubbleshield.effect.ContextModifier.ContextState;
 import com.bubbleshield.effect.ContextProfile;
@@ -302,6 +303,7 @@ public final class ShieldLogic {
 			level.playSound(null, pos, SoundEvents.SHIELD_BLOCK.value(), SoundSource.BLOCKS, 1.0F, 1.0F);
 			if (broke) {
 				level.playSound(null, pos, SoundEvents.SHIELD_BREAK.value(), SoundSource.BLOCKS, 1.0F, 1.0F);
+				ModCriteria.fireShieldBroken(level, state.ownerUuid);
 			}
 		}
 

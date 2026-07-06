@@ -1,5 +1,6 @@
 package com.bubbleshield;
 
+import com.bubbleshield.advancements.ModCriteria;
 import com.bubbleshield.effect.EffectRegistry;
 import com.bubbleshield.effect.InsideEffectBehavior;
 import com.bubbleshield.effect.behaviors.EffectBehaviors;
@@ -30,6 +31,7 @@ public class BubbleShield implements ModInitializer {
 		ModItems.init();
 		ModBlockEntities.init();
 		ModMenus.init();
+		ModCriteria.init();
 
 		ShieldPayloads.registerTypes();
 		ServerNet.register();
