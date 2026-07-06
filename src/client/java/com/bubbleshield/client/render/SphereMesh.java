@@ -98,6 +98,65 @@ public final class SphereMesh {
 		}
 	}
 
+	/** Emits the dome (upper hemisphere + bottom disc) with untransformed UVs; see the main overload. */
+	public void emitHemisphere(PoseStack.Pose pose, VertexConsumer buffer, float radius, int argbPrimary, int argbSecondary, float alphaBase, List<Vec3> dissolveCentersRelative) {
+		emitHemisphere(pose, buffer, radius, argbPrimary, argbSecondary, alphaBase, dissolveCentersRelative, 1.0F, 0.0F, 0.0F);
+	}
+
+	/**
+	 * Emits the upper hemisphere (lat rows {@code 0..latSteps / 2}, top pole to equator)
+	 * plus a flat disc closing the dome at {@code y = 0}, matching the server's
+	 * {@link com.bubbleshield.shield.ShieldShape#DOME} containment volume. The disc
+	 * reuses the equator ring vertices and fans to the center, whose color continues the
+	 * latitude blend downward (latFrac 1.0 = full secondary) so the rim doesn't end in a
+	 * hard hollow edge. Parameters match {@link #emit}. Requires an even {@code latSteps}
+	 * so one lat row lies exactly on the equator.
+	 */
+	public void emitHemisphere(PoseStack.Pose pose, VertexConsumer buffer, float radius, int argbPrimary, int argbSecondary, float alphaBase, List<Vec3> dissolveCentersRelative, float uvScale, float uvOffsetU, float uvOffsetV) {
+		int rowStride = this.lonSteps + 1;
+		int equatorLat = this.latSteps / 2;
+		int vertexCount = (equatorLat + 1) * rowStride;
+		int[] colors = new int[vertexCount];
+
+		for (int i = 0; i < vertexCount; i++) {
+			float x = this.positions[i * 3] * radius;
+			float y = this.positions[i * 3 + 1] * radius;
+			float z = this.positions[i * 3 + 2] * radius;
+			float alpha = alphaBase * dissolveFactor(x, y, z, dissolveCentersRelative);
+			colors[i] = packColor(argbPrimary, argbSecondary, this.uvs[i * 2 + 1], alpha);
+		}
+
+		for (int lat = 0; lat < equatorLat; lat++) {
+			for (int lon = 0; lon < this.lonSteps; lon++) {
+				int i00 = lat * rowStride + lon;
+				int i10 = (lat + 1) * rowStride + lon;
+				int i11 = (lat + 1) * rowStride + lon + 1;
+				int i01 = lat * rowStride + lon + 1;
+				emitVertex(pose, buffer, i00, radius, colors[i00], uvScale, uvOffsetU, uvOffsetV);
+				emitVertex(pose, buffer, i10, radius, colors[i10], uvScale, uvOffsetU, uvOffsetV);
+				emitVertex(pose, buffer, i11, radius, colors[i11], uvScale, uvOffsetU, uvOffsetV);
+				emitVertex(pose, buffer, i01, radius, colors[i01], uvScale, uvOffsetU, uvOffsetV);
+			}
+		}
+
+		// Bottom disc: one degenerate quad (triangle) per longitude step, from the equator
+		// ring to the dome center, so the dome reads as a closed shell from below.
+		float centerAlpha = alphaBase * dissolveFactor(0.0F, 0.0F, 0.0F, dissolveCentersRelative);
+		int centerColor = packColor(argbPrimary, argbSecondary, 1.0F, centerAlpha);
+		for (int lon = 0; lon < this.lonSteps; lon++) {
+			int i0 = equatorLat * rowStride + lon;
+			int i1 = equatorLat * rowStride + lon + 1;
+			float centerU = ((this.uvs[i0 * 2] + this.uvs[i1 * 2]) * 0.5F) * uvScale + uvOffsetU;
+			float centerV = 1.0F * uvScale + uvOffsetV;
+			emitVertex(pose, buffer, i0, radius, colors[i0], uvScale, uvOffsetU, uvOffsetV);
+			emitVertex(pose, buffer, i1, radius, colors[i1], uvScale, uvOffsetU, uvOffsetV);
+			// The two collapsed center vertices turn the quad into a triangle, exactly like
+			// the sphere's pole rows.
+			buffer.addVertex(pose, 0.0F, 0.0F, 0.0F).setUv(centerU, centerV).setColor(centerColor);
+			buffer.addVertex(pose, 0.0F, 0.0F, 0.0F).setUv(centerU, centerV).setColor(centerColor);
+		}
+	}
+
 	private void emitVertex(PoseStack.Pose pose, VertexConsumer buffer, int index, float radius, int argb, float uvScale, float uvOffsetU, float uvOffsetV) {
 		buffer.addVertex(pose, this.positions[index * 3] * radius, this.positions[index * 3 + 1] * radius, this.positions[index * 3 + 2] * radius)
 				.setUv(this.uvs[index * 2] * uvScale + uvOffsetU, this.uvs[index * 2 + 1] * uvScale + uvOffsetV)

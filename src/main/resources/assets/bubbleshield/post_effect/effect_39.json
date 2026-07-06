@@ -5,7 +5,7 @@
     "passes": [
         {
             "vertex_shader": "minecraft:core/screenquad",
-            "fragment_shader": "bubbleshield:screenfx/wobble",
+            "fragment_shader": "bubbleshield:screenfx/ripple",
             "inputs": [
                 {
                     "sampler_name": "In",
@@ -14,7 +14,7 @@
             ],
             "output": "swap",
             "uniforms": {
-                "WobbleConfig": [
+                "RippleConfig": [
                     {
                         "name": "Primary",
                         "type": "vec4",
@@ -26,14 +26,9 @@
                         ]
                     },
                     {
-                        "name": "Frequency",
+                        "name": "Intensity",
                         "type": "float",
-                        "value": 24.0
-                    },
-                    {
-                        "name": "Amplitude",
-                        "type": "float",
-                        "value": 0.00256
+                        "value": 0.512
                     },
                     {
                         "name": "Speed",

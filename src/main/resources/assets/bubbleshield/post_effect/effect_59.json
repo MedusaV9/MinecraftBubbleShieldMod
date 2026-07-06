@@ -5,7 +5,7 @@
     "passes": [
         {
             "vertex_shader": "minecraft:core/screenquad",
-            "fragment_shader": "bubbleshield:screenfx/vignette",
+            "fragment_shader": "bubbleshield:screenfx/frostlens",
             "inputs": [
                 {
                     "sampler_name": "In",
@@ -14,7 +14,7 @@
             ],
             "output": "swap",
             "uniforms": {
-                "VignetteConfig": [
+                "FrostLensConfig": [
                     {
                         "name": "Primary",
                         "type": "vec4",
@@ -26,14 +26,24 @@
                         ]
                     },
                     {
-                        "name": "Intensity",
-                        "type": "float",
-                        "value": 0.304
+                        "name": "Secondary",
+                        "type": "vec4",
+                        "value": [
+                            0.0039,
+                            0.2588,
+                            0.4157,
+                            1.0
+                        ]
                     },
                     {
-                        "name": "PulseSpeed",
+                        "name": "Intensity",
                         "type": "float",
-                        "value": 1.008
+                        "value": 0.38
+                    },
+                    {
+                        "name": "CrystalScale",
+                        "type": "float",
+                        "value": 30.16
                     }
                 ]
             }

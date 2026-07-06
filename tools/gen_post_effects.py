@@ -11,10 +11,10 @@ commit the regenerated files:
     python3 tools/gen_post_effects.py
 
 The EFFECTS table mirrors com.bubbleshield.effect.EffectRegistry row for row:
-(argbPrimary, argbSecondary, FINAL screenTemplate name). Templates without a
-shader yet resolve through SCREENFX_FALLBACK, which MUST stay identical to
-EffectRegistry.TEMP_SCREENFX_FALLBACK (the screenTemplateMatchesJson gametest
-cross-checks every generated JSON against EffectRegistry.resolvedScreenTemplate).
+(argbPrimary, argbSecondary, screenTemplate name). All 12 screen-fx templates
+ship a shader, so every JSON references its effect's final template directly
+(the screenTemplateMatchesJson gametest cross-checks every generated JSON
+against EffectDefinition.screenTemplate).
 Each JSON follows the vanilla post_effect schema (see
 assets/minecraft/post_effect/creeper.json in 26.2): a "targets"/"passes"
 document where every pass runs a fragment shader over a screenquad. Pass 1
@@ -29,17 +29,7 @@ OUT_DIR = Path(__file__).resolve().parent.parent / "src/main/resources/assets/bu
 
 EFFECT_COUNT = 75
 
-# TODO(S6): remove — must stay identical to EffectRegistry.TEMP_SCREENFX_FALLBACK.
-SCREENFX_FALLBACK = {
-    "bloomglow": "tint",
-    "ripple": "wobble",
-    "scanlines": "pixelate",
-    "edgeglow": "tint",
-    "frostlens": "vignette",
-    "heathaze": "wobble",
-}
-
-# Mirrors EffectRegistry.buildAll(): (argbPrimary, argbSecondary, FINAL screenTemplate).
+# Mirrors EffectRegistry.buildAll(): (argbPrimary, argbSecondary, screenTemplate).
 EFFECTS = [
     # F0 "Aurora Borealis" (greens)
     (0xFF66FFAA, 0xFF1E9E6E, "tint"),       # 0 Aurora Storm
@@ -184,12 +174,47 @@ def template_uniforms(template: str, primary: list[float], secondary: list[float
             uniform("Primary", "vec4", primary),
             uniform("Desaturation", "float", round(0.7 * param_b, 4)),
         ]}
+    if template == "bloomglow":
+        return {"BloomGlowConfig": [
+            uniform("Primary", "vec4", primary),
+            uniform("Intensity", "float", round(0.9 * param_b, 4)),
+            uniform("Threshold", "float", round(0.35 + 0.25 * param_a, 4)),
+        ]}
+    if template == "ripple":
+        return {"RippleConfig": [
+            uniform("Primary", "vec4", primary),
+            uniform("Intensity", "float", round(0.8 * param_b, 4)),
+            uniform("Speed", "float", round(param_a, 4)),
+        ]}
+    if template == "scanlines":
+        return {"ScanlinesConfig": [
+            uniform("Primary", "vec4", primary),
+            uniform("Intensity", "float", round(0.7 * param_b, 4)),
+            uniform("LineDensity", "float", round(160.0 + 180.0 * param_a, 4)),
+        ]}
+    if template == "edgeglow":
+        return {"EdgeGlowConfig": [
+            uniform("Primary", "vec4", primary),
+            uniform("Intensity", "float", round(0.8 * param_b, 4)),
+        ]}
+    if template == "frostlens":
+        return {"FrostLensConfig": [
+            uniform("Primary", "vec4", primary),
+            uniform("Secondary", "vec4", secondary),
+            uniform("Intensity", "float", round(0.75 * param_b, 4)),
+            uniform("CrystalScale", "float", round(10.0 + 20.0 * param_a, 4)),
+        ]}
+    if template == "heathaze":
+        return {"HeatHazeConfig": [
+            uniform("Primary", "vec4", primary),
+            uniform("Intensity", "float", round(0.9 * param_b, 4)),
+            uniform("Speed", "float", round(param_a, 4)),
+        ]}
     raise ValueError(f"unknown template {template}")
 
 
 def build_effect(effect_id: int) -> dict:
-    argb_primary, argb_secondary, final_template = EFFECTS[effect_id]
-    template = SCREENFX_FALLBACK.get(final_template, final_template)
+    argb_primary, argb_secondary, template = EFFECTS[effect_id]
     # Same per-id derivation as EffectRegistry.row(): paramA = pattern scale,
     # paramB = scroll speed / intensity driver; both vary for every id.
     param_a = 0.3 + 0.012 * effect_id

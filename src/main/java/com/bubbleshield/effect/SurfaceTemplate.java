@@ -9,5 +9,12 @@ public enum SurfaceTemplate {
 	HEX,
 	WAVES,
 	AURORA,
-	SPARKLE
+	SPARKLE,
+	RINGS,
+	VORONOI,
+	ARCS,
+	SCALES,
+	STARFIELD,
+	VORTEX,
+	INTERFERENCE
 }

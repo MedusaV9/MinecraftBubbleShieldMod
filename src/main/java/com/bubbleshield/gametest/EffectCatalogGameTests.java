@@ -14,6 +14,7 @@ import com.bubbleshield.effect.ContextModifier.ContextState;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.EffectRegistry;
 import com.bubbleshield.effect.InsideEffectBehavior;
+import com.bubbleshield.effect.SurfaceTemplate;
 import com.bubbleshield.registry.ModBlocks;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -72,6 +73,27 @@ public class EffectCatalogGameTests {
 		helper.succeed();
 	}
 
+	/**
+	 * The surface-template axis is complete: 12 templates exist and every one of them is
+	 * used by the catalogue. The bubble shader files themselves live in the CLIENT source
+	 * set (not on this dedicated-server classpath), so their GLSL is verified out-of-band
+	 * by {@code tools/validate_shaders.py} (glslangValidator) plus the build.
+	 */
+	@GameTest
+	public void surfaceTemplateCatalogComplete(GameTestHelper helper) {
+		helper.assertTrue(SurfaceTemplate.values().length == 12, "exactly 12 surface templates should exist, found " + SurfaceTemplate.values().length);
+
+		Set<SurfaceTemplate> used = new HashSet<>();
+		for (EffectDefinition def : EffectRegistry.ALL) {
+			used.add(def.surface());
+		}
+		for (SurfaceTemplate template : SurfaceTemplate.values()) {
+			helper.assertTrue(used.contains(template), "surface template " + template + " is not used by any effect");
+		}
+
+		helper.succeed();
+	}
+
 	@GameTest
 	public void uniquenessMatrixHolds(GameTestHelper helper) {
 		Set<Long> palettes = new HashSet<>();
@@ -87,9 +109,10 @@ public class EffectCatalogGameTests {
 			helper.assertTrue(behaviorVariants.add(behaviorVariant), "effect " + def.id() + " reuses behavior/variant pair " + behaviorVariant);
 
 			int family = def.id() / 5;
+			String surfaceName = def.surface().name().toLowerCase(Locale.ROOT);
 			helper.assertTrue(
-					surfacesPerFamily.computeIfAbsent(family, f -> new HashSet<>()).add(EffectRegistry.finalSurfaceName(def.id())),
-					"family " + family + " repeats surface " + EffectRegistry.finalSurfaceName(def.id()));
+					surfacesPerFamily.computeIfAbsent(family, f -> new HashSet<>()).add(surfaceName),
+					"family " + family + " repeats surface " + surfaceName);
 			helper.assertTrue(
 					screenFxPerFamily.computeIfAbsent(family, f -> new HashSet<>()).add(def.screenTemplate()),
 					"family " + family + " repeats screen template " + def.screenTemplate());
@@ -121,7 +144,7 @@ public class EffectCatalogGameTests {
 			helper.assertTrue(passes != null && !passes.isEmpty(), jsonPath + " should declare at least one pass");
 
 			String fragmentShader = passes.get(0).getAsJsonObject().get("fragment_shader").getAsString();
-			String expected = "bubbleshield:screenfx/" + EffectRegistry.resolvedScreenTemplate(def);
+			String expected = "bubbleshield:screenfx/" + def.screenTemplate();
 			helper.assertTrue(
 					expected.equals(fragmentShader),
 					jsonPath + " first pass should use " + expected + " but uses " + fragmentShader);

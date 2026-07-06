@@ -19,36 +19,6 @@ import java.util.Set;
 public final class EffectRegistry {
 	public static final int COUNT = 75;
 
-	// TODO(S6): remove — surface templates that do not have a shader/pipeline yet are
-	// temporarily mapped to the nearest existing template. The table below authors the
-	// FINAL surface names (kept in FINAL_SURFACE_NAMES); this map only affects the
-	// SurfaceTemplate stored on the definition until the new shaders land.
-	private static final Map<String, SurfaceTemplate> TEMP_SURFACE_FALLBACK = Map.of(
-			"rings", SurfaceTemplate.WAVES,
-			"voronoi", SurfaceTemplate.HEX,
-			"arcs", SurfaceTemplate.PLASMA,
-			"scales", SurfaceTemplate.HEX,
-			"starfield", SurfaceTemplate.SPARKLE,
-			"vortex", SurfaceTemplate.PLASMA,
-			"interference", SurfaceTemplate.WAVES
-	);
-
-	// TODO(S6): remove — screen-fx templates without a shader yet resolve to an existing
-	// one when generating/validating the post_effect JSONs. The definition itself keeps
-	// the FINAL template name; only resolvedScreenTemplate() applies this fallback.
-	private static final Map<String, String> TEMP_SCREENFX_FALLBACK = Map.of(
-			"bloomglow", "tint",
-			"ripple", "wobble",
-			"scanlines", "pixelate",
-			"edgeglow", "tint",
-			"frostlens", "vignette",
-			"heathaze", "wobble"
-	);
-
-	// TODO(S6): remove — once all surface shaders exist, the authored surface name equals
-	// def.surface().name().toLowerCase(Locale.ROOT) and this side table becomes redundant.
-	private static final String[] FINAL_SURFACE_NAMES = new String[COUNT];
-
 	public static final List<EffectDefinition> ALL = buildAll();
 
 	private EffectRegistry() {
@@ -159,38 +129,11 @@ public final class EffectRegistry {
 	 */
 	private static EffectDefinition row(int id, int rgbPrimary, int rgbSecondary, String surfaceName, String behaviorId, int behaviorVariant,
 			GuardStyle guard, ContextProfile context, String ambientSoundId, float ambientPitch, int ambientPeriodTicks, String screenTemplate) {
-		FINAL_SURFACE_NAMES[id] = surfaceName;
 		float paramA = 0.3F + 0.012F * id;
 		float paramB = 0.4F + ((id * 37) % COUNT) / (float) COUNT;
 		float behaviorStrength = 0.8F + 0.7F * ((id * 23) % COUNT) / (float) COUNT;
-		return EffectDefinition.of(id, 0xFF000000 | rgbPrimary, 0xFF000000 | rgbSecondary, resolveSurface(surfaceName), paramA, paramB,
+		return EffectDefinition.of(id, 0xFF000000 | rgbPrimary, 0xFF000000 | rgbSecondary, SurfaceTemplate.valueOf(surfaceName.toUpperCase(Locale.ROOT)), paramA, paramB,
 				behaviorId, behaviorVariant, behaviorStrength, guard, context, ambientSoundId, ambientPitch, ambientPeriodTicks, screenTemplate);
-	}
-
-	// TODO(S6): remove — resolves an authored surface name to an implemented template.
-	private static SurfaceTemplate resolveSurface(String surfaceName) {
-		SurfaceTemplate fallback = TEMP_SURFACE_FALLBACK.get(surfaceName);
-		return fallback != null ? fallback : SurfaceTemplate.valueOf(surfaceName.toUpperCase(Locale.ROOT));
-	}
-
-	/**
-	 * The screen-fx template whose shader file actually backs the given definition's
-	 * {@code post_effect/effect_NN.json}: the authored (final) template when its shader
-	 * exists, otherwise its temporary fallback. tools/gen_post_effects.py mirrors this
-	 * mapping exactly; the screenTemplateMatchesJson gametest keeps the two in sync.
-	 */
-	// TODO(S6): remove the fallback indirection once all 12 screen-fx shaders exist.
-	public static String resolvedScreenTemplate(EffectDefinition def) {
-		return TEMP_SCREENFX_FALLBACK.getOrDefault(def.screenTemplate(), def.screenTemplate());
-	}
-
-	/**
-	 * The authored (final) surface template name for the given id, e.g. "rings" even
-	 * while the stored {@link EffectDefinition#surface()} still points at a fallback.
-	 */
-	// TODO(S6): remove — becomes def.surface().name().toLowerCase(Locale.ROOT).
-	public static String finalSurfaceName(int id) {
-		return FINAL_SURFACE_NAMES[Math.clamp(id, 0, COUNT - 1)];
 	}
 
 	/** Returns the definition for the given id, clamped into [0, {@link #COUNT} - 1]. */

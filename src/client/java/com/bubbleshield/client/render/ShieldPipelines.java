@@ -29,7 +29,7 @@ import net.minecraft.client.renderer.rendertype.RenderType;
  * depth state copied from vanilla's translucent pipelines (e.g.
  * {@code BEACON_BEAM_TRANSLUCENT}).
  *
- * <p>All five pipelines share one vertex shader ({@code bubbleshield:bubble/surface});
+ * <p>All twelve pipelines share one vertex shader ({@code bubbleshield:bubble/surface});
  * only the fragment shader differs. They are registered through
  * {@link RenderPipelines#register} (access-widened by Fabric) during client init so the
  * shader manager precompiles them with the vanilla static pipelines on resource load.

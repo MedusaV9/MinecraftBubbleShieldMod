@@ -5,7 +5,7 @@
     "passes": [
         {
             "vertex_shader": "minecraft:core/screenquad",
-            "fragment_shader": "bubbleshield:screenfx/tint",
+            "fragment_shader": "bubbleshield:screenfx/edgeglow",
             "inputs": [
                 {
                     "sampler_name": "In",
@@ -14,7 +14,7 @@
             ],
             "output": "swap",
             "uniforms": {
-                "TintConfig": [
+                "EdgeGlowConfig": [
                     {
                         "name": "Primary",
                         "type": "vec4",
@@ -26,19 +26,9 @@
                         ]
                     },
                     {
-                        "name": "Secondary",
-                        "type": "vec4",
-                        "value": [
-                            0.9098,
-                            0.9176,
-                            0.9647,
-                            1.0
-                        ]
-                    },
-                    {
                         "name": "Intensity",
                         "type": "float",
-                        "value": 0.5333
+                        "value": 0.8533
                     }
                 ]
             }

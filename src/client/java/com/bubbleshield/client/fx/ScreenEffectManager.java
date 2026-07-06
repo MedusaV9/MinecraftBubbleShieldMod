@@ -5,6 +5,8 @@ import com.bubbleshield.client.ClientShieldManager;
 import com.bubbleshield.client.mixin.GameRendererInvoker;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.EffectRegistry;
+import com.bubbleshield.shield.ShieldGeometry;
+import com.bubbleshield.shield.ShieldShape;
 
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 
@@ -56,7 +58,11 @@ public final class ScreenEffectManager {
 		}
 	}
 
-	/** The effect of the first active shield whose bubble contains the player, or {@code null}. */
+	/**
+	 * The effect of the first active shield whose bubble contains the player, or
+	 * {@code null}. Containment is shape-aware ({@link ShieldGeometry#isInside} with the
+	 * synced shape), so standing under a dome's open bottom applies no screen effect.
+	 */
 	private static EffectDefinition findSurroundingShieldEffect(Minecraft mc) {
 		Vec3 playerPos = mc.player.position();
 		for (ClientShieldManager.ClientShield shield : ClientShieldManager.currentDimensionShields()) {
@@ -65,7 +71,7 @@ public final class ScreenEffectManager {
 			}
 
 			Vec3 center = Vec3.atCenterOf(shield.pos());
-			if (playerPos.distanceTo(center) < shield.currentRadius()) {
+			if (ShieldGeometry.isInside(ShieldShape.byOrdinal(shield.shape()), center, shield.currentRadius(), playerPos)) {
 				return EffectRegistry.get(shield.effectId());
 			}
 		}
