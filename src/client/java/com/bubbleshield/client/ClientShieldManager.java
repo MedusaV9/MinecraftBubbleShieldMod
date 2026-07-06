@@ -8,6 +8,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 import com.bubbleshield.net.ShieldPayloads;
+import com.bubbleshield.shield.ShieldGeometry;
+import com.bubbleshield.shield.ShieldShape;
 
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLevelEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
@@ -19,6 +21,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
 
 import org.jspecify.annotations.Nullable;
 
@@ -103,6 +106,32 @@ public final class ClientShieldManager {
 		}
 
 		return shields;
+	}
+
+	/**
+	 * The first active shield whose bubble contains the local player, or {@code null}.
+	 * Containment is shape-aware ({@link ShieldGeometry#isInside} with the synced shape),
+	 * so standing under a dome's open bottom does not count as "inside". Shared by the
+	 * in-bubble screen effect and the HUD status element.
+	 */
+	public static @Nullable ClientShield findSurroundingShield(Minecraft mc) {
+		if (mc.player == null) {
+			return null;
+		}
+
+		Vec3 playerPos = mc.player.position();
+		for (ClientShield shield : currentDimensionShields()) {
+			if (!shield.active()) {
+				continue;
+			}
+
+			Vec3 center = Vec3.atCenterOf(shield.pos());
+			if (ShieldGeometry.isInside(ShieldShape.byOrdinal(shield.shape()), center, shield.currentRadius(), playerPos)) {
+				return shield;
+			}
+		}
+
+		return null;
 	}
 
 	public static void register() {

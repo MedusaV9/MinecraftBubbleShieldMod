@@ -3,16 +3,12 @@ package com.bubbleshield.client.fx;
 import com.bubbleshield.BubbleShield;
 import com.bubbleshield.client.ClientShieldManager;
 import com.bubbleshield.client.mixin.GameRendererInvoker;
-import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.EffectRegistry;
-import com.bubbleshield.shield.ShieldGeometry;
-import com.bubbleshield.shield.ShieldShape;
 
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.Identifier;
-import net.minecraft.world.phys.Vec3;
 
 /**
  * Applies the per-effect full-screen post chain ({@code bubbleshield:effect_NN}) while the
@@ -46,9 +42,10 @@ public final class ScreenEffectManager {
 		}
 
 		Identifier current = mc.gameRenderer.currentPostEffect();
-		EffectDefinition def = findSurroundingShieldEffect(mc);
-		if (def != null) {
-			Identifier id = Identifier.fromNamespaceAndPath(BubbleShield.MOD_ID, def.screenEffectName());
+		// Shape-aware containment shared with the HUD element.
+		ClientShieldManager.ClientShield shield = ClientShieldManager.findSurroundingShield(mc);
+		if (shield != null) {
+			Identifier id = Identifier.fromNamespaceAndPath(BubbleShield.MOD_ID, EffectRegistry.get(shield.effectId()).screenEffectName());
 			if (!id.equals(current)) {
 				((GameRendererInvoker) mc.gameRenderer).bubbleshield$setPostEffect(id);
 			}
@@ -56,26 +53,5 @@ public final class ScreenEffectManager {
 			// Only clear the slot when the applied effect is ours.
 			mc.gameRenderer.clearPostEffect();
 		}
-	}
-
-	/**
-	 * The effect of the first active shield whose bubble contains the player, or
-	 * {@code null}. Containment is shape-aware ({@link ShieldGeometry#isInside} with the
-	 * synced shape), so standing under a dome's open bottom applies no screen effect.
-	 */
-	private static EffectDefinition findSurroundingShieldEffect(Minecraft mc) {
-		Vec3 playerPos = mc.player.position();
-		for (ClientShieldManager.ClientShield shield : ClientShieldManager.currentDimensionShields()) {
-			if (!shield.active()) {
-				continue;
-			}
-
-			Vec3 center = Vec3.atCenterOf(shield.pos());
-			if (ShieldGeometry.isInside(ShieldShape.byOrdinal(shield.shape()), center, shield.currentRadius(), playerPos)) {
-				return EffectRegistry.get(shield.effectId());
-			}
-		}
-
-		return null;
 	}
 }

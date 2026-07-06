@@ -2,6 +2,7 @@ package com.bubbleshield.client.gui;
 
 import java.util.Locale;
 
+import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.EffectRegistry;
 import com.bubbleshield.net.ShieldPayloads;
 
@@ -9,9 +10,11 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 
 /**
  * Paged 5x5 grid of the selectable shield effects (ids 0..{@link EffectRegistry#COUNT} - 1).
@@ -60,6 +63,7 @@ public class EffectPickerScreen extends Screen {
 			Button button = this.addRenderableWidget(
 				Button.builder(Component.translatable("effect.bubbleshield." + String.format(Locale.ROOT, "%02d", effectId)), b -> this.pick(chosenId))
 					.bounds(x, y, BUTTON_WIDTH, BUTTON_HEIGHT)
+					.tooltip(effectTooltip(EffectRegistry.get(effectId)))
 					.build()
 			);
 			button.active = effectId != this.currentEffectId;
@@ -80,6 +84,21 @@ public class EffectPickerScreen extends Screen {
 				.bounds(this.width / 2 - 75, this.height - 28, 150, 20)
 				.build()
 		);
+	}
+
+	/**
+	 * Composes the per-effect tooltip from the four translatable axis labels
+	 * (surface template, inside behavior, guard style, context profile), one per line.
+	 */
+	private static Tooltip effectTooltip(EffectDefinition def) {
+		MutableComponent text = Component.translatable("surface.bubbleshield." + def.surface().name().toLowerCase(Locale.ROOT))
+			.append(Component.literal("\n"))
+			.append(Component.translatable("behavior.bubbleshield." + def.insideBehaviorId()))
+			.append(Component.literal("\n"))
+			.append(Component.translatable("guard.bubbleshield." + def.guard().name().toLowerCase(Locale.ROOT)))
+			.append(Component.literal("\n"))
+			.append(Component.translatable("context.bubbleshield." + def.context().name().toLowerCase(Locale.ROOT)));
+		return Tooltip.create(text);
 	}
 
 	private void flipPage(int direction) {

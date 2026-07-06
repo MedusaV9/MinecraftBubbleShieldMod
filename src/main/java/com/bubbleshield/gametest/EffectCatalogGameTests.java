@@ -11,8 +11,10 @@ import java.util.Set;
 
 import com.bubbleshield.block.BubbleShieldBlockEntity;
 import com.bubbleshield.effect.ContextModifier.ContextState;
+import com.bubbleshield.effect.ContextProfile;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.EffectRegistry;
+import com.bubbleshield.effect.GuardStyle;
 import com.bubbleshield.effect.InsideEffectBehavior;
 import com.bubbleshield.effect.SurfaceTemplate;
 import com.bubbleshield.registry.ModBlocks;
@@ -121,6 +123,11 @@ public class EffectCatalogGameTests {
 		helper.succeed();
 	}
 
+	/**
+	 * EN/DE parity over the ENTIRE key set (not just effect names): the key sets must be
+	 * identical, so every gui/advancement/axis key added in one language must exist in
+	 * the other. Effect names 00..74 must additionally be present in both.
+	 */
 	@GameTest
 	public void langKeysComplete(GameTestHelper helper) {
 		Set<String> enKeys = readLangKeys(helper, "/assets/bubbleshield/lang/en_us.json");
@@ -129,6 +136,44 @@ public class EffectCatalogGameTests {
 
 		for (int i = 0; i < EffectRegistry.COUNT; i++) {
 			String key = String.format(Locale.ROOT, "effect.bubbleshield.%02d", i);
+			helper.assertTrue(enKeys.contains(key), "missing lang key: " + key);
+		}
+
+		for (String key : new String[] {"gui.bubbleshield.shape.sphere", "gui.bubbleshield.shape.dome", "gui.bubbleshield.tier"}) {
+			helper.assertTrue(enKeys.contains(key), "missing lang key: " + key);
+		}
+
+		helper.succeed();
+	}
+
+	/**
+	 * Every axis label used by the effect-picker tooltips resolves to a lang key:
+	 * 12 surface templates, 25 inside behaviors, 7 guard styles and 6 context profiles.
+	 * Keys are derived from the live enums/registry so the tooltip composition in
+	 * {@code EffectPickerScreen} and the lang files cannot drift apart.
+	 */
+	@GameTest
+	public void axisLangKeysComplete(GameTestHelper helper) {
+		Set<String> enKeys = readLangKeys(helper, "/assets/bubbleshield/lang/en_us.json");
+
+		for (SurfaceTemplate template : SurfaceTemplate.values()) {
+			String key = "surface.bubbleshield." + template.name().toLowerCase(Locale.ROOT);
+			helper.assertTrue(enKeys.contains(key), "missing lang key: " + key);
+		}
+
+		helper.assertTrue(InsideEffectBehavior.REGISTRY.size() == 25, "expected 25 registered behaviors");
+		for (String behaviorId : InsideEffectBehavior.REGISTRY.keySet()) {
+			String key = "behavior.bubbleshield." + behaviorId;
+			helper.assertTrue(enKeys.contains(key), "missing lang key: " + key);
+		}
+
+		for (GuardStyle guard : GuardStyle.values()) {
+			String key = "guard.bubbleshield." + guard.name().toLowerCase(Locale.ROOT);
+			helper.assertTrue(enKeys.contains(key), "missing lang key: " + key);
+		}
+
+		for (ContextProfile context : ContextProfile.values()) {
+			String key = "context.bubbleshield." + context.name().toLowerCase(Locale.ROOT);
 			helper.assertTrue(enKeys.contains(key), "missing lang key: " + key);
 		}
 

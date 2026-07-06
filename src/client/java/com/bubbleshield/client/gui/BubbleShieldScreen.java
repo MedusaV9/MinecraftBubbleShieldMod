@@ -3,6 +3,7 @@ package com.bubbleshield.client.gui;
 import com.bubbleshield.BubbleShield;
 import com.bubbleshield.menu.BubbleShieldMenu;
 import com.bubbleshield.net.ShieldPayloads;
+import com.bubbleshield.shield.ShieldShape;
 
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 
@@ -30,6 +31,7 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 
 	private Button activateButton;
 	private DiameterSlider diameterSlider;
+	private Button shapeButton;
 
 	public BubbleShieldScreen(BubbleShieldMenu menu, Inventory inventory, Component title) {
 		super(menu, inventory, title, 176, 166);
@@ -40,27 +42,34 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 	protected void init() {
 		super.init();
 
+		// Five 13px rows (12..81) fit above the player inventory (y = 84).
 		int x = this.leftPos + 80;
 		int width = 88;
 
 		this.activateButton = this.addRenderableWidget(
 			Button.builder(this.activateLabel(), button -> this.toggleActive())
-				.bounds(x, this.topPos + 12, width, 14)
+				.bounds(x, this.topPos + 12, width, 13)
 				.build()
 		);
 
-		this.diameterSlider = this.addRenderableWidget(new DiameterSlider(x, this.topPos + 28, width, 14, this.menu));
+		this.diameterSlider = this.addRenderableWidget(new DiameterSlider(x, this.topPos + 26, width, 13, this.menu));
+
+		this.shapeButton = this.addRenderableWidget(
+			Button.builder(this.shapeLabel(), button -> this.toggleShape())
+				.bounds(x, this.topPos + 40, width, 13)
+				.build()
+		);
 
 		this.addRenderableWidget(
 			Button.builder(Component.translatable("gui.bubbleshield.effects"), button ->
 				this.minecraft.gui.setScreen(new EffectPickerScreen(this, this.menu.pos(), this.menu.diameter(), this.menu.effectId(), this.menu.shape()))
-			).bounds(x, this.topPos + 44, width, 14).build()
+			).bounds(x, this.topPos + 54, width, 13).build()
 		);
 
 		this.addRenderableWidget(
 			Button.builder(Component.translatable("gui.bubbleshield.whitelist"), button ->
 				this.minecraft.gui.setScreen(new WhitelistScreen(this, this.menu.pos()))
-			).bounds(x, this.topPos + 60, width, 14).build()
+			).bounds(x, this.topPos + 68, width, 13).build()
 		);
 	}
 
@@ -72,6 +81,17 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 		return Component.translatable(this.menu.isActive() ? "gui.bubbleshield.deactivate" : "gui.bubbleshield.activate");
 	}
 
+	/** Sends the toggled shape, keeping the current (server-synced) diameter and effect. */
+	private void toggleShape() {
+		int toggled = this.menu.shape() == ShieldShape.SPHERE.ordinal() ? ShieldShape.DOME.ordinal() : ShieldShape.SPHERE.ordinal();
+		ClientPlayNetworking.send(new ShieldPayloads.SetSettingsC2S(this.menu.pos(), this.menu.diameter(), this.menu.effectId(), toggled));
+	}
+
+	private Component shapeLabel() {
+		boolean dome = ShieldShape.byOrdinal(this.menu.shape()) == ShieldShape.DOME;
+		return Component.translatable(dome ? "gui.bubbleshield.shape.dome" : "gui.bubbleshield.shape.sphere");
+	}
+
 	@Override
 	protected void containerTick() {
 		super.containerTick();
@@ -80,18 +100,29 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 		// ContainerData arrives after init(), so the slider must re-sync once the
 		// real diameter shows up (and whenever the server changes it).
 		this.diameterSlider.syncFromMenu();
+		// Same story for the shape: the label always reflects the synced server state.
+		this.shapeButton.setMessage(this.shapeLabel());
 	}
 
 	@Override
 	public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a) {
 		super.extractBackground(graphics, mouseX, mouseY, a);
 		graphics.blit(RenderPipelines.GUI_TEXTURED, TEXTURE, this.leftPos, this.topPos, 0.0F, 0.0F, this.imageWidth, this.imageHeight, 256, 256);
+		// The shipped background texture has no square for the (newer) core slot at
+		// (56, 53); draw a vanilla-style 18x18 slot frame with plain fills instead of
+		// a new texture: dark top/left edge, light bottom/right edge, grey interior.
+		int sx = this.leftPos + 55;
+		int sy = this.topPos + 52;
+		graphics.fill(sx, sy, sx + 18, sy + 18, 0xFF373737);
+		graphics.fill(sx + 1, sy + 1, sx + 18, sy + 18, 0xFFFFFFFF);
+		graphics.fill(sx + 1, sy + 1, sx + 17, sy + 17, 0xFF8B8B8B);
 	}
 
 	@Override
 	protected void extractLabels(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
 		super.extractLabels(graphics, mouseX, mouseY);
 		graphics.text(this.font, Component.translatable("gui.bubbleshield.fuel", this.menu.fuelSeconds()), 8, 20, LABEL_COLOR, false);
+		graphics.text(this.font, Component.translatable("gui.bubbleshield.tier", this.menu.tier()), 8, 44, LABEL_COLOR, false);
 		graphics.text(this.font, Component.translatable("gui.bubbleshield.health", String.format("%.1f", this.menu.health())), 8, 56, LABEL_COLOR, false);
 		graphics.text(this.font, Component.translatable("gui.bubbleshield.cooldown", this.menu.cooldownSeconds()), 8, 66, LABEL_COLOR, false);
 	}
