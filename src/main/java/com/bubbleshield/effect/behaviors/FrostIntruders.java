@@ -1,5 +1,6 @@
 package com.bubbleshield.effect.behaviors;
 
+import com.bubbleshield.effect.ContextModifier.ContextState;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.InsideEffectBehavior;
 
@@ -28,8 +29,8 @@ public final class FrostIntruders implements InsideEffectBehavior {
 	private static final int MAX_FROZEN_TICKS = 400;
 
 	@Override
-	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime) {
-		if (gameTime % 10L != 0L) {
+	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
+		if (gameTime % ctx.effectiveThrottle(10L) != 0L) {
 			return;
 		}
 
@@ -47,7 +48,7 @@ public final class FrostIntruders implements InsideEffectBehavior {
 			}
 
 			mob.setTicksFrozen(Math.min(MAX_FROZEN_TICKS, mob.getTicksFrozen() + freezeTicks));
-			level.sendParticles(ParticleTypes.SNOWFLAKE, true, false, mob.getX(), mob.getY() + mob.getBbHeight() * 0.5, mob.getZ(), 8, 0.3, 0.4, 0.3, 0.02);
+			level.sendParticles(ParticleTypes.SNOWFLAKE, true, false, mob.getX(), mob.getY() + mob.getBbHeight() * 0.5, mob.getZ(), ctx.scaleCount(8, 16), 0.3, 0.4, 0.3, 0.02);
 			if (variant == 2) {
 				mob.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, DURATION_TICKS, 0));
 			}

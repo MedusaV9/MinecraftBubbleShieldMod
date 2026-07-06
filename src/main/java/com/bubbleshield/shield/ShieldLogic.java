@@ -2,6 +2,9 @@ package com.bubbleshield.shield;
 
 import java.util.UUID;
 
+import com.bubbleshield.effect.ContextModifier;
+import com.bubbleshield.effect.ContextModifier.ContextState;
+import com.bubbleshield.effect.ContextProfile;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.EffectRegistry;
 import com.bubbleshield.effect.InsideEffectBehavior;
@@ -134,11 +137,12 @@ public final class ShieldLogic {
 			double barrierRadius = currentRadius(state);
 			for (Player player : level.getEntitiesOfClass(Player.class, area)) {
 				if (applyPlayerBarrier(center, barrierRadius, state, player)) {
+					GuardEnforcer.apply(level, center, state, player);
 					changed = true;
 				}
 			}
 
-			tickInsideEffect(level, center, currentRadius(state), state.effectId, gameTime);
+			tickInsideEffect(level, center, currentRadius(state), state, gameTime);
 		}
 
 		return changed;
@@ -146,20 +150,47 @@ public final class ShieldLogic {
 
 	/**
 	 * Runs the selected effect's ambient inside behaviour (particles, auras, sounds)
-	 * and its looping ambient sound.
+	 * and its looping ambient sound, modulated by the effect's context profile.
 	 */
-	private static void tickInsideEffect(ServerLevel level, Vec3 center, float radius, int effectId, long gameTime) {
-		EffectDefinition def = EffectRegistry.get(effectId);
+	private static void tickInsideEffect(ServerLevel level, Vec3 center, float radius, ShieldState state, long gameTime) {
+		EffectDefinition def = EffectRegistry.get(state.effectId);
 		if (def == null) {
 			return;
 		}
 
+		ContextState ctx = computeContext(level, center, radius, state, def);
 		InsideEffectBehavior behavior = InsideEffectBehavior.get(def.insideBehaviorId());
 		if (behavior != null) {
-			behavior.tick(level, center, radius, def, gameTime);
+			behavior.tick(level, center, radius, def, gameTime, ctx);
+		}
+
+		if (ctx.extraSparks() && gameTime % 10L == 0L) {
+			// STORM_CHARGED while raining: a small electric sprinkle across the interior.
+			level.sendParticles(ParticleTypes.ELECTRIC_SPARK, true, false,
+					center.x, center.y + radius * 0.4, center.z, 8, radius * 0.45, radius * 0.3, radius * 0.45, 0.02);
 		}
 
 		playAmbientSound(level, center, radius, def, gameTime);
+	}
+
+	/**
+	 * Gathers the context inputs for {@link ContextModifier#compute}: day/night and rain
+	 * from the level, the shield health fraction from the state, and (only when the
+	 * profile needs it) a count of players currently inside the shield.
+	 */
+	private static ContextState computeContext(ServerLevel level, Vec3 center, float radius, ShieldState state, EffectDefinition def) {
+		float healthFrac = state.maxHealth > 0.0F ? state.health / state.maxHealth : 0.0F;
+		int playersInside = 0;
+		if (def.context() == ContextProfile.CROWD_SCALE) {
+			AABB box = AABB.ofSize(center, radius * 2.0, radius * 2.0, radius * 2.0);
+			for (Player player : level.getEntitiesOfClass(Player.class, box)) {
+				if (player.position().distanceTo(center) <= radius) {
+					playersInside++;
+				}
+			}
+		}
+
+		return ContextModifier.compute(def.context(), level.isDarkOutside(), level.isRaining(), playersInside, healthFrac);
 	}
 
 	/**
@@ -269,6 +300,7 @@ public final class ShieldLogic {
 		boolean pushed = false;
 		for (Player player : level.getEntitiesOfClass(Player.class, area)) {
 			if (applyPlayerBarrier(center, radius, state, player)) {
+				GuardEnforcer.apply(level, center, state, player);
 				pushed = true;
 			}
 		}

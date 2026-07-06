@@ -1,5 +1,6 @@
 package com.bubbleshield.effect.behaviors;
 
+import com.bubbleshield.effect.ContextModifier.ContextState;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.InsideEffectBehavior;
 
@@ -21,8 +22,8 @@ public final class MistLayer implements InsideEffectBehavior {
 	public static final String ID = "mist_layer";
 
 	@Override
-	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime) {
-		if (gameTime % 10L != 0L) {
+	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
+		if (gameTime % ctx.effectiveThrottle(10L) != 0L) {
 			return;
 		}
 
@@ -31,7 +32,7 @@ public final class MistLayer implements InsideEffectBehavior {
 			// v0 unchanged from the 10-behavior era: scale the cloud count with the bubble
 			// size and override the 32-block send limiter so players deep inside a large
 			// bubble (radius up to 100) still see them.
-			int count = Mth.clamp((int) (radius * 2.0F), 16, 128);
+			int count = ctx.scaleCount(Mth.clamp((int) (radius * 2.0F), 16, 128), 128);
 			level.sendParticles(
 					ParticleTypes.CLOUD,
 					true, false,
@@ -44,13 +45,13 @@ public final class MistLayer implements InsideEffectBehavior {
 		}
 
 		if (variant == 1) {
-			int count = Mth.clamp((int) (radius * 2.0F * def.behaviorStrength()), 16, 84);
+			int count = ctx.scaleCount(Mth.clamp((int) (radius * 2.0F * def.behaviorStrength()), 16, 84), 84);
 			level.sendParticles(ParticleTypes.WHITE_ASH, true, false, center.x, center.y + 0.4, center.z, count, radius * 0.6, 0.3, radius * 0.6, 0.0);
 			level.sendParticles(ParticleTypes.ASH, true, false, center.x, center.y + 0.6, center.z, Math.min(42, count / 2), radius * 0.6, 0.3, radius * 0.6, 0.0);
 			return;
 		}
 
-		int count = Mth.clamp((int) (radius * 2.0F * def.behaviorStrength()), 16, 128);
+		int count = ctx.scaleCount(Mth.clamp((int) (radius * 2.0F * def.behaviorStrength()), 16, 128), 128);
 		level.sendParticles(ParticleTypes.SPORE_BLOSSOM_AIR, true, false, center.x, center.y + 0.8, center.z, count, radius * 0.6, 0.6, radius * 0.6, 0.0);
 	}
 }

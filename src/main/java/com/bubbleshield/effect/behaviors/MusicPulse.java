@@ -1,5 +1,6 @@
 package com.bubbleshield.effect.behaviors;
 
+import com.bubbleshield.effect.ContextModifier.ContextState;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.InsideEffectBehavior;
 
@@ -28,8 +29,8 @@ public final class MusicPulse implements InsideEffectBehavior {
 	private static final int[] CHIME_MOTIF = {5, 3, 2, 0};
 
 	@Override
-	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime) {
-		if (gameTime % 10L != 0L) {
+	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
+		if (gameTime % ctx.effectiveThrottle(10L) != 0L) {
 			return;
 		}
 
@@ -56,7 +57,7 @@ public final class MusicPulse implements InsideEffectBehavior {
 		float volume = Mth.clamp(radius / 12.0F, 0.6F, 8.0F);
 		level.playSound(null, center.x, center.y + 1.0, center.z, sound, SoundSource.AMBIENT, volume, PITCH_LADDER[pitchIndex]);
 
-		int notes = Mth.clamp((int) (radius * def.behaviorStrength()), 4, 24);
+		int notes = ctx.scaleCount(Mth.clamp((int) (radius * def.behaviorStrength()), 4, 24), 24);
 		level.sendParticles(ParticleTypes.NOTE, true, false, center.x, center.y + 2.0, center.z, notes, radius * 0.3, 1.0, radius * 0.3, 0.0);
 	}
 }

@@ -1,5 +1,6 @@
 package com.bubbleshield.effect.behaviors;
 
+import com.bubbleshield.effect.ContextModifier.ContextState;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.InsideEffectBehavior;
 
@@ -29,8 +30,8 @@ public final class NightGlowAura implements InsideEffectBehavior {
 	private static final int NIGHT_VISION_DURATION_TICKS = 260;
 
 	@Override
-	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime) {
-		if (gameTime % 10L != 0L) {
+	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
+		if (gameTime % ctx.effectiveThrottle(10L) != 0L) {
 			return;
 		}
 

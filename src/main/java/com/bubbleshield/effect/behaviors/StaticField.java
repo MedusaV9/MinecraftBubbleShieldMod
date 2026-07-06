@@ -1,5 +1,6 @@
 package com.bubbleshield.effect.behaviors;
 
+import com.bubbleshield.effect.ContextModifier.ContextState;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.InsideEffectBehavior;
 
@@ -24,14 +25,14 @@ public final class StaticField implements InsideEffectBehavior {
 	public static final String ID = "static_field";
 
 	@Override
-	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime) {
-		if (gameTime % 10L != 0L) {
+	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
+		if (gameTime % ctx.effectiveThrottle(10L) != 0L) {
 			return;
 		}
 
 		int variant = def.behaviorVariant();
 		RandomSource random = level.getRandom();
-		int sparks = Mth.clamp((int) (radius * (variant == 0 ? 0.8F : 1.6F) * def.behaviorStrength()), 6, 96);
+		int sparks = ctx.scaleCount(Mth.clamp((int) (radius * (variant == 0 ? 0.8F : 1.6F) * def.behaviorStrength()), 6, 96), 96);
 		for (int i = 0; i < sparks; i++) {
 			// Random points on the upper hemisphere shell, just inside the surface.
 			double theta = random.nextDouble() * Math.PI * 2.0;

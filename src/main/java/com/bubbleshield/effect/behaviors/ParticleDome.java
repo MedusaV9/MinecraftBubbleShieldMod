@@ -1,5 +1,6 @@
 package com.bubbleshield.effect.behaviors;
 
+import com.bubbleshield.effect.ContextModifier.ContextState;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.InsideEffectBehavior;
 
@@ -25,25 +26,25 @@ public final class ParticleDome implements InsideEffectBehavior {
 	private static final int MAX_POINTS = 128;
 
 	@Override
-	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime) {
-		if (gameTime % 10L != 0L) {
+	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
+		if (gameTime % ctx.effectiveThrottle(10L) != 0L) {
 			return;
 		}
 
 		switch (def.behaviorVariant()) {
-			case 1 -> tickCounterRings(level, center, radius, def, gameTime);
-			case 2 -> tickDomeCap(level, center, radius, def, gameTime);
-			default -> tickSingleRing(level, center, radius, def, gameTime);
+			case 1 -> tickCounterRings(level, center, radius, def, gameTime, ctx);
+			case 2 -> tickDomeCap(level, center, radius, def, gameTime, ctx);
+			default -> tickSingleRing(level, center, radius, def, gameTime, ctx);
 		}
 	}
 
 	/** v0: the original single rotating ring (semantics unchanged from the 10-behavior era). */
-	private static void tickSingleRing(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime) {
-		DustParticleOptions primary = new DustParticleOptions(def.argbPrimary() & 0xFFFFFF, 1.0F);
+	private static void tickSingleRing(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
+		DustParticleOptions primary = new DustParticleOptions(ctx.pickColor(def.argbPrimary(), def.argbSecondary()) & 0xFFFFFF, 1.0F);
 		DustParticleOptions secondary = new DustParticleOptions(def.argbSecondary() & 0xFFFFFF, 0.7F);
 		// Keep the point spacing roughly constant (one point per ~2 blocks of circumference)
 		// so the ring does not look sparse at radius 100.
-		int points = Mth.clamp((int) Math.round(Math.PI * 2.0 * radius / 2.0), MIN_POINTS, MAX_POINTS);
+		int points = ctx.scaleCount(Mth.clamp((int) Math.round(Math.PI * 2.0 * radius / 2.0), MIN_POINTS, MAX_POINTS), MAX_POINTS);
 		double phase = gameTime / 10.0 * 0.3;
 		for (int i = 0; i < points; i++) {
 			double angle = phase + Math.PI * 2.0 * i / points;
@@ -56,10 +57,10 @@ public final class ParticleDome implements InsideEffectBehavior {
 	}
 
 	/** v1: two counter-rotating rings; primary dust at chest height, end rod motes above. */
-	private static void tickCounterRings(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime) {
-		DustParticleOptions primary = new DustParticleOptions(def.argbPrimary() & 0xFFFFFF, 1.0F);
+	private static void tickCounterRings(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
+		DustParticleOptions primary = new DustParticleOptions(ctx.pickColor(def.argbPrimary(), def.argbSecondary()) & 0xFFFFFF, 1.0F);
 		// Each loop pass emits two particles (one per ring), so cap points at half the budget.
-		int points = Mth.clamp((int) Math.round(Math.PI * radius * def.behaviorStrength()), MIN_POINTS / 2, MAX_POINTS / 2);
+		int points = ctx.scaleCount(Mth.clamp((int) Math.round(Math.PI * radius * def.behaviorStrength()), MIN_POINTS / 2, MAX_POINTS / 2), MAX_POINTS / 2);
 		double phase = gameTime / 10.0 * 0.3;
 		for (int i = 0; i < points; i++) {
 			double angle = Math.PI * 2.0 * i / points;
@@ -73,9 +74,9 @@ public final class ParticleDome implements InsideEffectBehavior {
 	}
 
 	/** v2: latitude rings of color-transition dust forming a slowly spinning dome-cap grid. */
-	private static void tickDomeCap(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime) {
+	private static void tickDomeCap(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
 		DustColorTransitionOptions dust = new DustColorTransitionOptions(
-				def.argbPrimary() & 0xFFFFFF, def.argbSecondary() & 0xFFFFFF, Mth.clamp(def.behaviorStrength(), 0.8F, 1.5F));
+				ctx.pickColor(def.argbPrimary(), def.argbSecondary()) & 0xFFFFFF, def.argbSecondary() & 0xFFFFFF, Mth.clamp(def.behaviorStrength(), 0.8F, 1.5F));
 		double spin = gameTime / 10.0 * 0.15;
 		int latRows = 4;
 		int sent = 0;
@@ -84,7 +85,7 @@ public final class ParticleDome implements InsideEffectBehavior {
 			double latitude = Math.PI / 2.0 * row / (latRows + 1);
 			double y = center.y + Math.cos(latitude) * radius;
 			double ringRadius = Math.sin(latitude) * radius;
-			int points = Mth.clamp((int) Math.round(Math.PI * 2.0 * ringRadius / 3.0), 6, 32);
+			int points = ctx.scaleCount(Mth.clamp((int) Math.round(Math.PI * 2.0 * ringRadius / 3.0), 6, 32), 32);
 			for (int i = 0; i < points && sent < MAX_POINTS; i++) {
 				double angle = spin + Math.PI * 2.0 * i / points;
 				double x = center.x + Math.cos(angle) * ringRadius;

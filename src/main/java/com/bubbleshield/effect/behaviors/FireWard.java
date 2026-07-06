@@ -1,5 +1,6 @@
 package com.bubbleshield.effect.behaviors;
 
+import com.bubbleshield.effect.ContextModifier.ContextState;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.InsideEffectBehavior;
 
@@ -27,8 +28,8 @@ public final class FireWard implements InsideEffectBehavior {
 	private static final int DURATION_TICKS = 60;
 
 	@Override
-	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime) {
-		if (gameTime % 10L != 0L) {
+	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
+		if (gameTime % ctx.effectiveThrottle(10L) != 0L) {
 			return;
 		}
 
@@ -48,7 +49,7 @@ public final class FireWard implements InsideEffectBehavior {
 			}
 
 			player.clearFire();
-			level.sendParticles(ParticleTypes.SMOKE, true, false, player.getX(), player.getY() + 1.0, player.getZ(), 12, 0.3, 0.5, 0.3, 0.02);
+			level.sendParticles(ParticleTypes.SMOKE, true, false, player.getX(), player.getY() + 1.0, player.getZ(), ctx.scaleCount(12, 24), 0.3, 0.5, 0.3, 0.02);
 			if (variant == 2) {
 				level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.FIRE_EXTINGUISH, SoundSource.AMBIENT, 0.8F, 1.0F);
 				level.sendParticles(ParticleTypes.LAVA, true, false, player.getX(), player.getY() + 0.5, player.getZ(), 6, 0.3, 0.3, 0.3, 0.0);

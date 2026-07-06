@@ -1,5 +1,6 @@
 package com.bubbleshield.effect.behaviors;
 
+import com.bubbleshield.effect.ContextModifier.ContextState;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.InsideEffectBehavior;
 
@@ -25,8 +26,8 @@ public final class RegenAura implements InsideEffectBehavior {
 	private static final int DURATION_TICKS = 60;
 
 	@Override
-	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime) {
-		if (gameTime % 10L != 0L) {
+	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
+		if (gameTime % ctx.effectiveThrottle(10L) != 0L) {
 			return;
 		}
 
@@ -39,7 +40,7 @@ public final class RegenAura implements InsideEffectBehavior {
 
 			player.addEffect(new MobEffectInstance(MobEffects.REGENERATION, DURATION_TICKS, 0));
 			if (variant == 1) {
-				level.sendParticles(ParticleTypes.HEART, true, false, player.getX(), player.getY() + 1.5, player.getZ(), 2, 0.3, 0.3, 0.3, 0.0);
+				level.sendParticles(ParticleTypes.HEART, true, false, player.getX(), player.getY() + 1.5, player.getZ(), ctx.scaleCount(2, 8), 0.3, 0.3, 0.3, 0.0);
 			} else if (variant == 2) {
 				player.addEffect(new MobEffectInstance(MobEffects.ABSORPTION, DURATION_TICKS, 0));
 			}

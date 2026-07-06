@@ -1,5 +1,6 @@
 package com.bubbleshield.effect.behaviors;
 
+import com.bubbleshield.effect.ContextModifier.ContextState;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.InsideEffectBehavior;
 
@@ -23,8 +24,8 @@ public final class RisingSouls implements InsideEffectBehavior {
 	public static final String ID = "rising_souls";
 
 	@Override
-	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime) {
-		if (gameTime % 10L != 0L) {
+	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
+		if (gameTime % ctx.effectiveThrottle(10L) != 0L) {
 			return;
 		}
 
@@ -32,7 +33,7 @@ public final class RisingSouls implements InsideEffectBehavior {
 		SimpleParticleType particle = variant == 2 ? ParticleTypes.SOUL : ParticleTypes.SCULK_SOUL;
 		int perColumn = variant == 2 ? 4 : 3;
 		// v1 adds one apex pop per column; worst case 24 * (4 + 1) = 120 particles/pulse.
-		int columns = Mth.clamp((int) (radius * (variant == 2 ? 1.6F : 1.0F) * def.behaviorStrength()), 4, 24);
+		int columns = ctx.scaleCount(Mth.clamp((int) (radius * (variant == 2 ? 1.6F : 1.0F) * def.behaviorStrength()), 4, 24), 24);
 		RandomSource random = level.getRandom();
 		for (int i = 0; i < columns; i++) {
 			double angle = random.nextDouble() * Math.PI * 2.0;

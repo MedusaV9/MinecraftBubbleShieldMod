@@ -1,5 +1,6 @@
 package com.bubbleshield.effect.behaviors;
 
+import com.bubbleshield.effect.ContextModifier.ContextState;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.InsideEffectBehavior;
 
@@ -22,18 +23,20 @@ public final class MeteorBurst implements InsideEffectBehavior {
 	public static final String ID = "meteor_burst";
 
 	@Override
-	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime) {
+	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
 		int variant = def.behaviorVariant();
 		// Coarser multiples of the standard %10 throttle: bursts feel like events, not rain.
 		long cadence = variant == 0 ? 40L : 20L;
-		if (gameTime % cadence != 0L) {
+		if (gameTime % ctx.effectiveThrottle(cadence) != 0L) {
 			return;
 		}
 
 		RandomSource random = level.getRandom();
 		int bursts = variant == 2 ? 2 : 1;
 		// Worst case (v2): 2 * (32 + 16) + 12 = 108 particles/pulse.
-		int flames = Mth.clamp((int) (radius * (variant == 0 ? 3.0F : 4.5F) * def.behaviorStrength() / bursts), 12, variant == 2 ? 32 : 64);
+		int flames = ctx.scaleCount(
+				Mth.clamp((int) (radius * (variant == 0 ? 3.0F : 4.5F) * def.behaviorStrength() / bursts), 12, variant == 2 ? 32 : 64),
+				variant == 2 ? 32 : 64);
 		double baseAzimuth = random.nextDouble() * Math.PI * 2.0;
 		for (int b = 0; b < bursts; b++) {
 			double azimuth = baseAzimuth + b * Math.PI;

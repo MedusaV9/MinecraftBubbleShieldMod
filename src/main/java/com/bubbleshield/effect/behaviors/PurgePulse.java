@@ -1,5 +1,6 @@
 package com.bubbleshield.effect.behaviors;
 
+import com.bubbleshield.effect.ContextModifier.ContextState;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.InsideEffectBehavior;
 
@@ -26,9 +27,9 @@ public final class PurgePulse implements InsideEffectBehavior {
 	private static final double MAX_HORIZONTAL_SPEED = 1.2;
 
 	@Override
-	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime) {
+	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
 		// Every 4th %10 window, so the purge reads as a distinct pulse.
-		if (gameTime % 40L != 0L) {
+		if (gameTime % ctx.effectiveThrottle(40L) != 0L) {
 			return;
 		}
 

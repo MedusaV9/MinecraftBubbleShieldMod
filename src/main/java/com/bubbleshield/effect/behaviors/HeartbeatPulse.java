@@ -1,5 +1,6 @@
 package com.bubbleshield.effect.behaviors;
 
+import com.bubbleshield.effect.ContextModifier.ContextState;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.InsideEffectBehavior;
 
@@ -27,8 +28,8 @@ public final class HeartbeatPulse implements InsideEffectBehavior {
 	private static final int MAX_POINTS = 128;
 
 	@Override
-	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime) {
-		if (gameTime % 10L != 0L) {
+	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
+		if (gameTime % ctx.effectiveThrottle(10L) != 0L) {
 			return;
 		}
 
@@ -57,8 +58,9 @@ public final class HeartbeatPulse implements InsideEffectBehavior {
 		float dustScale = variant == 2 ? 2.0F : 1.4F;
 		// Keep the point spacing roughly constant along the ring so the pulse stays
 		// visible instead of turning sparse at large radii.
-		int points = Mth.clamp((int) Math.round(Math.PI * 2.0 * ringRadius / 2.0), MIN_POINTS, MAX_POINTS);
-		DustParticleOptions dust = new DustParticleOptions((phase % 2L == 0L ? def.argbPrimary() : def.argbSecondary()) & 0xFFFFFF, dustScale);
+		int points = ctx.scaleCount(Mth.clamp((int) Math.round(Math.PI * 2.0 * ringRadius / 2.0), MIN_POINTS, MAX_POINTS), MAX_POINTS);
+		DustParticleOptions dust = new DustParticleOptions(
+				(phase % 2L == 0L ? ctx.pickColor(def.argbPrimary(), def.argbSecondary()) : def.argbSecondary()) & 0xFFFFFF, dustScale);
 		for (int i = 0; i < points; i++) {
 			double angle = Math.PI * 2.0 * i / points;
 			double x = center.x + Math.cos(angle) * ringRadius;

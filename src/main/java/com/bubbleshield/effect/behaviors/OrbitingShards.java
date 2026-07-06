@@ -1,5 +1,6 @@
 package com.bubbleshield.effect.behaviors;
 
+import com.bubbleshield.effect.ContextModifier.ContextState;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.InsideEffectBehavior;
 
@@ -23,15 +24,15 @@ public final class OrbitingShards implements InsideEffectBehavior {
 	private static final int MAX_POINTS = 128;
 
 	@Override
-	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime) {
-		if (gameTime % 10L != 0L) {
+	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
+		if (gameTime % ctx.effectiveThrottle(10L) != 0L) {
 			return;
 		}
 
 		int orbits = def.behaviorVariant() + 1;
 		SimpleParticleType particle = def.behaviorVariant() == 2 ? ParticleTypes.ELECTRIC_SPARK : ParticleTypes.END_ROD;
 		double orbitRadius = radius * 0.7;
-		int pointsPerOrbit = Mth.clamp((int) Math.round(orbitRadius * 2.0 * def.behaviorStrength()), 8, MAX_POINTS / orbits);
+		int pointsPerOrbit = ctx.scaleCount(Mth.clamp((int) Math.round(orbitRadius * 2.0 * def.behaviorStrength()), 8, MAX_POINTS / orbits), MAX_POINTS / orbits);
 		double phase = gameTime / 10.0 * 0.35;
 		for (int orbit = 0; orbit < orbits; orbit++) {
 			// Each orbit plane is tilted and rotated so multiple orbits visibly cross.

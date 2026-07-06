@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Set;
 
 import com.bubbleshield.block.BubbleShieldBlockEntity;
+import com.bubbleshield.effect.ContextModifier.ContextState;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.EffectRegistry;
 import com.bubbleshield.effect.InsideEffectBehavior;
@@ -59,7 +60,7 @@ public class EffectCatalogGameTests {
 			InsideEffectBehavior behavior = InsideEffectBehavior.get(def.insideBehaviorId());
 			helper.assertTrue(behavior != null, "effect " + def.id() + " references unregistered behavior " + def.insideBehaviorId());
 			for (long gameTime : new long[] {0L, 10L, 20L, 30L, 40L}) {
-				behavior.tick(level, center, 6.0F, def, gameTime);
+				behavior.tick(level, center, 6.0F, def, gameTime, ContextState.NEUTRAL);
 			}
 
 			Identifier soundId = Identifier.parse("minecraft:" + def.ambientSoundId());

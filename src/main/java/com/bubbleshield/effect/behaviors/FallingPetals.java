@@ -1,5 +1,6 @@
 package com.bubbleshield.effect.behaviors;
 
+import com.bubbleshield.effect.ContextModifier.ContextState;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.InsideEffectBehavior;
 
@@ -22,8 +23,8 @@ public final class FallingPetals implements InsideEffectBehavior {
 	public static final String ID = "falling_petals";
 
 	@Override
-	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime) {
-		if (gameTime % 10L != 0L) {
+	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
+		if (gameTime % ctx.effectiveThrottle(10L) != 0L) {
 			return;
 		}
 
@@ -32,7 +33,7 @@ public final class FallingPetals implements InsideEffectBehavior {
 			case 2 -> ParticleTypes.FALLING_SPORE_BLOSSOM;
 			default -> ParticleTypes.PALE_OAK_LEAVES;
 		};
-		int count = Mth.clamp((int) (radius * 2.5F * def.behaviorStrength()), 16, 128);
+		int count = ctx.scaleCount(Mth.clamp((int) (radius * 2.5F * def.behaviorStrength()), 16, 128), 128);
 		level.sendParticles(
 				particle,
 				true, false,

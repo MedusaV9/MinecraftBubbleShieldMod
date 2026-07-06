@@ -1,5 +1,6 @@
 package com.bubbleshield.effect.behaviors;
 
+import com.bubbleshield.effect.ContextModifier.ContextState;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.InsideEffectBehavior;
 
@@ -21,8 +22,8 @@ public final class EmberRain implements InsideEffectBehavior {
 	public static final String ID = "ember_rain";
 
 	@Override
-	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime) {
-		if (gameTime % 10L != 0L) {
+	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
+		if (gameTime % ctx.effectiveThrottle(10L) != 0L) {
 			return;
 		}
 
@@ -31,7 +32,7 @@ public final class EmberRain implements InsideEffectBehavior {
 			// v0 unchanged from the 10-behavior era: scale the ember count with the bubble
 			// size and override the 32-block send limiter so players deep inside a large
 			// bubble (radius up to 100) still see them.
-			int count = Mth.clamp((int) (radius * 2.5F), 20, 128);
+			int count = ctx.scaleCount(Mth.clamp((int) (radius * 2.5F), 20, 128), 128);
 			level.sendParticles(
 					ParticleTypes.FLAME,
 					true, false,
@@ -44,7 +45,7 @@ public final class EmberRain implements InsideEffectBehavior {
 		}
 
 		if (variant == 1) {
-			int count = Mth.clamp((int) (radius * 2.5F * def.behaviorStrength()), 20, 112);
+			int count = ctx.scaleCount(Mth.clamp((int) (radius * 2.5F * def.behaviorStrength()), 20, 112), 112);
 			level.sendParticles(
 					ParticleTypes.FALLING_LAVA,
 					true, false,
@@ -58,7 +59,7 @@ public final class EmberRain implements InsideEffectBehavior {
 			return;
 		}
 
-		int count = Mth.clamp((int) (radius * 2.5F * def.behaviorStrength()), 20, 128);
+		int count = ctx.scaleCount(Mth.clamp((int) (radius * 2.5F * def.behaviorStrength()), 20, 128), 128);
 		level.sendParticles(
 				ParticleTypes.SOUL_FIRE_FLAME,
 				true, false,

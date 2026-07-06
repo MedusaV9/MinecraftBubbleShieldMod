@@ -1,5 +1,6 @@
 package com.bubbleshield.effect.behaviors;
 
+import com.bubbleshield.effect.ContextModifier.ContextState;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.InsideEffectBehavior;
 
@@ -22,16 +23,17 @@ public final class BubbleVeil implements InsideEffectBehavior {
 	public static final String ID = "bubble_veil";
 
 	@Override
-	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime) {
-		if (gameTime % 10L != 0L) {
+	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
+		if (gameTime % ctx.effectiveThrottle(10L) != 0L) {
 			return;
 		}
 
 		int variant = def.behaviorVariant();
 		if (variant == 2) {
-			// Fizz bursts: 8 pockets of popping bubbles, 12 particles each (96/pulse max).
+			// Fizz bursts: 8 pockets of popping bubbles, 12 particles each (96/pulse max;
+			// context scaling caps at 10 pockets = 120/pulse).
 			RandomSource random = level.getRandom();
-			int bursts = Mth.clamp((int) (4.0F * def.behaviorStrength()) + 4, 4, 8);
+			int bursts = ctx.scaleCount(Mth.clamp((int) (4.0F * def.behaviorStrength()) + 4, 4, 8), 10);
 			for (int i = 0; i < bursts; i++) {
 				double angle = random.nextDouble() * Math.PI * 2.0;
 				double dist = Math.sqrt(random.nextDouble()) * radius * 0.8;
@@ -44,7 +46,8 @@ public final class BubbleVeil implements InsideEffectBehavior {
 		}
 
 		// Curtain: bubbles along the wall at undulating heights (96 points/pulse max).
-		int points = Mth.clamp((int) Math.round(Math.PI * 2.0 * radius * def.behaviorStrength()), 16, variant == 1 ? 80 : 96);
+		int points = ctx.scaleCount(
+				Mth.clamp((int) Math.round(Math.PI * 2.0 * radius * def.behaviorStrength()), 16, variant == 1 ? 80 : 96), variant == 1 ? 80 : 96);
 		double phase = gameTime / 10.0 * 0.2;
 		for (int i = 0; i < points; i++) {
 			double angle = phase + Math.PI * 2.0 * i / points;

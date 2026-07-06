@@ -1,5 +1,6 @@
 package com.bubbleshield.effect.behaviors;
 
+import com.bubbleshield.effect.ContextModifier.ContextState;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.InsideEffectBehavior;
 
@@ -23,14 +24,14 @@ public final class EnchantStream implements InsideEffectBehavior {
 	public static final String ID = "enchant_stream";
 
 	@Override
-	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime) {
-		if (gameTime % 10L != 0L) {
+	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
+		if (gameTime % ctx.effectiveThrottle(10L) != 0L) {
 			return;
 		}
 
 		int variant = def.behaviorVariant();
 		// Each loop pass sends exactly one glyph (count=0 packet == a single particle).
-		int glyphs = Mth.clamp((int) Math.round(radius * 3.0 * def.behaviorStrength()), 12, 96);
+		int glyphs = ctx.scaleCount(Mth.clamp((int) Math.round(radius * 3.0 * def.behaviorStrength()), 12, 96), 96);
 		double phase = gameTime / 10.0 * 0.25;
 		for (int i = 0; i < glyphs; i++) {
 			double angle = phase + Math.PI * 2.0 * i / glyphs;
