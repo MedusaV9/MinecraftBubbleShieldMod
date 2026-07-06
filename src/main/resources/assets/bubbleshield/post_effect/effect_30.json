@@ -5,7 +5,7 @@
     "passes": [
         {
             "vertex_shader": "minecraft:core/screenquad",
-            "fragment_shader": "bubbleshield:screenfx/desat",
+            "fragment_shader": "bubbleshield:screenfx/vignette",
             "inputs": [
                 {
                     "sampler_name": "In",
@@ -14,7 +14,7 @@
             ],
             "output": "swap",
             "uniforms": {
-                "DesatConfig": [
+                "VignetteConfig": [
                     {
                         "name": "Primary",
                         "type": "vec4",
@@ -26,9 +26,14 @@
                         ]
                     },
                     {
-                        "name": "Desaturation",
+                        "name": "Intensity",
                         "type": "float",
-                        "value": 0.42
+                        "value": 0.72
+                    },
+                    {
+                        "name": "PulseSpeed",
+                        "type": "float",
+                        "value": 0.66
                     }
                 ]
             }

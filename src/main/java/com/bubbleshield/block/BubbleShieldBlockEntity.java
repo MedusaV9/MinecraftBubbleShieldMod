@@ -2,6 +2,7 @@ package com.bubbleshield.block;
 
 import com.bubbleshield.menu.BubbleShieldMenu;
 import com.bubbleshield.net.ServerNet;
+import com.bubbleshield.net.ShieldPayloads;
 import com.bubbleshield.registry.ModBlockEntities;
 import com.bubbleshield.shield.FuelMap;
 import com.bubbleshield.shield.ShieldLogic;
@@ -285,11 +286,7 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 
 	/** The client-visible fields mirrored by {@code ShieldSyncS2C}; used to skip redundant broadcasts. */
 	private record ReplicatedState(
-		boolean active,
-		int effectId,
-		float targetRadius,
-		float currentRadius,
-		float healthFrac,
+		ShieldPayloads.ShieldVisual visual,
 		Set<UUID> whitelistUuids,
 		Set<String> whitelistNames,
 		int cooldownSeconds,
@@ -300,11 +297,13 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	private ReplicatedState buildReplicatedState() {
 		ShieldState state = this.shieldState;
 		return new ReplicatedState(
-			state.active,
-			state.effectId,
-			state.targetRadius,
-			ShieldLogic.currentRadius(state),
-			state.maxHealth > 0.0F ? state.health / state.maxHealth : 0.0F,
+			new ShieldPayloads.ShieldVisual(
+				state.active,
+				state.effectId,
+				state.targetRadius,
+				ShieldLogic.currentRadius(state),
+				state.maxHealth > 0.0F ? state.health / state.maxHealth : 0.0F
+			),
 			Set.copyOf(state.whitelistUuids),
 			Set.copyOf(state.whitelistNames),
 			(int) (this.cooldownTicksLeft() / ShieldLogic.TICKS_PER_FUEL_SECOND),

@@ -2,6 +2,7 @@ package com.bubbleshield.client.gui;
 
 import java.util.Locale;
 
+import com.bubbleshield.effect.EffectRegistry;
 import com.bubbleshield.net.ShieldPayloads;
 
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
@@ -13,11 +14,11 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 
 /**
- * Paged 5x5 grid of the 50 selectable shield effects (ids 0..49).
+ * Paged 5x5 grid of the selectable shield effects (ids 0..{@link EffectRegistry#COUNT} - 1).
  * Clicking an effect sends {@code SetSettingsC2S} keeping the current diameter.
  */
 public class EffectPickerScreen extends Screen {
-	private static final int EFFECT_COUNT = 50;
+	private static final int EFFECT_COUNT = EffectRegistry.COUNT;
 	private static final int COLUMNS = 5;
 	private static final int ROWS = 5;
 	private static final int PER_PAGE = COLUMNS * ROWS;

@@ -5,7 +5,7 @@
     "passes": [
         {
             "vertex_shader": "minecraft:core/screenquad",
-            "fragment_shader": "bubbleshield:screenfx/chroma",
+            "fragment_shader": "bubbleshield:screenfx/vignette",
             "inputs": [
                 {
                     "sampler_name": "In",
@@ -14,21 +14,26 @@
             ],
             "output": "swap",
             "uniforms": {
-                "ChromaConfig": [
+                "VignetteConfig": [
                     {
                         "name": "Primary",
                         "type": "vec4",
                         "value": [
-                            0.949,
-                            0.949,
-                            0.949,
+                            0.9333,
+                            0.9333,
+                            0.9333,
                             1.0
                         ]
                     },
                     {
-                        "name": "OffsetAmount",
+                        "name": "Intensity",
                         "type": "float",
-                        "value": 0.012
+                        "value": 0.344
+                    },
+                    {
+                        "name": "PulseSpeed",
+                        "type": "float",
+                        "value": 0.888
                     }
                 ]
             }

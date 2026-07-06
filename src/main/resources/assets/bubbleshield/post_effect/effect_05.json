@@ -33,12 +33,12 @@
                     {
                         "name": "Amplitude",
                         "type": "float",
-                        "value": 0.0024
+                        "value": 0.00347
                     },
                     {
                         "name": "Speed",
                         "type": "float",
-                        "value": 0.48
+                        "value": 0.36
                     }
                 ]
             }

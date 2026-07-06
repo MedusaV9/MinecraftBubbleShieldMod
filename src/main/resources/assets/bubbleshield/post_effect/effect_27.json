@@ -5,7 +5,7 @@
     "passes": [
         {
             "vertex_shader": "minecraft:core/screenquad",
-            "fragment_shader": "bubbleshield:screenfx/tint",
+            "fragment_shader": "bubbleshield:screenfx/wobble",
             "inputs": [
                 {
                     "sampler_name": "In",
@@ -14,31 +14,31 @@
             ],
             "output": "swap",
             "uniforms": {
-                "TintConfig": [
+                "WobbleConfig": [
                     {
                         "name": "Primary",
                         "type": "vec4",
                         "value": [
-                            1.0,
-                            0.8235,
-                            0.302,
+                            0.9608,
+                            0.7725,
+                            0.0941,
                             1.0
                         ]
                     },
                     {
-                        "name": "Secondary",
-                        "type": "vec4",
-                        "value": [
-                            0.7216,
-                            0.5255,
-                            0.0431,
-                            1.0
-                        ]
-                    },
-                    {
-                        "name": "Intensity",
+                        "name": "Frequency",
                         "type": "float",
-                        "value": 0.4
+                        "value": 24.0
+                    },
+                    {
+                        "name": "Amplitude",
+                        "type": "float",
+                        "value": 0.00288
+                    },
+                    {
+                        "name": "Speed",
+                        "type": "float",
+                        "value": 0.624
                     }
                 ]
             }

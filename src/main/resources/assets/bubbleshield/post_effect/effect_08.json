@@ -5,7 +5,7 @@
     "passes": [
         {
             "vertex_shader": "minecraft:core/screenquad",
-            "fragment_shader": "bubbleshield:screenfx/wobble",
+            "fragment_shader": "bubbleshield:screenfx/pixelate",
             "inputs": [
                 {
                     "sampler_name": "In",
@@ -14,31 +14,26 @@
             ],
             "output": "swap",
             "uniforms": {
-                "WobbleConfig": [
+                "PixelateConfig": [
                     {
                         "name": "Primary",
                         "type": "vec4",
                         "value": [
                             1.0,
-                            0.2,
-                            0.8,
+                            0.302,
+                            0.8392,
                             1.0
                         ]
                     },
                     {
-                        "name": "Frequency",
+                        "name": "Resolution",
                         "type": "float",
                         "value": 24.0
                     },
                     {
-                        "name": "Amplitude",
+                        "name": "MosaicSize",
                         "type": "float",
-                        "value": 0.0036
-                    },
-                    {
-                        "name": "Speed",
-                        "type": "float",
-                        "value": 0.48
+                        "value": 4.6933
                     }
                 ]
             }

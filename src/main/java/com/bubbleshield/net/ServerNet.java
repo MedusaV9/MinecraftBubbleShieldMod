@@ -9,6 +9,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import com.bubbleshield.block.BubbleShieldBlockEntity;
+import com.bubbleshield.effect.EffectRegistry;
 import com.bubbleshield.shield.ShieldLogic;
 import com.bubbleshield.shield.ShieldState;
 
@@ -38,7 +39,7 @@ public final class ServerNet {
 	public static final int MIN_DIAMETER = 8;
 	public static final int MAX_DIAMETER = 200;
 	public static final int MIN_EFFECT_ID = 0;
-	public static final int MAX_EFFECT_ID = 49;
+	public static final int MAX_EFFECT_ID = EffectRegistry.COUNT - 1;
 	/** Hard cap on whitelist entries to keep payloads and NBT bounded. */
 	public static final int MAX_WHITELIST_SIZE = 64;
 
@@ -211,11 +212,13 @@ public final class ServerNet {
 		return new ShieldPayloads.ShieldSyncS2C(
 			shield.getBlockPos(),
 			level.dimension(),
-			state.active,
-			state.effectId,
-			state.targetRadius,
-			ShieldLogic.currentRadius(state),
-			healthFrac,
+			new ShieldPayloads.ShieldVisual(
+				state.active,
+				state.effectId,
+				state.targetRadius,
+				ShieldLogic.currentRadius(state),
+				healthFrac
+			),
 			List.copyOf(state.whitelistUuids),
 			List.copyOf(state.whitelistNames),
 			(int) (cooldownTicks / ShieldLogic.TICKS_PER_FUEL_SECOND),

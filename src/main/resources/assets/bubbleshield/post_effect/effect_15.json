@@ -5,7 +5,7 @@
     "passes": [
         {
             "vertex_shader": "minecraft:core/screenquad",
-            "fragment_shader": "bubbleshield:screenfx/vignette",
+            "fragment_shader": "bubbleshield:screenfx/wobble",
             "inputs": [
                 {
                     "sampler_name": "In",
@@ -14,7 +14,7 @@
             ],
             "output": "swap",
             "uniforms": {
-                "VignetteConfig": [
+                "WobbleConfig": [
                     {
                         "name": "Primary",
                         "type": "vec4",
@@ -26,14 +26,19 @@
                         ]
                     },
                     {
-                        "name": "Intensity",
+                        "name": "Frequency",
                         "type": "float",
-                        "value": 0.36
+                        "value": 24.0
                     },
                     {
-                        "name": "PulseSpeed",
+                        "name": "Amplitude",
                         "type": "float",
-                        "value": 0.64
+                        "value": 0.0032
+                    },
+                    {
+                        "name": "Speed",
+                        "type": "float",
+                        "value": 0.48
                     }
                 ]
             }

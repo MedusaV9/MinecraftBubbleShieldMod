@@ -19,9 +19,9 @@
                         "name": "Primary",
                         "type": "vec4",
                         "value": [
-                            1.0,
-                            0.2,
-                            0.8,
+                            0.8784,
+                            0.1216,
+                            0.6627,
                             1.0
                         ]
                     },
@@ -33,12 +33,12 @@
                     {
                         "name": "Amplitude",
                         "type": "float",
-                        "value": 0.0032
+                        "value": 0.00341
                     },
                     {
                         "name": "Speed",
                         "type": "float",
-                        "value": 0.48
+                        "value": 0.384
                     }
                 ]
             }

@@ -5,7 +5,7 @@
     "passes": [
         {
             "vertex_shader": "minecraft:core/screenquad",
-            "fragment_shader": "bubbleshield:screenfx/vignette",
+            "fragment_shader": "bubbleshield:screenfx/pixelate",
             "inputs": [
                 {
                     "sampler_name": "In",
@@ -14,26 +14,26 @@
             ],
             "output": "swap",
             "uniforms": {
-                "VignetteConfig": [
+                "PixelateConfig": [
                     {
                         "name": "Primary",
                         "type": "vec4",
                         "value": [
-                            0.7843,
-                            0.0588,
-                            0.1176,
+                            0.6431,
+                            0.0863,
+                            0.102,
                             1.0
                         ]
                     },
                     {
-                        "name": "Intensity",
+                        "name": "Resolution",
                         "type": "float",
-                        "value": 0.54
+                        "value": 24.0
                     },
                     {
-                        "name": "PulseSpeed",
+                        "name": "MosaicSize",
                         "type": "float",
-                        "value": 0.96
+                        "value": 4.2933
                     }
                 ]
             }

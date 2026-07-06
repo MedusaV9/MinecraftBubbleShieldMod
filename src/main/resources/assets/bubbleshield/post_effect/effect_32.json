@@ -5,7 +5,7 @@
     "passes": [
         {
             "vertex_shader": "minecraft:core/screenquad",
-            "fragment_shader": "bubbleshield:screenfx/desat",
+            "fragment_shader": "bubbleshield:screenfx/wobble",
             "inputs": [
                 {
                     "sampler_name": "In",
@@ -14,21 +14,31 @@
             ],
             "output": "swap",
             "uniforms": {
-                "DesatConfig": [
+                "WobbleConfig": [
                     {
                         "name": "Primary",
                         "type": "vec4",
                         "value": [
-                            0.498,
-                            0.9137,
-                            1.0,
+                            0.6275,
+                            0.9098,
+                            0.9412,
                             1.0
                         ]
                     },
                     {
-                        "name": "Desaturation",
+                        "name": "Frequency",
                         "type": "float",
-                        "value": 0.56
+                        "value": 24.0
+                    },
+                    {
+                        "name": "Amplitude",
+                        "type": "float",
+                        "value": 0.00475
+                    },
+                    {
+                        "name": "Speed",
+                        "type": "float",
+                        "value": 0.684
                     }
                 ]
             }

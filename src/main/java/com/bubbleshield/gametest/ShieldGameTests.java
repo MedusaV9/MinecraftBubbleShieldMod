@@ -7,7 +7,6 @@ import java.util.UUID;
 
 import com.bubbleshield.block.BubbleShieldBlockEntity;
 import com.bubbleshield.effect.EffectRegistry;
-import com.bubbleshield.effect.InsideEffectBehavior;
 import com.bubbleshield.menu.BubbleShieldMenu;
 import com.bubbleshield.registry.ModBlocks;
 import com.bubbleshield.shield.ShieldLogic;
@@ -218,14 +217,6 @@ public class ShieldGameTests {
 			helper.getLevel().getServer().getPlayerList().remove(player);
 		}
 
-		helper.succeed();
-	}
-
-	@GameTest(padding = 16)
-	public void allFiftyEffectsValid(GameTestHelper helper) {
-		EffectRegistry.validate();
-		helper.assertTrue(EffectRegistry.ALL.size() == EffectRegistry.COUNT, "registry should expose exactly 50 effect definitions");
-		helper.assertTrue(InsideEffectBehavior.REGISTRY.size() == 10, "exactly 10 inside behaviors should be registered");
 		helper.succeed();
 	}
 

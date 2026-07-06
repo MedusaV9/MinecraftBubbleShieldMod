@@ -19,9 +19,9 @@
                         "name": "Primary",
                         "type": "vec4",
                         "value": [
-                            0.949,
-                            0.949,
-                            0.949,
+                            0.8784,
+                            0.8784,
+                            0.8784,
                             1.0
                         ]
                     },
@@ -33,7 +33,7 @@
                     {
                         "name": "MosaicSize",
                         "type": "float",
-                        "value": 3.4
+                        "value": 4.1867
                     }
                 ]
             }

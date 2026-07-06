@@ -150,7 +150,8 @@ public final class ShieldLogic {
 			return;
 		}
 
-		InsideEffectBehavior behavior = InsideEffectBehavior.get(def.insideBehaviorId());
+		// TODO(S2): dispatch def.insideBehaviorId() directly once all 25 behaviors exist.
+		InsideEffectBehavior behavior = InsideEffectBehavior.get(EffectRegistry.resolvedBehaviorId(def));
 		if (behavior == null) {
 			return;
 		}

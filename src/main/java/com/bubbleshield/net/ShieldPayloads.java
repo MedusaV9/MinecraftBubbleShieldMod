@@ -6,6 +6,8 @@ import java.util.UUID;
 
 import com.bubbleshield.BubbleShield;
 
+import io.netty.buffer.ByteBuf;
+
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 
 import net.minecraft.core.BlockPos;
@@ -74,20 +76,35 @@ public final class ShieldPayloads {
 	}
 
 	/**
-	 * Full shield snapshot for the client-side replica.
-	 *
-	 * <p>{@link StreamCodec#composite} supports up to 12 fields in this Minecraft version,
-	 * so the 11 fields fit in a single composite. The dimension travels with the snapshot
-	 * so clients never render "ghost" shields synced from another dimension.
+	 * The renderable core of a shield snapshot, nested inside {@link ShieldSyncS2C} with
+	 * its own codec so the outer {@link StreamCodec#composite} (capped at 12 fields in
+	 * this Minecraft version) keeps free slots for future fields (e.g. tier/shape).
 	 */
-	public record ShieldSyncS2C(
-		BlockPos pos,
-		ResourceKey<Level> dimension,
+	public record ShieldVisual(
 		boolean active,
 		int effectId,
 		float targetRadius,
 		float currentRadius,
-		float healthFrac,
+		float healthFrac
+	) {
+		public static final StreamCodec<ByteBuf, ShieldVisual> STREAM_CODEC = StreamCodec.composite(
+			ByteBufCodecs.BOOL, ShieldVisual::active,
+			ByteBufCodecs.VAR_INT, ShieldVisual::effectId,
+			ByteBufCodecs.FLOAT, ShieldVisual::targetRadius,
+			ByteBufCodecs.FLOAT, ShieldVisual::currentRadius,
+			ByteBufCodecs.FLOAT, ShieldVisual::healthFrac,
+			ShieldVisual::new
+		);
+	}
+
+	/**
+	 * Full shield snapshot for the client-side replica. The dimension travels with the
+	 * snapshot so clients never render "ghost" shields synced from another dimension.
+	 */
+	public record ShieldSyncS2C(
+		BlockPos pos,
+		ResourceKey<Level> dimension,
+		ShieldVisual visual,
 		List<UUID> whitelist,
 		List<String> whitelistNames,
 		int cooldownSeconds,
@@ -97,11 +114,7 @@ public final class ShieldPayloads {
 		public static final StreamCodec<RegistryFriendlyByteBuf, ShieldSyncS2C> CODEC = StreamCodec.composite(
 			BlockPos.STREAM_CODEC, ShieldSyncS2C::pos,
 			ResourceKey.streamCodec(Registries.DIMENSION), ShieldSyncS2C::dimension,
-			ByteBufCodecs.BOOL, ShieldSyncS2C::active,
-			ByteBufCodecs.VAR_INT, ShieldSyncS2C::effectId,
-			ByteBufCodecs.FLOAT, ShieldSyncS2C::targetRadius,
-			ByteBufCodecs.FLOAT, ShieldSyncS2C::currentRadius,
-			ByteBufCodecs.FLOAT, ShieldSyncS2C::healthFrac,
+			ShieldVisual.STREAM_CODEC, ShieldSyncS2C::visual,
 			UUIDUtil.STREAM_CODEC.apply(ByteBufCodecs.list()), ShieldSyncS2C::whitelist,
 			ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()), ShieldSyncS2C::whitelistNames,
 			ByteBufCodecs.VAR_INT, ShieldSyncS2C::cooldownSeconds,

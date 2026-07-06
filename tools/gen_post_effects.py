@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Dev tool: generates the 50 shield screen post-effect JSONs.
+"""Dev tool: generates the 75 shield screen post-effect JSONs.
 
 Emits src/main/resources/assets/bubbleshield/post_effect/effect_00.json ...
-effect_49.json. The assets live in the main (not client) source set so the
+effect_74.json. The assets live in the main (not client) source set so the
 postEffectAssetsExist game test can find them on the dedicated-server classpath;
 the client resource manager loads them from the merged mod jar all the same.
 Not wired into the build; rerun manually after changing the mapping below and
@@ -10,13 +10,16 @@ commit the regenerated files:
 
     python3 tools/gen_post_effects.py
 
-The mapping mirrors com.bubbleshield.effect.EffectRegistry: id = theme * 5 + surface,
-where theme (id // 5) picks the colors + base screen template and surface (id % 5)
-nudges the template choice and the intensity. Each JSON follows the vanilla
-post_effect schema (see assets/minecraft/post_effect/creeper.json in 26.2): a
-"targets"/"passes" document where every pass runs a fragment shader over a
-screenquad. Pass 1 applies our template main -> swap; pass 2 blits swap -> main
-with the vanilla blit shader, because a pass cannot read and write the same target.
+The EFFECTS table mirrors com.bubbleshield.effect.EffectRegistry row for row:
+(argbPrimary, argbSecondary, FINAL screenTemplate name). Templates without a
+shader yet resolve through SCREENFX_FALLBACK, which MUST stay identical to
+EffectRegistry.TEMP_SCREENFX_FALLBACK (the screenTemplateMatchesJson gametest
+cross-checks every generated JSON against EffectRegistry.resolvedScreenTemplate).
+Each JSON follows the vanilla post_effect schema (see
+assets/minecraft/post_effect/creeper.json in 26.2): a "targets"/"passes"
+document where every pass runs a fragment shader over a screenquad. Pass 1
+applies our template main -> swap; pass 2 blits swap -> main with the vanilla
+blit shader, because a pass cannot read and write the same target.
 """
 
 import json
@@ -24,24 +27,111 @@ from pathlib import Path
 
 OUT_DIR = Path(__file__).resolve().parent.parent / "src/main/resources/assets/bubbleshield/post_effect"
 
-# Mirrors EffectRegistry.THEMES: (argbPrimary, argbSecondary, base screen template).
-THEMES = [
-    (0xFF66FFAA, 0xFF1E9E6E, "tint"),      # 0 aurora greens
-    (0xFFFF33CC, 0xFF7A00FF, "wobble"),    # 1 plasma magenta
-    (0xFF2E7BFF, 0xFF00CFEA, "tint"),      # 2 ocean blue
-    (0xFFFF7A1A, 0xFFFFC23D, "vignette"),  # 3 ember orange
-    (0xFF8A2BE2, 0xFF3B0A66, "chroma"),    # 4 void purple
-    (0xFFFFD24D, 0xFFB8860B, "tint"),      # 5 gold
-    (0xFF7FE9FF, 0xFF2FA8C9, "desat"),     # 6 cyan ice
-    (0xFFC80F1E, 0xFF5A0710, "vignette"),  # 7 blood red
-    (0xFF2ECC71, 0xFF0E7A3C, "tint"),      # 8 emerald
-    (0xFFF2F2F2, 0xFF3C3C3C, "desat"),     # 9 monochrome
-]
+EFFECT_COUNT = 75
 
-# Surfaces, in EffectRegistry.SURFACES order: PLASMA, HEX, WAVES, AURORA, SPARKLE.
-# HEX's lattice look maps to the mosaic template, SPARKLE's glitter to the chroma
-# fringe; the other three keep the theme's base template.
-SURFACE_TEMPLATE_NUDGE = {1: "pixelate", 4: "chroma"}
+# TODO(S6): remove — must stay identical to EffectRegistry.TEMP_SCREENFX_FALLBACK.
+SCREENFX_FALLBACK = {
+    "bloomglow": "tint",
+    "ripple": "wobble",
+    "scanlines": "pixelate",
+    "edgeglow": "tint",
+    "frostlens": "vignette",
+    "heathaze": "wobble",
+}
+
+# Mirrors EffectRegistry.buildAll(): (argbPrimary, argbSecondary, FINAL screenTemplate).
+EFFECTS = [
+    # F0 "Aurora Borealis" (greens)
+    (0xFF66FFAA, 0xFF1E9E6E, "tint"),       # 0 Aurora Storm
+    (0xFF8CFFC1, 0xFF0FBF8F, "bloomglow"),  # 1 Polar Curtain
+    (0xFF3DF5B0, 0xFF136B4F, "edgeglow"),   # 2 Greenwash Veil
+    (0xFFA1FFD9, 0xFF2FBF71, "ripple"),     # 3 Borealis Bloom
+    (0xFF57E68C, 0xFF0E5C38, "desat"),      # 4 Verdant Halo
+    # F1 "Plasma Nexus" (magentas)
+    (0xFFFF33CC, 0xFF7A00FF, "wobble"),     # 5 Plasma Storm
+    (0xFFFF66E0, 0xFF5500BB, "chroma"),     # 6 Ion Cascade
+    (0xFFE01FA9, 0xFF3D0066, "heathaze"),   # 7 Magenta Meteor
+    (0xFFFF4DD6, 0xFF8A1FB8, "scanlines"),  # 8 Fuchsia Purge
+    (0xFFFF00B3, 0xFFBF00FF, "bloomglow"),  # 9 Neon Overdrive
+    # F2 "Deep Ocean" (blues)
+    (0xFF2E7BFF, 0xFF00CFEA, "ripple"),     # 10 Tidal Veil
+    (0xFF1F5FD6, 0xFF00A3C4, "tint"),       # 11 Abyssal Mend
+    (0xFF66B8FF, 0xFF0E4FA3, "frostlens"),  # 12 Frostline Current
+    (0xFF3E8FE0, 0xFF123C78, "wobble"),     # 13 Deepsea Mist
+    (0xFF8FD4FF, 0xFF1F73B8, "vignette"),   # 14 Blizzard Reef
+    # F3 "Ember Forge" (oranges)
+    (0xFFFF7A1A, 0xFFFFC23D, "heathaze"),   # 15 Ember Storm
+    (0xFFE85D04, 0xFF9D2B06, "vignette"),   # 16 Cinder Ward
+    (0xFFFFA347, 0xFFB33F00, "bloomglow"),  # 17 Meteor Forge
+    (0xFFFF8C29, 0xFFFFD97A, "tint"),       # 18 Gilded Sprint
+    (0xFFD9480F, 0xFF5A0F05, "chroma"),     # 19 Furnace Pulse
+    # F4 "Void Whisper" (purples)
+    (0xFF8A2BE2, 0xFF3B0A66, "chroma"),     # 20 Soul Well
+    (0xFF6A0DAD, 0xFF2E0854, "scanlines"),  # 21 Gravity Hush
+    (0xFF9D4EDD, 0xFF4A148C, "desat"),      # 22 Rune Whisper
+    (0xFFB388FF, 0xFF1A0033, "vignette"),   # 23 Event Horizon
+    (0xFF7C43BD, 0xFF26094D, "edgeglow"),   # 24 Umbral Frost
+    # F5 "Solar Crown" (golds)
+    (0xFFFFD24D, 0xFFB8860B, "bloomglow"),  # 25 Midas Rush
+    (0xFFFFE066, 0xFFCC9A06, "tint"),       # 26 Sun Sprinter
+    (0xFFF5C518, 0xFF8A6D00, "heathaze"),   # 27 Gold Firefly
+    (0xFFFFDF80, 0xFFA67C00, "edgeglow"),   # 28 Royal Chorus
+    (0xFFEAB530, 0xFF6B4E00, "pixelate"),   # 29 Crown Mender
+    # F6 "Glacial Palace" (ice cyans)
+    (0xFF7FE9FF, 0xFF2FA8C9, "frostlens"),  # 30 Glacial Lattice
+    (0xFFB3F0FF, 0xFF1B7A99, "desat"),      # 31 Permafrost Bite
+    (0xFFA0E8F0, 0xFF33808C, "ripple"),     # 32 Rimefog
+    (0xFF66D9E8, 0xFF0B525B, "pixelate"),   # 33 Frozen Tide
+    (0xFFD0FBFF, 0xFF4FB3C9, "tint"),       # 34 Aegis of Winter
+    # F7 "Crimson Rite" (reds)
+    (0xFFC80F1E, 0xFF5A0710, "vignette"),   # 35 Blood Pulse
+    (0xFFE5383B, 0xFF7F0A0F, "heathaze"),   # 36 Pyre Rain
+    (0xFFFF5A5F, 0xFF8C1C13, "chroma"),     # 37 Red Reckoning
+    (0xFFA4161A, 0xFF3D0000, "scanlines"),  # 38 Hexen Bane
+    (0xFFF25C54, 0xFF661411, "ripple"),     # 39 Martyr's Ward
+    # F8 "Verdant Grove" (emerald/lime)
+    (0xFF2ECC71, 0xFF0E7A3C, "tint"),       # 40 Petal Grove
+    (0xFF7AE582, 0xFF1E6B2F, "ripple"),     # 41 Lush Firefly
+    (0xFF58D68D, 0xFF145A32, "bloomglow"),  # 42 Grove Mender
+    (0xFF9CCC65, 0xFF33691E, "frostlens"),  # 43 Sporesong
+    (0xFF66BB6A, 0xFF1B5E20, "wobble"),     # 44 Owl Sight
+    # F9 "Monochrome Static" (greys)
+    (0xFFF2F2F2, 0xFF3C3C3C, "desat"),      # 45 Ashen Shroud
+    (0xFFE0E0E0, 0xFF616161, "pixelate"),   # 46 White Noise
+    (0xFFBDBDBD, 0xFF212121, "scanlines"),  # 47 Grey Ring
+    (0xFF9E9E9E, 0xFF424242, "edgeglow"),   # 48 Static Cage
+    (0xFFEEEEEE, 0xFF757575, "vignette"),   # 49 Silent Chord
+    # F10 "Celestial Vault" (indigo/silver)
+    (0xFF7986CB, 0xFFE8EAF6, "edgeglow"),   # 50 Starfall Vault
+    (0xFF5C6BC0, 0xFFC5CAE9, "bloomglow"),  # 51 Zodiac Script
+    (0xFF3F51B5, 0xFF9FA8DA, "pixelate"),   # 52 Comet Spiral
+    (0xFF283593, 0xFFB0BEC5, "desat"),      # 53 Nebula Firefly
+    (0xFF9FA8DA, 0xFF1A237E, "wobble"),     # 54 Lunar Sight
+    # F11 "Tempest Cell" (storm blue/electric)
+    (0xFF4FC3F7, 0xFF01579B, "scanlines"),  # 55 Storm Lattice
+    (0xFF29B6F6, 0xFF0D47A1, "chroma"),     # 56 Thunder Meteor
+    (0xFF81D4FA, 0xFF0277BD, "wobble"),     # 57 Gale Purge
+    (0xFF00B0FF, 0xFF002F6C, "heathaze"),   # 58 Ion Orbit
+    (0xFF40C4FF, 0xFF01426A, "frostlens"),  # 59 Slipstream
+    # F12 "Sakura Dream" (pink/white)
+    (0xFFF8BBD0, 0xFFAD1457, "ripple"),     # 60 Sakura Drift
+    (0xFFF48FB1, 0xFF880E4F, "tint"),       # 61 Blossom Tide
+    (0xFFFF80AB, 0xFFC2185B, "pixelate"),   # 62 Pink Lattice
+    (0xFFFFC1E3, 0xFFD81B60, "wobble"),     # 63 Petal Haste
+    (0xFFEC407A, 0xFF4A0025, "bloomglow"),  # 64 Heart Bloom
+    # F13 "Sculk Depths" (dark teals)
+    (0xFF1DE9B6, 0xFF0B3D33, "desat"),      # 65 Sculk Souls
+    (0xFF00BFA5, 0xFF00332B, "edgeglow"),   # 66 Deep Freeze
+    (0xFF26A69A, 0xFF00201C, "scanlines"),  # 67 Warden's Ring
+    (0xFF4DB6AC, 0xFF00251F, "vignette"),   # 68 Echo Aegis
+    (0xFF80CBC4, 0xFF0E2E29, "chroma"),     # 69 Sporeveil
+    # F14 "Twin Nether" (crimson/warped duotones)
+    (0xFFDD2C00, 0xFF00C853, "heathaze"),   # 70 Crimson Spores
+    (0xFFFF3D00, 0xFF1B5E20, "vignette"),   # 71 Nether Ward
+    (0xFF00E5FF, 0xFFBF360C, "frostlens"),  # 72 Soulfire Rain
+    (0xFF76FF03, 0xFF8D1007, "pixelate"),   # 73 Wailing Souls
+    (0xFFCFD8DC, 0xFF4E342E, "ripple"),     # 74 Basalt Blizzard
+]
 
 
 def argb_to_vec4(argb: int) -> list[float]:
@@ -98,12 +188,12 @@ def template_uniforms(template: str, primary: list[float], secondary: list[float
 
 
 def build_effect(effect_id: int) -> dict:
-    theme, surface = divmod(effect_id, 5)
-    argb_primary, argb_secondary, base_template = THEMES[theme]
-    template = SURFACE_TEMPLATE_NUDGE.get(surface, base_template)
-    # Same derivation as EffectRegistry: theme drives speed, surface drives intensity.
-    param_a = 0.4 + 0.08 * theme
-    param_b = 0.6 + 0.1 * surface
+    argb_primary, argb_secondary, final_template = EFFECTS[effect_id]
+    template = SCREENFX_FALLBACK.get(final_template, final_template)
+    # Same per-id derivation as EffectRegistry.row(): paramA = pattern scale,
+    # paramB = scroll speed / intensity driver; both vary for every id.
+    param_a = 0.3 + 0.012 * effect_id
+    param_b = 0.4 + ((effect_id * 37) % EFFECT_COUNT) / EFFECT_COUNT
 
     return {
         "targets": {
@@ -140,11 +230,12 @@ def build_effect(effect_id: int) -> dict:
 
 
 def main() -> None:
+    assert len(EFFECTS) == EFFECT_COUNT, f"expected {EFFECT_COUNT} rows, found {len(EFFECTS)}"
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    for effect_id in range(50):
+    for effect_id in range(EFFECT_COUNT):
         path = OUT_DIR / f"effect_{effect_id:02d}.json"
         path.write_text(json.dumps(build_effect(effect_id), indent=4) + "\n")
-    print(f"Wrote 50 post effect JSONs to {OUT_DIR}")
+    print(f"Wrote {EFFECT_COUNT} post effect JSONs to {OUT_DIR}")
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@
     "passes": [
         {
             "vertex_shader": "minecraft:core/screenquad",
-            "fragment_shader": "bubbleshield:screenfx/chroma",
+            "fragment_shader": "bubbleshield:screenfx/tint",
             "inputs": [
                 {
                     "sampler_name": "In",
@@ -14,21 +14,31 @@
             ],
             "output": "swap",
             "uniforms": {
-                "ChromaConfig": [
+                "TintConfig": [
                     {
                         "name": "Primary",
                         "type": "vec4",
                         "value": [
-                            0.5412,
-                            0.1686,
-                            0.8863,
+                            0.4863,
+                            0.2627,
+                            0.7412,
                             1.0
                         ]
                     },
                     {
-                        "name": "OffsetAmount",
+                        "name": "Secondary",
+                        "type": "vec4",
+                        "value": [
+                            0.149,
+                            0.0353,
+                            0.302,
+                            1.0
+                        ]
+                    },
+                    {
+                        "name": "Intensity",
                         "type": "float",
-                        "value": 0.012
+                        "value": 0.62
                     }
                 ]
             }

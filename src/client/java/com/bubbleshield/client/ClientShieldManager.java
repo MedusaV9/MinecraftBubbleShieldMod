@@ -34,16 +34,33 @@ public final class ClientShieldManager {
 	public record ClientShield(
 		BlockPos pos,
 		ResourceKey<Level> dimension,
-		boolean active,
-		int effectId,
-		float targetRadius,
-		float currentRadius,
-		float healthFrac,
+		ShieldPayloads.ShieldVisual visual,
 		List<UUID> whitelist,
 		List<String> whitelistNames,
 		int cooldownSeconds,
 		Optional<UUID> ownerUuid
 	) {
+		// Flat accessors kept for renderer/screen-fx consumers; they delegate into the
+		// nested visual record synced from the server.
+		public boolean active() {
+			return this.visual.active();
+		}
+
+		public int effectId() {
+			return this.visual.effectId();
+		}
+
+		public float targetRadius() {
+			return this.visual.targetRadius();
+		}
+
+		public float currentRadius() {
+			return this.visual.currentRadius();
+		}
+
+		public float healthFrac() {
+			return this.visual.healthFrac();
+		}
 	}
 
 	private static final Map<GlobalPos, ClientShield> SHIELDS = new HashMap<>();
@@ -86,11 +103,7 @@ public final class ClientShieldManager {
 			SHIELDS.put(new GlobalPos(payload.dimension(), payload.pos()), new ClientShield(
 				payload.pos(),
 				payload.dimension(),
-				payload.active(),
-				payload.effectId(),
-				payload.targetRadius(),
-				payload.currentRadius(),
-				payload.healthFrac(),
+				payload.visual(),
 				payload.whitelist(),
 				payload.whitelistNames(),
 				payload.cooldownSeconds(),

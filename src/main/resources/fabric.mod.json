@@ -22,7 +22,8 @@
 			"com.bubbleshield.client.BubbleShieldClient"
 		],
 		"fabric-gametest": [
-			"com.bubbleshield.gametest.ShieldGameTests"
+			"com.bubbleshield.gametest.ShieldGameTests",
+			"com.bubbleshield.gametest.EffectCatalogGameTests"
 		]
 	},
 	"mixins": [

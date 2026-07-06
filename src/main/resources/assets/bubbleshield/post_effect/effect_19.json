@@ -19,16 +19,16 @@
                         "name": "Primary",
                         "type": "vec4",
                         "value": [
-                            1.0,
-                            0.4784,
-                            0.102,
+                            0.851,
+                            0.2824,
+                            0.0588,
                             1.0
                         ]
                     },
                     {
                         "name": "OffsetAmount",
                         "type": "float",
-                        "value": 0.012
+                        "value": 0.00928
                     }
                 ]
             }
