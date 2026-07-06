@@ -8,6 +8,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
+
 /**
  * The fixed catalogue of the 75 selectable shield effects (ids 0..74), organized as
  * 15 color families x 5 effects, but individually authored: every id is a unique row
@@ -18,6 +21,11 @@ import java.util.Set;
  */
 public final class EffectRegistry {
 	public static final int COUNT = 75;
+
+	/** The full screen-fx template catalogue; every row's screenTemplate must be one of these. */
+	public static final Set<String> SCREEN_TEMPLATES = Set.of(
+			"tint", "wobble", "vignette", "chroma", "pixelate", "desat",
+			"bloomglow", "ripple", "scanlines", "edgeglow", "frostlens", "heathaze");
 
 	public static final List<EffectDefinition> ALL = buildAll();
 
@@ -146,8 +154,11 @@ public final class EffectRegistry {
 	 * entries with ids 0..COUNT-1; all palette pairs pairwise distinct; all
 	 * (insideBehaviorId, behaviorVariant) pairs pairwise distinct with every behavior id
 	 * used EXACTLY 3 times covering variants {0, 1, 2}; ambientPeriodTicks positive;
-	 * every (ambientSoundId, ambientPitch, ambientPeriodTicks) triple distinct; and
-	 * every behavior id registered in {@link InsideEffectBehavior#REGISTRY}.
+	 * every (ambientSoundId, ambientPitch, ambientPeriodTicks) triple distinct;
+	 * every behavior id registered in {@link InsideEffectBehavior#REGISTRY};
+	 * every screenTemplate one of the 12 {@link #SCREEN_TEMPLATES}; every
+	 * ambientSoundId resolvable in the vanilla sound registry; and no surface or
+	 * screenTemplate repeated within a 5-effect color family (id / 5).
 	 */
 	public static void validate() {
 		if (ALL.size() != COUNT) {
@@ -157,6 +168,8 @@ public final class EffectRegistry {
 		Set<Long> palettes = new HashSet<>();
 		Map<String, Set<Integer>> behaviorVariants = new HashMap<>();
 		Set<String> soundTriples = new HashSet<>();
+		Map<Integer, Set<SurfaceTemplate>> surfacesPerFamily = new HashMap<>();
+		Map<Integer, Set<String>> screenFxPerFamily = new HashMap<>();
 		for (int i = 0; i < ALL.size(); i++) {
 			EffectDefinition def = ALL.get(i);
 			if (def.id() != i) {
@@ -183,6 +196,23 @@ public final class EffectRegistry {
 
 			if (!InsideEffectBehavior.REGISTRY.containsKey(def.insideBehaviorId())) {
 				throw new IllegalStateException("Effect " + def.id() + " references unregistered inside behavior: " + def.insideBehaviorId());
+			}
+
+			if (!SCREEN_TEMPLATES.contains(def.screenTemplate())) {
+				throw new IllegalStateException("Effect " + def.id() + " uses unknown screen template: " + def.screenTemplate());
+			}
+
+			if (!BuiltInRegistries.SOUND_EVENT.containsKey(Identifier.parse("minecraft:" + def.ambientSoundId()))) {
+				throw new IllegalStateException("Effect " + def.id() + " ambient sound does not resolve: " + def.ambientSoundId());
+			}
+
+			int family = def.id() / 5;
+			if (!surfacesPerFamily.computeIfAbsent(family, f -> new HashSet<>()).add(def.surface())) {
+				throw new IllegalStateException("Family " + family + " repeats surface " + def.surface() + " (effect " + def.id() + ")");
+			}
+
+			if (!screenFxPerFamily.computeIfAbsent(family, f -> new HashSet<>()).add(def.screenTemplate())) {
+				throw new IllegalStateException("Family " + family + " repeats screen template " + def.screenTemplate() + " (effect " + def.id() + ")");
 			}
 		}
 

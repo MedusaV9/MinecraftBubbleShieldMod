@@ -53,6 +53,12 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	private int lastTier = -1;
 	/** Last observed redstone level; persisted so chunk reloads do not fake an edge. */
 	private boolean powered;
+	/**
+	 * Whether {@link #powered} reflects an actual observation (placement seed, NBT load
+	 * or a neighbor update). A freshly placed projector seeds from the live neighbor
+	 * signal so a pre-existing steady level is never misread as a rising edge.
+	 */
+	private boolean poweredInitialized;
 	/** Live server-side snapshot for the menu; values in SECONDS (data slots sync 16-bit signed). */
 	private final ContainerData menuData = new ContainerData() {
 		@Override
@@ -136,6 +142,11 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	 * Runs one server tick of shield logic. Invoked by the block ticker on the server only.
 	 */
 	public void serverTick() {
+		// Covers placements that bypass setPlacedBy (e.g. /setblock, structures).
+		if (!this.poweredInitialized && this.level != null) {
+			this.seedPowered(this.level.hasNeighborSignal(this.worldPosition));
+		}
+
 		this.consumeFuelSlot();
 		this.refreshTier();
 		if (this.level instanceof ServerLevel serverLevel && ShieldLogic.serverTick(serverLevel, this.worldPosition, this.shieldState, this.tier())) {
@@ -145,8 +156,10 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 
 	/**
 	 * Applies the tier derived from the core slot to the shield's max health whenever the
-	 * slot content changed (including the first tick after load): {@code maxHealth = 100 * (1 + tier)},
-	 * clamping current health down when a core is removed.
+	 * slot content changed (including the first tick after load): {@code maxHealth = 100 * (1 + tier)}.
+	 * When max health rises (core inserted) the health FRACTION is preserved, so an
+	 * active shield keeps its current radius instead of instantly shrinking; when it
+	 * drops (core removed) current health is clamped down as before.
 	 */
 	private void refreshTier() {
 		int tier = this.tier();
@@ -155,8 +168,14 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		}
 
 		this.lastTier = tier;
-		this.shieldState.maxHealth = ShieldState.DEFAULT_MAX_HEALTH * (1 + tier);
-		this.shieldState.health = Math.min(this.shieldState.health, this.shieldState.maxHealth);
+		float newMaxHealth = ShieldState.DEFAULT_MAX_HEALTH * (1 + tier);
+		float oldMaxHealth = this.shieldState.maxHealth;
+		if (newMaxHealth > oldMaxHealth && oldMaxHealth > 0.0F) {
+			this.shieldState.health = this.shieldState.health / oldMaxHealth * newMaxHealth;
+		}
+
+		this.shieldState.maxHealth = newMaxHealth;
+		this.shieldState.health = Math.min(this.shieldState.health, newMaxHealth);
 		this.markUpdated();
 	}
 
@@ -228,10 +247,12 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 			if (this.level instanceof ServerLevel serverLevel) {
 				ShieldLogic.expelBlockedPlayers(serverLevel, this.worldPosition, this.shieldState);
 			}
-		}
 
-		if (initiator != null) {
-			ModCriteria.SHIELD_ACTIVATED.trigger(initiator, Math.round(this.shieldState.targetRadius * 2.0F), this.shieldState.effectId);
+			// Only a real inactive->active transition counts as an activation; a no-op
+			// re-activation of an already-active shield must not award the criterion.
+			if (initiator != null) {
+				ModCriteria.SHIELD_ACTIVATED.trigger(initiator, Math.round(this.shieldState.targetRadius * 2.0F), this.shieldState.effectId);
+			}
 		}
 
 		return true;
@@ -245,6 +266,7 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		this.shieldState.ownerUuid = player.getUUID();
 		this.shieldState.whitelistUuids.add(player.getUUID());
 		addNameIfAbsent(this.shieldState.whitelistNames, player.getGameProfile().name());
+		this.shieldState.rememberWhitelistUuid(player.getGameProfile().name(), player.getUUID());
 		this.markUpdated();
 	}
 
@@ -275,11 +297,23 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	}
 
 	/**
+	 * Seeds the powered flag from the current neighbor signal WITHOUT acting on it.
+	 * Called at placement (and on the first tick as a fallback) so a projector placed
+	 * next to an already-powered block does not misread the next unrelated neighbor
+	 * update as a rising edge.
+	 */
+	public void seedPowered(boolean powered) {
+		this.poweredInitialized = true;
+		this.powered = powered;
+	}
+
+	/**
 	 * Records the redstone level seen by the block and acts on edges only: a rising edge
 	 * tries to activate the shield (subject to fuel/cooldown), a falling edge deactivates
 	 * it. Steady levels never fight the GUI toggle.
 	 */
 	public void setNeighborPowered(boolean powered) {
+		this.poweredInitialized = true;
 		if (powered == this.powered) {
 			return;
 		}
@@ -325,13 +359,15 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 			return;
 		}
 
-		addNameIfAbsent(this.shieldState.whitelistNames, trimmed);
+		boolean added = addNameIfAbsent(this.shieldState.whitelistNames, trimmed);
 		ServerPlayer online = server.getPlayerList().getPlayerByName(trimmed);
 		if (online != null) {
 			this.shieldState.whitelistUuids.add(online.getUUID());
+			this.shieldState.rememberWhitelistUuid(trimmed, online.getUUID());
 		}
 
-		if (actor != null) {
+		// Only genuinely new entries count, and whitelisting yourself is not an achievement.
+		if (added && actor != null && !trimmed.equalsIgnoreCase(actor.getGameProfile().name())) {
 			ModCriteria.PLAYER_WHITELISTED.trigger(actor);
 		}
 
@@ -339,8 +375,11 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	}
 
 	/**
-	 * Removes a name from the whitelist and revokes the matching UUID(s), resolving the
-	 * name via the online player list and the server's name-to-id cache.
+	 * Removes a name from the whitelist and revokes the matching UUID, resolving the
+	 * name strictly locally: via the online player list and the shield's own stored
+	 * name-to-UUID associations. The server's name-to-id cache is deliberately never
+	 * consulted, because a cache miss there performs a blocking remote lookup plus a
+	 * usercache disk write on the server thread (spammable via WhitelistModifyC2S).
 	 */
 	public void whitelistRemove(MinecraftServer server, String name) {
 		String trimmed = name.trim();
@@ -351,30 +390,47 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 			this.shieldState.whitelistUuids.remove(online.getUUID());
 		}
 
-		server.services().nameToIdCache().get(trimmed).ifPresent(nameAndId -> this.shieldState.whitelistUuids.remove(nameAndId.id()));
+		UUID stored = this.shieldState.forgetWhitelistUuid(trimmed);
+		if (stored != null) {
+			this.shieldState.whitelistUuids.remove(stored);
+		}
+
 		this.markUpdated();
 	}
 
-	/** Adds {@code name} unless an equal name (ignoring case) is already present. */
-	private static void addNameIfAbsent(Set<String> names, String name) {
+	/**
+	 * Adds {@code name} unless an equal name (ignoring case) is already present.
+	 *
+	 * @return true if the name was actually added.
+	 */
+	private static boolean addNameIfAbsent(Set<String> names, String name) {
 		for (String existing : names) {
 			if (existing.equalsIgnoreCase(name)) {
-				return;
+				return false;
 			}
 		}
 
 		names.add(name);
+		return true;
 	}
 
 	/**
-	 * Marks the shield dirty for persistence and, if any replicated field changed since
-	 * the last broadcast, replicates the new state to clients.
+	 * Marks the shield dirty for persistence, refreshes comparators, and, if any
+	 * replicated field changed since the last broadcast, replicates the new state to
+	 * clients. Only the NETWORK broadcast is gated on the snapshot: fuelSeconds is not
+	 * part of the replicated snapshot, yet comparators read it while the shield is
+	 * inactive, so the comparator refresh must run unconditionally.
 	 */
 	public void markUpdated() {
+		// setChanged() also calls level.updateNeighbourForOutputSignal in 26.2, but the
+		// comparator refresh is kept explicit so it never silently regresses.
 		this.setChanged();
 		if (!(this.level instanceof ServerLevel)) {
 			return;
 		}
+
+		BlockState state = this.getBlockState();
+		this.level.updateNeighbourForOutputSignal(this.worldPosition, state.getBlock());
 
 		ReplicatedState snapshot = this.buildReplicatedState();
 		if (snapshot.equals(this.lastSentState)) {
@@ -382,10 +438,7 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		}
 
 		this.lastSentState = snapshot;
-		BlockState state = this.getBlockState();
 		this.level.sendBlockUpdated(this.worldPosition, state, state, Block.UPDATE_CLIENTS);
-		// Comparators read health/fuel through the analog output; refresh them on change.
-		this.level.updateNeighbourForOutputSignal(this.worldPosition, state.getBlock());
 		ServerNet.syncShield(this);
 	}
 
@@ -490,6 +543,8 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		super.loadAdditional(input);
 		this.shieldState.load(input);
 		this.powered = input.getBooleanOr("powered", false);
+		// The persisted level counts as an observation; do not re-seed on the first tick.
+		this.poweredInitialized = true;
 		this.fuelContainer.fromItemList(input.listOrEmpty("fuel_items", ItemStack.CODEC));
 		this.coreContainer.fromItemList(input.listOrEmpty("core_items", ItemStack.CODEC));
 		// Re-derive tier-dependent fields on the next tick (covers cores edited while unloaded).

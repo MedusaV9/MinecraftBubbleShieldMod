@@ -139,7 +139,9 @@ public final class ServerNet {
 	/**
 	 * Resolves name-only whitelist entries for a joining player: any loaded shield whose
 	 * whitelist contains the player's name (case-insensitively) but not their UUID gets
-	 * the UUID backfilled, so the barrier and client edge-dissolve recognise them.
+	 * the UUID backfilled, so the barrier and client edge-dissolve recognise them. The
+	 * learned name-to-UUID association is stored so a later whitelist removal can revoke
+	 * the UUID without any name-to-id cache (remote) lookup.
 	 */
 	private static void backfillWhitelistUuid(ServerPlayer player) {
 		String name = player.getGameProfile().name();
@@ -149,6 +151,7 @@ public final class ServerNet {
 				ShieldState state = shield.getShieldState();
 				if (!state.whitelistUuids.contains(uuid) && containsIgnoreCase(state.whitelistNames, name)) {
 					state.whitelistUuids.add(uuid);
+					state.rememberWhitelistUuid(name, uuid);
 					shield.markUpdated();
 				}
 			}

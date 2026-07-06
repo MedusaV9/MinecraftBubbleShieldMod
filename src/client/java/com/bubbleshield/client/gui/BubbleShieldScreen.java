@@ -127,17 +127,22 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 		graphics.text(this.font, Component.translatable("gui.bubbleshield.cooldown", this.menu.cooldownSeconds()), 8, 66, LABEL_COLOR, false);
 	}
 
-	/** Diameter slider [8..200]; sends the chosen value (keeping the current effect) on mouse release. */
+	/**
+	 * Diameter slider [8..200]. Any user change (mouse drag OR keyboard arrows, both of
+	 * which land in {@link #applyValue()}) marks the slider dirty; the SetSettingsC2S
+	 * packet is flushed on mouse release, immediately for keyboard adjustments, and on
+	 * focus loss as a fallback, so no adjustment path is ever dropped.
+	 */
 	private static class DiameterSlider extends AbstractSliderButton {
 		private final BubbleShieldMenu menu;
 		/** AbstractSliderButton keeps its dragging flag private, so track our own. */
 		private boolean dragging;
-		private int lastSyncedDiameter;
+		/** Set by applyValue(); cleared when the pending value has been sent to the server. */
+		private boolean dirty;
 
 		DiameterSlider(int x, int y, int width, int height, BubbleShieldMenu menu) {
 			super(x, y, width, height, Component.empty(), toSliderValue(menu.diameter()));
 			this.menu = menu;
-			this.lastSyncedDiameter = menu.diameter();
 			this.updateMessage();
 		}
 
@@ -149,11 +154,15 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 			return MIN_DIAMETER + (int) Math.round(this.value * (MAX_DIAMETER - MIN_DIAMETER));
 		}
 
-		/** Re-syncs from the server-authoritative ContainerData value unless the user is dragging. */
+		/**
+		 * Re-syncs from the server-authoritative ContainerData value unless the user is
+		 * mid-adjustment (dragging or an unflushed change). Comparing against the
+		 * DISPLAYED value means a label left stale (e.g. a rejected request) snaps back
+		 * once the server state disagrees with it.
+		 */
 		void syncFromMenu() {
 			int synced = this.menu.diameter();
-			if (!this.dragging && synced != this.lastSyncedDiameter) {
-				this.lastSyncedDiameter = synced;
+			if (!this.dragging && !this.dirty && synced != this.diameter()) {
 				this.value = toSliderValue(synced);
 				this.updateMessage();
 			}
@@ -166,7 +175,23 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 
 		@Override
 		protected void applyValue() {
-			// Only the on-screen label updates while dragging; the packet is sent on release.
+			// Called for both mouse-drag and keyboard-arrow changes. While dragging, the
+			// flush waits for onRelease; keyboard adjustments flush immediately.
+			this.dirty = true;
+			if (!this.dragging) {
+				this.flush();
+			}
+		}
+
+		/** Sends the pending diameter to the server (keeping the synced effect and shape). */
+		private void flush() {
+			if (!this.dirty) {
+				return;
+			}
+
+			this.dirty = false;
+			// The current (server-synced) shape is echoed back so only the diameter changes.
+			ClientPlayNetworking.send(new ShieldPayloads.SetSettingsC2S(this.menu.pos(), this.diameter(), this.menu.effectId(), this.menu.shape()));
 		}
 
 		@Override
@@ -179,8 +204,17 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 		public void onRelease(MouseButtonEvent event) {
 			this.dragging = false;
 			super.onRelease(event);
-			// The current (server-synced) shape is echoed back so only the diameter changes.
-			ClientPlayNetworking.send(new ShieldPayloads.SetSettingsC2S(this.menu.pos(), this.diameter(), this.menu.effectId(), this.menu.shape()));
+			this.flush();
+		}
+
+		@Override
+		public void setFocused(boolean focused) {
+			super.setFocused(focused);
+			if (!focused) {
+				// Fallback: never leave an adjustment unsent when focus moves away.
+				this.dragging = false;
+				this.flush();
+			}
 		}
 	}
 }

@@ -42,8 +42,13 @@ public class BubbleShieldBlock extends BaseEntityBlock {
 
 	@Override
 	public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer, ItemStack itemStack) {
-		if (!level.isClientSide() && placer instanceof Player player && level.getBlockEntity(pos) instanceof BubbleShieldBlockEntity blockEntity) {
-			blockEntity.setOwner(player);
+		if (!level.isClientSide() && level.getBlockEntity(pos) instanceof BubbleShieldBlockEntity blockEntity) {
+			// Seed the powered flag from the pre-existing signal WITHOUT acting, so the
+			// next unrelated neighbor update is not misread as a rising edge.
+			blockEntity.seedPowered(level.hasNeighborSignal(pos));
+			if (placer instanceof Player player) {
+				blockEntity.setOwner(player);
+			}
 		}
 	}
 

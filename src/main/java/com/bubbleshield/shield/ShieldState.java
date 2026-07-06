@@ -1,6 +1,9 @@
 package com.bubbleshield.shield;
 
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -28,8 +31,31 @@ public class ShieldState {
 	public @Nullable UUID ownerUuid;
 	public final Set<String> whitelistNames = new HashSet<>();
 	public final Set<UUID> whitelistUuids = new HashSet<>();
+	/**
+	 * Name-to-UUID associations learned locally (add-time online lookup, join backfill,
+	 * owner assignment), keyed by lowercase name. Persisted so whitelist removal can
+	 * revoke the matching UUID without ever consulting the server's name-to-id cache
+	 * (whose misses trigger a blocking remote lookup + usercache write).
+	 */
+	public final Map<String, UUID> whitelistNameToUuid = new HashMap<>();
 	public int fuelSeconds;
 	public long cooldownUntil;
+
+	private static final Codec<Map<String, UUID>> NAME_TO_UUID_CODEC = Codec.unboundedMap(Codec.STRING, UUIDUtil.CODEC);
+
+	/** Records a locally learned name-to-UUID association (lowercase key). */
+	public void rememberWhitelistUuid(String name, UUID uuid) {
+		this.whitelistNameToUuid.put(name.toLowerCase(Locale.ROOT), uuid);
+	}
+
+	/**
+	 * Drops the stored association for {@code name} (case-insensitive).
+	 *
+	 * @return the UUID that was associated with the name, or null if none was stored.
+	 */
+	public @Nullable UUID forgetWhitelistUuid(String name) {
+		return this.whitelistNameToUuid.remove(name.toLowerCase(Locale.ROOT));
+	}
 
 	public void save(ValueOutput output) {
 		output.putBoolean("active", this.active);
@@ -50,6 +76,7 @@ public class ShieldState {
 			uuids.add(uuid);
 		}
 
+		output.store("whitelist_name_uuids", NAME_TO_UUID_CODEC, Map.copyOf(this.whitelistNameToUuid));
 		output.putInt("fuel_seconds", this.fuelSeconds);
 		output.putLong("cooldown_until", this.cooldownUntil);
 	}
@@ -73,6 +100,8 @@ public class ShieldState {
 			this.whitelistUuids.add(uuid);
 		}
 
+		this.whitelistNameToUuid.clear();
+		this.whitelistNameToUuid.putAll(input.read("whitelist_name_uuids", NAME_TO_UUID_CODEC).orElse(Map.of()));
 		this.fuelSeconds = input.getIntOr("fuel_seconds", 0);
 		this.cooldownUntil = input.getLongOr("cooldown_until", 0L);
 	}

@@ -63,6 +63,17 @@ public class AdvancementGameTests {
 			helper.getLevel().getServer().getPlayerList().remove(player);
 		}
 
+		// A no-op re-activation of the already-active shield is not an activation edge
+		// and must not award the criterion to a second player.
+		ServerPlayer second = helper.makeMockServerPlayerInLevel();
+		try {
+			helper.assertTrue(be.getShieldState().active, "the shield should still be active");
+			helper.assertTrue(be.tryActivate(second), "re-activating an active shield should report success");
+			helper.assertTrue(!isDone(second, shieldRaised), "a no-op re-activation should NOT award shield_raised");
+		} finally {
+			helper.getLevel().getServer().getPlayerList().remove(second);
+		}
+
 		helper.succeed();
 	}
 
@@ -105,11 +116,25 @@ public class AdvancementGameTests {
 		ServerPlayer player = helper.makeMockServerPlayerInLevel();
 		try {
 			helper.assertTrue(!isDone(player, friendZone), "a fresh player should not have friend_zone yet");
+
+			// Whitelisting yourself is not befriending anyone.
+			be.whitelistAdd(helper.getLevel().getServer(), player.getGameProfile().name(), player);
+			helper.assertTrue(!isDone(player, friendZone), "whitelisting yourself should NOT award friend_zone");
+
 			// Same actor-crediting overload the WhitelistModifyC2S add-branch uses.
 			be.whitelistAdd(helper.getLevel().getServer(), "SomeFriend", player);
 			helper.assertTrue(isDone(player, friendZone), "whitelisting a player should award friend_zone");
 		} finally {
 			helper.getLevel().getServer().getPlayerList().remove(player);
+		}
+
+		// A duplicate add (different casing) is a no-op and must not award the criterion.
+		ServerPlayer second = helper.makeMockServerPlayerInLevel();
+		try {
+			be.whitelistAdd(helper.getLevel().getServer(), "SOMEFRIEND", second);
+			helper.assertTrue(!isDone(second, friendZone), "re-adding an existing name should NOT award friend_zone");
+		} finally {
+			helper.getLevel().getServer().getPlayerList().remove(second);
 		}
 
 		helper.succeed();

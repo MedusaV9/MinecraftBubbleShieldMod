@@ -21,8 +21,10 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.UUIDUtil;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.InteractionHand;
@@ -193,6 +195,37 @@ public class ShieldGameTests {
 			helper.getLevel().getServer().getPlayerList().remove(player);
 		}
 
+		helper.succeed();
+	}
+
+	/**
+	 * Removing a name that never resolved to a UUID (offline, unknown) must succeed
+	 * purely locally: the name-to-id cache (whose misses trigger a blocking remote
+	 * lookup + usercache write on the server thread) must never be consulted. The
+	 * canary UUID is exactly what the cache WOULD resolve for the name (offline
+	 * resolution is deterministic), so it survives only when no lookup happened.
+	 */
+	@GameTest(padding = 16)
+	public void whitelistRemoveOfflineNameNoLookup(GameTestHelper helper) {
+		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
+		ShieldState state = be.getShieldState();
+		MinecraftServer server = helper.getLevel().getServer();
+
+		String unknown = "OfflineStranger";
+		be.whitelistAdd(server, unknown);
+		helper.assertTrue(state.whitelistNames.contains(unknown), "the offline name should be whitelisted by name");
+		helper.assertTrue(state.whitelistUuids.isEmpty(), "adding an offline unknown name must not record any UUID");
+
+		UUID canary = UUIDUtil.createOfflinePlayerUUID(unknown);
+		state.whitelistUuids.add(canary);
+
+		be.whitelistRemove(server, unknown);
+		helper.assertTrue(
+				state.whitelistNames.stream().noneMatch(existing -> existing.equalsIgnoreCase(unknown)),
+				"removing an offline unknown name should still remove the name");
+		helper.assertTrue(
+				state.whitelistUuids.contains(canary),
+				"whitelistRemove must not resolve unknown names through the name-to-id cache");
 		helper.succeed();
 	}
 
@@ -388,6 +421,7 @@ public class ShieldGameTests {
 		original.whitelistNames.add("Bob");
 		original.whitelistUuids.add(UUID.randomUUID());
 		original.whitelistUuids.add(UUID.randomUUID());
+		original.rememberWhitelistUuid("Alice", UUID.randomUUID());
 		original.fuelSeconds = 77;
 		original.cooldownUntil = 123456L;
 
@@ -408,6 +442,7 @@ public class ShieldGameTests {
 		helper.assertTrue(original.ownerUuid.equals(loaded.ownerUuid), "ownerUuid should round-trip");
 		helper.assertTrue(loaded.whitelistNames.equals(original.whitelistNames), "whitelistNames should round-trip");
 		helper.assertTrue(loaded.whitelistUuids.equals(original.whitelistUuids), "whitelistUuids should round-trip");
+		helper.assertTrue(loaded.whitelistNameToUuid.equals(original.whitelistNameToUuid), "whitelistNameToUuid should round-trip");
 		helper.assertTrue(loaded.fuelSeconds == original.fuelSeconds, "fuelSeconds should round-trip");
 		helper.assertTrue(loaded.cooldownUntil == original.cooldownUntil, "cooldownUntil should round-trip");
 		helper.succeed();

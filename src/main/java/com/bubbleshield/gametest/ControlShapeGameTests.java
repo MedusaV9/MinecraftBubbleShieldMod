@@ -88,6 +88,44 @@ public class ControlShapeGameTests {
 		});
 	}
 
+	/**
+	 * A projector placed NEXT TO an already-powered block must seed powered=true without
+	 * acting, so a later unrelated neighbor update is not misread as a rising edge
+	 * (pre-fix, it spuriously activated the fueled shield).
+	 */
+	@GameTest(maxTicks = 100, padding = 16)
+	public void poweredSeededAtPlacement(GameTestHelper helper) {
+		BlockPos redstonePos = PROJECTOR_POS.east();
+		helper.setBlock(redstonePos, Blocks.REDSTONE_BLOCK);
+
+		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
+		be.addFuelSeconds(PLENTY_OF_FUEL);
+
+		helper.runAfterDelay(2, () -> {
+			helper.assertTrue(be.isPowered(), "the projector should seed powered=true from the pre-existing signal");
+			helper.assertTrue(!be.getShieldState().active, "seeding the powered flag must not activate the shield");
+
+			// An unrelated neighbor update while the signal is steady: no edge, no activation.
+			helper.setBlock(PROJECTOR_POS.west(), Blocks.STONE);
+			helper.runAfterDelay(2, () -> {
+				helper.assertTrue(!be.getShieldState().active, "an unrelated neighbor update must not fake a rising edge");
+				helper.assertTrue(be.isPowered(), "the powered flag should still reflect the steady signal");
+
+				// The edge behaviour is intact: removing the signal is a falling edge (no-op
+				// on an inactive shield), re-adding it is a genuine rising edge that activates.
+				helper.setBlock(redstonePos, Blocks.AIR);
+				helper.runAfterDelay(2, () -> {
+					helper.assertTrue(!be.isPowered(), "removing the redstone block should be observed as unpowered");
+					helper.setBlock(redstonePos, Blocks.REDSTONE_BLOCK);
+					helper.runAfterDelay(2, () -> {
+						helper.assertTrue(be.getShieldState().active, "a genuine rising edge should still activate the fueled shield");
+						helper.succeed();
+					});
+				});
+			});
+		});
+	}
+
 	@GameTest(maxTicks = 200, padding = 16)
 	public void fireballDeflected(GameTestHelper helper) {
 		// Radius 8 puts the boundary crossing (relative y=10.5) in the open air above the

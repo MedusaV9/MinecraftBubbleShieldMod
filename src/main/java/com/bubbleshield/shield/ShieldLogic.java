@@ -11,6 +11,7 @@ import com.bubbleshield.effect.EffectRegistry;
 import com.bubbleshield.effect.InsideEffectBehavior;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
@@ -20,6 +21,7 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityReference;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.entity.projectile.ProjectileDeflection;
@@ -215,6 +217,15 @@ public final class ShieldLogic {
 					center.x, center.y + radius * 0.4, center.z, 8, radius * 0.45, radius * 0.3, radius * 0.45, 0.02);
 		}
 
+		if (def.context() == ContextProfile.HEALTH_HUE && ctx.useSecondaryColor() && gameTime % 20L == 0L) {
+			// HEALTH_HUE below half health: a small secondary-color dust accent at the core,
+			// so the hue shift is observable no matter which behavior the effect uses.
+			// overrideLimiter=true lifts the 32-block send limit for large bubbles.
+			DustParticleOptions accent = new DustParticleOptions(def.argbSecondary() & 0xFFFFFF, 1.2F);
+			level.sendParticles(accent, true, false,
+					center.x, center.y + 1.0, center.z, 6, radius * 0.15, radius * 0.15, radius * 0.15, 0.0);
+		}
+
 		playAmbientSound(level, center, radius, def, gameTime);
 	}
 
@@ -280,12 +291,22 @@ public final class ShieldLogic {
 
 			// Type-specific interaction. ThrownTrident extends AbstractArrow, so it must
 			// be matched first; everything unclassified keeps the legacy absorb behaviour.
+			// Deflection re-sets the owner (Projectile.deflect calls setOwner), so the
+			// resolved owner is passed back through an EntityReference: loyalty tridents
+			// keep returning and reflected projectiles keep their damage attribution.
+			// A refusal to deflect (e.g. WindCharge.deflect returns false during its
+			// first noDeflectTicks) falls back to absorbing, so nothing keeps flying
+			// inward and explodes inside the bubble.
 			float damage;
 			if (projectile instanceof ThrownTrident) {
-				projectile.deflect(ProjectileDeflection.REVERSE, null, null, false);
+				if (!projectile.deflect(ProjectileDeflection.REVERSE, null, EntityReference.of(owner), false)) {
+					projectile.discard();
+				}
 				damage = TRIDENT_DAMAGE;
 			} else if (projectile instanceof AbstractHurtingProjectile) {
-				projectile.deflect(ProjectileDeflection.REVERSE, null, null, false);
+				if (!projectile.deflect(ProjectileDeflection.REVERSE, null, EntityReference.of(owner), false)) {
+					projectile.discard();
+				}
 				damage = HURTING_PROJECTILE_DAMAGE;
 			} else if (projectile instanceof ThrowableItemProjectile || projectile instanceof ShulkerBullet) {
 				projectile.discard();

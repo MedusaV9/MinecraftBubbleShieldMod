@@ -59,6 +59,46 @@ public class TierGameTests {
 		});
 	}
 
+	/**
+	 * Inserting a core into a live shield raises maxHealth but must PRESERVE the health
+	 * fraction (and therefore the current radius); only removing a core clamps health.
+	 */
+	@GameTest(maxTicks = 100, padding = 16)
+	public void tierUpPreservesHealthFraction(GameTestHelper helper) {
+		BubbleShieldBlockEntity be = placeProjector(helper, 8.0F);
+		ShieldState state = be.getShieldState();
+		be.addFuelSeconds(PLENTY_OF_FUEL);
+		helper.assertTrue(be.tryActivate(), "shield should activate");
+		helper.assertTrue(be.currentRadius() == 8.0F, "a full-health shield should start at radius 8");
+
+		// Full health, tier 0 -> 1: the fraction (1.0) is preserved exactly, so the
+		// radius must not budge (pre-fix, health stayed 100/200 and the radius halved).
+		be.getCoreContainer().setItem(0, new ItemStack(ModItems.RESONANT_CORE));
+		helper.runAfterDelay(2, () -> {
+			helper.assertTrue(state.maxHealth == 200.0F, "tier 1 should raise maxHealth to 200, got " + state.maxHealth);
+			helper.assertTrue(state.health == 200.0F, "tier-up at full health should scale health to 200, got " + state.health);
+			helper.assertTrue(be.currentRadius() == 8.0F, "tier-up must not shrink the live shield, radius is " + be.currentRadius());
+
+			// Partial health, tier 1 -> 2: 150/200 (radius 6) must stay at 3/4 health.
+			// Small tolerances absorb at most one regen pulse between the two ticks.
+			be.applyShieldDamage(50.0F);
+			float fracBefore = state.health / state.maxHealth;
+			float radiusBefore = be.currentRadius();
+			be.getCoreContainer().setItem(0, new ItemStack(ModItems.PRISMATIC_CORE));
+			helper.runAfterDelay(2, () -> {
+				helper.assertTrue(state.maxHealth == 300.0F, "tier 2 should raise maxHealth to 300, got " + state.maxHealth);
+				float fracAfter = state.health / state.maxHealth;
+				helper.assertTrue(
+						Math.abs(fracAfter - fracBefore) < 0.02F,
+						"tier-up should preserve the health fraction: " + fracBefore + " -> " + fracAfter);
+				helper.assertTrue(
+						Math.abs(be.currentRadius() - radiusBefore) < 0.1F,
+						"tier-up must not shrink the live shield: radius " + radiusBefore + " -> " + be.currentRadius());
+				helper.succeed();
+			});
+		});
+	}
+
 	@GameTest(maxTicks = 200, padding = 16)
 	public void shieldRegenerates(GameTestHelper helper) {
 		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);

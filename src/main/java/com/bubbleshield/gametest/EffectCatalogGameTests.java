@@ -3,10 +3,8 @@ package com.bubbleshield.gametest;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Set;
 
 import com.bubbleshield.block.BubbleShieldBlockEntity;
@@ -96,12 +94,15 @@ public class EffectCatalogGameTests {
 		helper.succeed();
 	}
 
+	/**
+	 * The per-family (id/5) "no repeated surface/screenTemplate" invariant lives in
+	 * {@link EffectRegistry#validate()} (checked by {@link #allEffectsValid}) so it
+	 * also runs at mod init; this test keeps the remaining pairwise-uniqueness axes.
+	 */
 	@GameTest
 	public void uniquenessMatrixHolds(GameTestHelper helper) {
 		Set<Long> palettes = new HashSet<>();
 		Set<String> behaviorVariants = new HashSet<>();
-		Map<Integer, Set<String>> surfacesPerFamily = new HashMap<>();
-		Map<Integer, Set<String>> screenFxPerFamily = new HashMap<>();
 
 		for (EffectDefinition def : EffectRegistry.ALL) {
 			long palette = ((long) def.argbPrimary() << 32) | (def.argbSecondary() & 0xFFFFFFFFL);
@@ -109,15 +110,6 @@ public class EffectCatalogGameTests {
 
 			String behaviorVariant = def.insideBehaviorId() + "@" + def.behaviorVariant();
 			helper.assertTrue(behaviorVariants.add(behaviorVariant), "effect " + def.id() + " reuses behavior/variant pair " + behaviorVariant);
-
-			int family = def.id() / 5;
-			String surfaceName = def.surface().name().toLowerCase(Locale.ROOT);
-			helper.assertTrue(
-					surfacesPerFamily.computeIfAbsent(family, f -> new HashSet<>()).add(surfaceName),
-					"family " + family + " repeats surface " + surfaceName);
-			helper.assertTrue(
-					screenFxPerFamily.computeIfAbsent(family, f -> new HashSet<>()).add(def.screenTemplate()),
-					"family " + family + " repeats screen template " + def.screenTemplate());
 		}
 
 		helper.succeed();
