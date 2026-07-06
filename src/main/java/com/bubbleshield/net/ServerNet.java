@@ -11,6 +11,7 @@ import java.util.UUID;
 import com.bubbleshield.block.BubbleShieldBlockEntity;
 import com.bubbleshield.effect.EffectRegistry;
 import com.bubbleshield.shield.ShieldLogic;
+import com.bubbleshield.shield.ShieldShape;
 import com.bubbleshield.shield.ShieldState;
 
 import net.fabricmc.fabric.api.entity.event.v1.ServerEntityLevelChangeEvents;
@@ -61,7 +62,8 @@ public final class ServerNet {
 
 			int diameter = Mth.clamp(payload.diameter(), MIN_DIAMETER, MAX_DIAMETER);
 			int effectId = Mth.clamp(payload.effectId(), MIN_EFFECT_ID, MAX_EFFECT_ID);
-			shield.setSettings(diameter, effectId);
+			int shapeOrdinal = Mth.clamp(payload.shapeOrdinal(), 0, ShieldShape.values().length - 1);
+			shield.setSettings(diameter, effectId, shapeOrdinal);
 		});
 
 		ServerPlayNetworking.registerGlobalReceiver(ShieldPayloads.WhitelistModifyC2S.TYPE, (payload, ctx) -> {
@@ -218,7 +220,8 @@ public final class ServerNet {
 				state.targetRadius,
 				ShieldLogic.currentRadius(state),
 				healthFrac,
-				shield.tier()
+				shield.tier(),
+				state.shape.ordinal()
 			),
 			List.copyOf(state.whitelistUuids),
 			List.copyOf(state.whitelistNames),

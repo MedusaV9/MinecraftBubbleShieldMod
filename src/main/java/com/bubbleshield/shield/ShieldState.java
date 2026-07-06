@@ -21,6 +21,7 @@ public class ShieldState {
 
 	public boolean active;
 	public int effectId;
+	public ShieldShape shape = ShieldShape.SPHERE;
 	public float targetRadius = DEFAULT_TARGET_RADIUS;
 	public float health = DEFAULT_MAX_HEALTH;
 	public float maxHealth = DEFAULT_MAX_HEALTH;
@@ -33,6 +34,7 @@ public class ShieldState {
 	public void save(ValueOutput output) {
 		output.putBoolean("active", this.active);
 		output.putInt("effect_id", this.effectId);
+		output.putInt("shape", this.shape.ordinal());
 		output.putFloat("target_radius", this.targetRadius);
 		output.putFloat("health", this.health);
 		output.putFloat("max_health", this.maxHealth);
@@ -55,6 +57,7 @@ public class ShieldState {
 	public void load(ValueInput input) {
 		this.active = input.getBooleanOr("active", false);
 		this.effectId = input.getIntOr("effect_id", 0);
+		this.shape = ShieldShape.byOrdinal(input.getIntOr("shape", 0));
 		this.targetRadius = input.getFloatOr("target_radius", DEFAULT_TARGET_RADIUS);
 		this.health = input.getFloatOr("health", DEFAULT_MAX_HEALTH);
 		this.maxHealth = input.getFloatOr("max_health", DEFAULT_MAX_HEALTH);

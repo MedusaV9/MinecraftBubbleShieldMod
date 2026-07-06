@@ -65,6 +65,11 @@ public final class ClientShieldManager {
 		public int tier() {
 			return this.visual.tier();
 		}
+
+		/** The synced {@link com.bubbleshield.shield.ShieldShape} ordinal. */
+		public int shape() {
+			return this.visual.shape();
+		}
 	}
 
 	private static final Map<GlobalPos, ClientShield> SHIELDS = new HashMap<>();

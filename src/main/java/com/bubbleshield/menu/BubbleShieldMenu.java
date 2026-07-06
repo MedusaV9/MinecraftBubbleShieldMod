@@ -33,7 +33,8 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 	public static final int DATA_ACTIVE = 4;
 	public static final int DATA_COOLDOWN_SECONDS = 5;
 	public static final int DATA_TIER = 6;
-	public static final int DATA_COUNT = 7;
+	public static final int DATA_SHAPE = 7;
+	public static final int DATA_COUNT = 8;
 
 	public static final int FUEL_SLOT = 0;
 	public static final int CORE_SLOT = 1;
@@ -129,6 +130,11 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 
 	public int tier() {
 		return this.data.get(DATA_TIER);
+	}
+
+	/** @return the synced {@link com.bubbleshield.shield.ShieldShape} ordinal. */
+	public int shape() {
+		return this.data.get(DATA_SHAPE);
 	}
 
 	@Override

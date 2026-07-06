@@ -361,6 +361,7 @@ public class ShieldGameTests {
 		ShieldState original = new ShieldState();
 		original.active = true;
 		original.effectId = 3;
+		original.shape = com.bubbleshield.shield.ShieldShape.DOME;
 		original.targetRadius = 12.5F;
 		original.health = 42.0F;
 		original.maxHealth = 120.0F;
@@ -382,6 +383,7 @@ public class ShieldGameTests {
 
 		helper.assertTrue(loaded.active == original.active, "active should round-trip");
 		helper.assertTrue(loaded.effectId == original.effectId, "effectId should round-trip");
+		helper.assertTrue(loaded.shape == original.shape, "shape should round-trip");
 		helper.assertTrue(loaded.targetRadius == original.targetRadius, "targetRadius should round-trip");
 		helper.assertTrue(loaded.health == original.health, "health should round-trip");
 		helper.assertTrue(loaded.maxHealth == original.maxHealth, "maxHealth should round-trip");

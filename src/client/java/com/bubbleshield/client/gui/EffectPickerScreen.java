@@ -31,14 +31,17 @@ public class EffectPickerScreen extends Screen {
 	private final BlockPos pos;
 	private final int diameter;
 	private final int currentEffectId;
+	/** Echoed back unchanged in {@code SetSettingsC2S} so picking an effect keeps the shape. */
+	private final int shapeOrdinal;
 	private int page;
 
-	public EffectPickerScreen(Screen parent, BlockPos pos, int diameter, int currentEffectId) {
+	public EffectPickerScreen(Screen parent, BlockPos pos, int diameter, int currentEffectId, int shapeOrdinal) {
 		super(Component.translatable("gui.bubbleshield.effects"));
 		this.parent = parent;
 		this.pos = pos;
 		this.diameter = diameter;
 		this.currentEffectId = currentEffectId;
+		this.shapeOrdinal = shapeOrdinal;
 	}
 
 	@Override
@@ -85,7 +88,7 @@ public class EffectPickerScreen extends Screen {
 	}
 
 	private void pick(int effectId) {
-		ClientPlayNetworking.send(new ShieldPayloads.SetSettingsC2S(this.pos, this.diameter, effectId));
+		ClientPlayNetworking.send(new ShieldPayloads.SetSettingsC2S(this.pos, this.diameter, effectId, this.shapeOrdinal));
 		this.onClose();
 	}
 

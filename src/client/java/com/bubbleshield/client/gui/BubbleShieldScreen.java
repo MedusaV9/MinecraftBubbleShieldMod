@@ -53,7 +53,7 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 
 		this.addRenderableWidget(
 			Button.builder(Component.translatable("gui.bubbleshield.effects"), button ->
-				this.minecraft.gui.setScreen(new EffectPickerScreen(this, this.menu.pos(), this.menu.diameter(), this.menu.effectId()))
+				this.minecraft.gui.setScreen(new EffectPickerScreen(this, this.menu.pos(), this.menu.diameter(), this.menu.effectId(), this.menu.shape()))
 			).bounds(x, this.topPos + 44, width, 14).build()
 		);
 
@@ -148,7 +148,8 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 		public void onRelease(MouseButtonEvent event) {
 			this.dragging = false;
 			super.onRelease(event);
-			ClientPlayNetworking.send(new ShieldPayloads.SetSettingsC2S(this.menu.pos(), this.diameter(), this.menu.effectId()));
+			// The current (server-synced) shape is echoed back so only the diameter changes.
+			ClientPlayNetworking.send(new ShieldPayloads.SetSettingsC2S(this.menu.pos(), this.diameter(), this.menu.effectId(), this.menu.shape()));
 		}
 	}
 }

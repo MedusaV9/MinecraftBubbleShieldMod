@@ -7,6 +7,7 @@ import com.bubbleshield.registry.ModBlockEntities;
 import com.bubbleshield.registry.ModItems;
 import com.bubbleshield.shield.FuelMap;
 import com.bubbleshield.shield.ShieldLogic;
+import com.bubbleshield.shield.ShieldShape;
 import com.bubbleshield.shield.ShieldState;
 
 import java.util.Set;
@@ -49,6 +50,8 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	private final SimpleContainer coreContainer = new SimpleContainer(1);
 	/** Tier applied by the last {@link #refreshTier()} pass; -1 forces a refresh on the first tick. */
 	private int lastTier = -1;
+	/** Last observed redstone level; persisted so chunk reloads do not fake an edge. */
+	private boolean powered;
 	/** Live server-side snapshot for the menu; values in SECONDS (data slots sync 16-bit signed). */
 	private final ContainerData menuData = new ContainerData() {
 		@Override
@@ -62,6 +65,7 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 				case BubbleShieldMenu.DATA_ACTIVE -> state.active ? 1 : 0;
 				case BubbleShieldMenu.DATA_COOLDOWN_SECONDS -> (int) Math.min(Short.MAX_VALUE, BubbleShieldBlockEntity.this.cooldownTicksLeft() / ShieldLogic.TICKS_PER_FUEL_SECOND);
 				case BubbleShieldMenu.DATA_TIER -> BubbleShieldBlockEntity.this.tier();
+				case BubbleShieldMenu.DATA_SHAPE -> state.shape.ordinal();
 				default -> 0;
 			};
 		}
@@ -111,6 +115,11 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 
 	public ContainerData getMenuData() {
 		return this.menuData;
+	}
+
+	/** @return the last redstone level observed by {@link #setNeighborPowered}. */
+	public boolean isPowered() {
+		return this.powered;
 	}
 
 	private long cooldownTicksLeft() {
@@ -238,12 +247,34 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	}
 
 	/**
-	 * Applies validated settings from the client: diameter (converted to radius) and effect id.
+	 * Applies validated settings from the client: diameter (converted to radius),
+	 * effect id and shield shape (by ordinal).
 	 */
-	public void setSettings(int diameter, int effectId) {
+	public void setSettings(int diameter, int effectId, int shapeOrdinal) {
 		this.shieldState.targetRadius = diameter / 2.0F;
 		this.shieldState.effectId = effectId;
+		this.shieldState.shape = ShieldShape.byOrdinal(shapeOrdinal);
 		this.markUpdated();
+	}
+
+	/**
+	 * Records the redstone level seen by the block and acts on edges only: a rising edge
+	 * tries to activate the shield (subject to fuel/cooldown), a falling edge deactivates
+	 * it. Steady levels never fight the GUI toggle.
+	 */
+	public void setNeighborPowered(boolean powered) {
+		if (powered == this.powered) {
+			return;
+		}
+
+		this.powered = powered;
+		if (powered) {
+			this.tryActivate();
+		} else {
+			this.setActive(false);
+		}
+
+		this.setChanged();
 	}
 
 	/**
@@ -323,6 +354,8 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		this.lastSentState = snapshot;
 		BlockState state = this.getBlockState();
 		this.level.sendBlockUpdated(this.worldPosition, state, state, Block.UPDATE_CLIENTS);
+		// Comparators read health/fuel through the analog output; refresh them on change.
+		this.level.updateNeighbourForOutputSignal(this.worldPosition, state.getBlock());
 		ServerNet.syncShield(this);
 	}
 
@@ -345,7 +378,8 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 				state.targetRadius,
 				ShieldLogic.currentRadius(state),
 				state.maxHealth > 0.0F ? state.health / state.maxHealth : 0.0F,
-				this.tier()
+				this.tier(),
+				state.shape.ordinal()
 			),
 			Set.copyOf(state.whitelistUuids),
 			Set.copyOf(state.whitelistNames),
@@ -416,6 +450,7 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	protected void saveAdditional(ValueOutput output) {
 		super.saveAdditional(output);
 		this.shieldState.save(output);
+		output.putBoolean("powered", this.powered);
 		this.fuelContainer.storeAsItemList(output.list("fuel_items", ItemStack.CODEC));
 		this.coreContainer.storeAsItemList(output.list("core_items", ItemStack.CODEC));
 	}
@@ -424,6 +459,7 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	protected void loadAdditional(ValueInput input) {
 		super.loadAdditional(input);
 		this.shieldState.load(input);
+		this.powered = input.getBooleanOr("powered", false);
 		this.fuelContainer.fromItemList(input.listOrEmpty("fuel_items", ItemStack.CODEC));
 		this.coreContainer.fromItemList(input.listOrEmpty("core_items", ItemStack.CODEC));
 		// Re-derive tier-dependent fields on the next tick (covers cores edited while unloaded).

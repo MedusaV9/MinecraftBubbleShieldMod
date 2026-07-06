@@ -21,6 +21,11 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.Projectile;
+import net.minecraft.world.entity.projectile.ProjectileDeflection;
+import net.minecraft.world.entity.projectile.ShulkerBullet;
+import net.minecraft.world.entity.projectile.arrow.ThrownTrident;
+import net.minecraft.world.entity.projectile.hurtingprojectile.AbstractHurtingProjectile;
+import net.minecraft.world.entity.projectile.throwableitemprojectile.ThrowableItemProjectile;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
@@ -32,7 +37,14 @@ import org.jspecify.annotations.Nullable;
  */
 public final class ShieldLogic {
 	public static final float MIN_RADIUS = 4.0F;
+	/** Absorb damage for arrows (and unclassified projectiles): the pre-existing behaviour. */
 	public static final float PROJECTILE_DAMAGE = 5.0F;
+	/** Tridents are too heavy to absorb; they are reverse-deflected instead. */
+	public static final float TRIDENT_DAMAGE = 4.0F;
+	/** Fireballs/wither skulls/wind charges are reverse-deflected (no explosion inside). */
+	public static final float HURTING_PROJECTILE_DAMAGE = 8.0F;
+	/** Thrown items (snowballs, potions, ender pearls) and shulker bullets fizzle out. */
+	public static final float THROWN_DAMAGE = 2.0F;
 	/** 30 minutes. */
 	public static final long BREAK_COOLDOWN_TICKS = 36000L;
 	public static final int TICKS_PER_FUEL_SECOND = 20;
@@ -216,7 +228,7 @@ public final class ShieldLogic {
 		if (def.context() == ContextProfile.CROWD_SCALE) {
 			AABB box = AABB.ofSize(center, radius * 2.0, radius * 2.0, radius * 2.0);
 			for (Player player : level.getEntitiesOfClass(Player.class, box)) {
-				if (player.position().distanceTo(center) <= radius) {
+				if (ShieldGeometry.isInside(state.shape, center, radius, player.position())) {
 					playersInside++;
 				}
 			}
@@ -254,9 +266,9 @@ public final class ShieldLogic {
 
 			Vec3 prev = new Vec3(projectile.xo, projectile.yo, projectile.zo);
 			Vec3 current = projectile.position();
-			double prevDist = prev.distanceTo(center);
-			double curDist = current.distanceTo(center);
-			if (!(prevDist > radius && curDist <= radius)) {
+			// Only inbound boundary crossings trigger; a projectile that was deflected
+			// back out (both positions inside, then inside->outside) is never re-hit.
+			if (!ShieldGeometry.crossedInto(state.shape, center, radius, prev, current)) {
 				continue;
 			}
 
@@ -265,8 +277,25 @@ public final class ShieldLogic {
 				continue;
 			}
 
-			projectile.discard();
-			boolean broke = applyDamage(state, PROJECTILE_DAMAGE, level.getGameTime(), breakCooldownTicks);
+			// Type-specific interaction. ThrownTrident extends AbstractArrow, so it must
+			// be matched first; everything unclassified keeps the legacy absorb behaviour.
+			float damage;
+			if (projectile instanceof ThrownTrident) {
+				projectile.deflect(ProjectileDeflection.REVERSE, null, null, false);
+				damage = TRIDENT_DAMAGE;
+			} else if (projectile instanceof AbstractHurtingProjectile) {
+				projectile.deflect(ProjectileDeflection.REVERSE, null, null, false);
+				damage = HURTING_PROJECTILE_DAMAGE;
+			} else if (projectile instanceof ThrowableItemProjectile || projectile instanceof ShulkerBullet) {
+				projectile.discard();
+				damage = THROWN_DAMAGE;
+			} else {
+				// AbstractArrow (non-trident) and any other projectile: absorb.
+				projectile.discard();
+				damage = PROJECTILE_DAMAGE;
+			}
+
+			boolean broke = applyDamage(state, damage, level.getGameTime(), breakCooldownTicks);
 			changed = true;
 
 			level.sendParticles(ParticleTypes.CRIT, current.x, current.y, current.z, 20, 0.3, 0.3, 0.3, 0.1);
@@ -298,7 +327,7 @@ public final class ShieldLogic {
 		}
 
 		Vec3 current = player.position();
-		if (current.distanceTo(center) > radius) {
+		if (!ShieldGeometry.isInside(state.shape, center, radius, current)) {
 			return false;
 		}
 

@@ -27,13 +27,14 @@ public final class ShieldPayloads {
 	private ShieldPayloads() {
 	}
 
-	/** Client asks to change diameter/effect of the projector at {@code pos}. */
-	public record SetSettingsC2S(BlockPos pos, int diameter, int effectId) implements CustomPacketPayload {
+	/** Client asks to change diameter/effect/shape (ordinal) of the projector at {@code pos}. */
+	public record SetSettingsC2S(BlockPos pos, int diameter, int effectId, int shapeOrdinal) implements CustomPacketPayload {
 		public static final CustomPacketPayload.Type<SetSettingsC2S> TYPE = new CustomPacketPayload.Type<>(BubbleShield.id("set_settings"));
 		public static final StreamCodec<RegistryFriendlyByteBuf, SetSettingsC2S> CODEC = StreamCodec.composite(
 			BlockPos.STREAM_CODEC, SetSettingsC2S::pos,
 			ByteBufCodecs.VAR_INT, SetSettingsC2S::diameter,
 			ByteBufCodecs.VAR_INT, SetSettingsC2S::effectId,
+			ByteBufCodecs.VAR_INT, SetSettingsC2S::shapeOrdinal,
 			SetSettingsC2S::new
 		);
 
@@ -86,7 +87,8 @@ public final class ShieldPayloads {
 		float targetRadius,
 		float currentRadius,
 		float healthFrac,
-		int tier
+		int tier,
+		int shape
 	) {
 		public static final StreamCodec<ByteBuf, ShieldVisual> STREAM_CODEC = StreamCodec.composite(
 			ByteBufCodecs.BOOL, ShieldVisual::active,
@@ -95,6 +97,7 @@ public final class ShieldPayloads {
 			ByteBufCodecs.FLOAT, ShieldVisual::currentRadius,
 			ByteBufCodecs.FLOAT, ShieldVisual::healthFrac,
 			ByteBufCodecs.VAR_INT, ShieldVisual::tier,
+			ByteBufCodecs.VAR_INT, ShieldVisual::shape,
 			ShieldVisual::new
 		);
 	}
