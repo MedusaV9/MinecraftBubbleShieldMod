@@ -12,9 +12,12 @@ import net.minecraft.world.phys.Vec3;
  * Cached unit-radius UV sphere emitted as quads into a {@link VertexConsumer} using the
  * {@code POSITION_TEX_COLOR} format ({@code addVertex(pose, x, y, z).setUv(u, v).setColor(argb)}).
  *
- * <p>Positions and base UVs are precomputed once on a (latSteps + 1) x (lonSteps + 1)
+ * <p>Positions and UVs are precomputed once on a (latSteps + 1) x (lonSteps + 1)
  * grid; the two pole rows collapse into degenerate quads, which vanilla's quad
- * rendering handles fine. Per-vertex color blends primary to secondary along the
+ * rendering handles fine. UVs are emitted RAW: u is the longitude fraction and v the
+ * latitude fraction, both in [0, 1], with no per-effect scale or time-based offset —
+ * the bubble fragment shaders assume UVs in [0, 1] and animate via the GameTime
+ * shader global instead. Per-vertex color blends primary to secondary along the
  * latitude, and per-vertex alpha fades near "dissolve centers" (whitelisted players
  * close to the surface) so they can see/walk through the shield wall.
  */
@@ -26,7 +29,7 @@ public final class SphereMesh {
 	private final int latSteps;
 	/** Unit sphere positions, indexed [lat * (lonSteps + 1) + lon] * 3. */
 	private final float[] positions;
-	/** Base UVs (u = longitude 0..1, v = latitude 0..1), same indexing, stride 2. */
+	/** Raw UVs (u = longitude 0..1, v = latitude 0..1), same indexing, stride 2. */
 	private final float[] uvs;
 
 	public SphereMesh(int lonSteps, int latSteps) {
@@ -54,11 +57,6 @@ public final class SphereMesh {
 		}
 	}
 
-	/** Emits the sphere with untransformed UVs; see the main overload. */
-	public void emit(PoseStack.Pose pose, VertexConsumer buffer, float radius, int argbPrimary, int argbSecondary, float alphaBase, List<Vec3> dissolveCentersRelative) {
-		emit(pose, buffer, radius, argbPrimary, argbSecondary, alphaBase, dissolveCentersRelative, 1.0F, 0.0F, 0.0F);
-	}
-
 	/**
 	 * Emits the sphere as quads.
 	 *
@@ -67,11 +65,8 @@ public final class SphereMesh {
 	 * @param alphaBase               base surface opacity; per-vertex alpha is
 	 *                                {@code alphaBase * clamp(minDistToAnyDissolveCenter / DISSOLVE_RANGE, 0, 1)}
 	 * @param dissolveCentersRelative dissolve centers relative to the sphere center
-	 * @param uvScale                 pre-baked pattern scale (effect paramA); multiplies the base UVs
-	 * @param uvOffsetU               pre-baked scroll offset (effect paramB * time), u axis
-	 * @param uvOffsetV               pre-baked scroll offset, v axis
 	 */
-	public void emit(PoseStack.Pose pose, VertexConsumer buffer, float radius, int argbPrimary, int argbSecondary, float alphaBase, List<Vec3> dissolveCentersRelative, float uvScale, float uvOffsetU, float uvOffsetV) {
+	public void emit(PoseStack.Pose pose, VertexConsumer buffer, float radius, int argbPrimary, int argbSecondary, float alphaBase, List<Vec3> dissolveCentersRelative) {
 		int rowStride = this.lonSteps + 1;
 		int vertexCount = (this.latSteps + 1) * rowStride;
 		int[] colors = new int[vertexCount];
@@ -90,17 +85,12 @@ public final class SphereMesh {
 				int i10 = (lat + 1) * rowStride + lon;
 				int i11 = (lat + 1) * rowStride + lon + 1;
 				int i01 = lat * rowStride + lon + 1;
-				emitVertex(pose, buffer, i00, radius, colors[i00], uvScale, uvOffsetU, uvOffsetV);
-				emitVertex(pose, buffer, i10, radius, colors[i10], uvScale, uvOffsetU, uvOffsetV);
-				emitVertex(pose, buffer, i11, radius, colors[i11], uvScale, uvOffsetU, uvOffsetV);
-				emitVertex(pose, buffer, i01, radius, colors[i01], uvScale, uvOffsetU, uvOffsetV);
+				emitVertex(pose, buffer, i00, radius, colors[i00]);
+				emitVertex(pose, buffer, i10, radius, colors[i10]);
+				emitVertex(pose, buffer, i11, radius, colors[i11]);
+				emitVertex(pose, buffer, i01, radius, colors[i01]);
 			}
 		}
-	}
-
-	/** Emits the dome (upper hemisphere + bottom disc) with untransformed UVs; see the main overload. */
-	public void emitHemisphere(PoseStack.Pose pose, VertexConsumer buffer, float radius, int argbPrimary, int argbSecondary, float alphaBase, List<Vec3> dissolveCentersRelative) {
-		emitHemisphere(pose, buffer, radius, argbPrimary, argbSecondary, alphaBase, dissolveCentersRelative, 1.0F, 0.0F, 0.0F);
 	}
 
 	/**
@@ -112,7 +102,7 @@ public final class SphereMesh {
 	 * hard hollow edge. Parameters match {@link #emit}. Requires an even {@code latSteps}
 	 * so one lat row lies exactly on the equator.
 	 */
-	public void emitHemisphere(PoseStack.Pose pose, VertexConsumer buffer, float radius, int argbPrimary, int argbSecondary, float alphaBase, List<Vec3> dissolveCentersRelative, float uvScale, float uvOffsetU, float uvOffsetV) {
+	public void emitHemisphere(PoseStack.Pose pose, VertexConsumer buffer, float radius, int argbPrimary, int argbSecondary, float alphaBase, List<Vec3> dissolveCentersRelative) {
 		int rowStride = this.lonSteps + 1;
 		int equatorLat = this.latSteps / 2;
 		int vertexCount = (equatorLat + 1) * rowStride;
@@ -132,10 +122,10 @@ public final class SphereMesh {
 				int i10 = (lat + 1) * rowStride + lon;
 				int i11 = (lat + 1) * rowStride + lon + 1;
 				int i01 = lat * rowStride + lon + 1;
-				emitVertex(pose, buffer, i00, radius, colors[i00], uvScale, uvOffsetU, uvOffsetV);
-				emitVertex(pose, buffer, i10, radius, colors[i10], uvScale, uvOffsetU, uvOffsetV);
-				emitVertex(pose, buffer, i11, radius, colors[i11], uvScale, uvOffsetU, uvOffsetV);
-				emitVertex(pose, buffer, i01, radius, colors[i01], uvScale, uvOffsetU, uvOffsetV);
+				emitVertex(pose, buffer, i00, radius, colors[i00]);
+				emitVertex(pose, buffer, i10, radius, colors[i10]);
+				emitVertex(pose, buffer, i11, radius, colors[i11]);
+				emitVertex(pose, buffer, i01, radius, colors[i01]);
 			}
 		}
 
@@ -146,10 +136,10 @@ public final class SphereMesh {
 		for (int lon = 0; lon < this.lonSteps; lon++) {
 			int i0 = equatorLat * rowStride + lon;
 			int i1 = equatorLat * rowStride + lon + 1;
-			float centerU = ((this.uvs[i0 * 2] + this.uvs[i1 * 2]) * 0.5F) * uvScale + uvOffsetU;
-			float centerV = 1.0F * uvScale + uvOffsetV;
-			emitVertex(pose, buffer, i0, radius, colors[i0], uvScale, uvOffsetU, uvOffsetV);
-			emitVertex(pose, buffer, i1, radius, colors[i1], uvScale, uvOffsetU, uvOffsetV);
+			float centerU = (this.uvs[i0 * 2] + this.uvs[i1 * 2]) * 0.5F;
+			float centerV = 1.0F;
+			emitVertex(pose, buffer, i0, radius, colors[i0]);
+			emitVertex(pose, buffer, i1, radius, colors[i1]);
 			// The two collapsed center vertices turn the quad into a triangle, exactly like
 			// the sphere's pole rows.
 			buffer.addVertex(pose, 0.0F, 0.0F, 0.0F).setUv(centerU, centerV).setColor(centerColor);
@@ -157,9 +147,9 @@ public final class SphereMesh {
 		}
 	}
 
-	private void emitVertex(PoseStack.Pose pose, VertexConsumer buffer, int index, float radius, int argb, float uvScale, float uvOffsetU, float uvOffsetV) {
+	private void emitVertex(PoseStack.Pose pose, VertexConsumer buffer, int index, float radius, int argb) {
 		buffer.addVertex(pose, this.positions[index * 3] * radius, this.positions[index * 3 + 1] * radius, this.positions[index * 3 + 2] * radius)
-				.setUv(this.uvs[index * 2] * uvScale + uvOffsetU, this.uvs[index * 2 + 1] * uvScale + uvOffsetV)
+				.setUv(this.uvs[index * 2], this.uvs[index * 2 + 1])
 				.setColor(argb);
 	}
 

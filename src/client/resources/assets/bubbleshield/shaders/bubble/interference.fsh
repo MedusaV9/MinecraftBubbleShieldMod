@@ -12,7 +12,9 @@ out vec4 fragColor;
 
 void main() {
     float time = GameTime * 1200.0;
-    vec2 uv = texCoord0;
+    // Defensive: the wave sources orbit inside [0,1]^2, so wrap out-of-range UVs
+    // back into that domain (the fringe distances stay latitude-correct).
+    vec2 uv = fract(texCoord0);
 
     // Two wave sources orbiting the surface on offset tracks; each emits expanding
     // concentric rings and the superposition draws moire interference fringes.

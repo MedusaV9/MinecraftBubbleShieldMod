@@ -63,7 +63,7 @@ public class EffectCatalogGameTests {
 			InsideEffectBehavior behavior = InsideEffectBehavior.get(def.insideBehaviorId());
 			helper.assertTrue(behavior != null, "effect " + def.id() + " references unregistered behavior " + def.insideBehaviorId());
 			for (long gameTime : new long[] {0L, 10L, 20L, 30L, 40L}) {
-				behavior.tick(level, center, 6.0F, def, gameTime, ContextState.NEUTRAL);
+				behavior.tick(level, center, 6.0F, be.getShieldState().shape, def, gameTime, ContextState.NEUTRAL);
 			}
 
 			Identifier soundId = Identifier.parse("minecraft:" + def.ambientSoundId());

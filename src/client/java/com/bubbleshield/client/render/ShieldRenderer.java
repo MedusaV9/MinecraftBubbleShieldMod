@@ -25,29 +25,24 @@ import net.minecraft.world.phys.Vec3;
  * synced shape) through the 26.2 submit-based level renderer
  * ({@code LevelRenderEvents.COLLECT_SUBMITS} + {@code SubmitNodeCollector.submitCustomGeometry}).
  *
- * <p>The camera position and animation clock are captured during extraction
+ * <p>The camera position is captured during extraction
  * ({@code LevelExtractionEvents.END_EXTRACTION}); the submit callback then translates
  * the pose by {@code shieldCenter - cameraPos} and emits the cached {@link SphereMesh}.
- * Effect params are pre-baked CPU-side (no custom uniforms): paramA scales the UVs,
- * paramB scrolls them over time, and the primary/secondary colors plus the dissolve
- * alpha ride in the vertex color channel.
+ * The mesh carries raw sphere UVs in [0, 1] (no per-effect scale or time offset —
+ * the surface shaders animate via the GameTime global); the primary/secondary colors
+ * plus the dissolve alpha ride in the vertex color channel.
  */
 public final class ShieldRenderer {
 	private static final SphereMesh SPHERE = new SphereMesh(48, 32);
 	private static final float MIN_VISIBLE_RADIUS = 0.05F;
 
 	private static volatile Vec3 cameraPos = Vec3.ZERO;
-	private static volatile float timeSeconds;
 
 	private ShieldRenderer() {
 	}
 
 	public static void register() {
-		LevelExtractionEvents.END_EXTRACTION.register(context -> {
-			cameraPos = context.camera().position();
-			// Wraps once per day cycle, matching the GameTime shader global.
-			timeSeconds = ((context.level().getGameTime() % 24000L) + context.deltaTracker().getGameTimeDeltaPartialTick(false)) / 20.0F;
-		});
+		LevelExtractionEvents.END_EXTRACTION.register(context -> cameraPos = context.camera().position());
 		LevelRenderEvents.COLLECT_SUBMITS.register(ShieldRenderer::collectSubmits);
 	}
 
@@ -66,7 +61,6 @@ public final class ShieldRenderer {
 		PoseStack poseStack = context.poseStack();
 		SubmitNodeCollector collector = context.submitNodeCollector();
 		Vec3 camera = cameraPos;
-		float seconds = timeSeconds;
 
 		for (ClientShieldManager.ClientShield shield : shields) {
 			float radius = shield.currentRadius();
@@ -81,10 +75,6 @@ public final class ShieldRenderer {
 
 			// Weaker shields render fainter.
 			float alphaBase = 0.25F + 0.5F * shield.healthFrac();
-			// paramA = pattern scale, paramB = scroll speed; both pre-baked into the UVs.
-			float uvScale = def.paramA();
-			float uvOffsetU = seconds * def.paramB() * 0.05F;
-			float uvOffsetV = seconds * def.paramB() * 0.02F;
 
 			// The synced shape picks the mesh: full sphere or dome (upper hemisphere + disc).
 			boolean dome = ShieldShape.byOrdinal(shield.shape()) == ShieldShape.DOME;
@@ -95,9 +85,9 @@ public final class ShieldRenderer {
 			// dissolve distances (per-vertex alpha) are computed in world units.
 			collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
 				if (dome) {
-					SPHERE.emitHemisphere(pose, buffer, radius, def.argbPrimary(), def.argbSecondary(), alphaBase, dissolveCenters, uvScale, uvOffsetU, uvOffsetV);
+					SPHERE.emitHemisphere(pose, buffer, radius, def.argbPrimary(), def.argbSecondary(), alphaBase, dissolveCenters);
 				} else {
-					SPHERE.emit(pose, buffer, radius, def.argbPrimary(), def.argbSecondary(), alphaBase, dissolveCenters, uvScale, uvOffsetU, uvOffsetV);
+					SPHERE.emit(pose, buffer, radius, def.argbPrimary(), def.argbSecondary(), alphaBase, dissolveCenters);
 				}
 			});
 			poseStack.popPose();

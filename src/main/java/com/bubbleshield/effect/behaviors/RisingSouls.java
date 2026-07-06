@@ -3,6 +3,7 @@ package com.bubbleshield.effect.behaviors;
 import com.bubbleshield.effect.ContextModifier.ContextState;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.InsideEffectBehavior;
+import com.bubbleshield.shield.ShieldShape;
 
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.particles.SimpleParticleType;
@@ -24,7 +25,7 @@ public final class RisingSouls implements InsideEffectBehavior {
 	public static final String ID = "rising_souls";
 
 	@Override
-	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
+	public void tick(ServerLevel level, Vec3 center, float radius, ShieldShape shape, EffectDefinition def, long gameTime, ContextState ctx) {
 		if (gameTime % ctx.effectiveThrottle(10L) != 0L) {
 			return;
 		}
@@ -43,7 +44,21 @@ public final class RisingSouls implements InsideEffectBehavior {
 			// Both soul particle types drift upward on their own once spawned near the floor.
 			level.sendParticles(particle, true, false, x, center.y + 0.3, z, perColumn, 0.15, 0.5, 0.15, 0.02);
 			if (variant == 1) {
-				level.sendParticles(ParticleTypes.SCULK_CHARGE_POP, true, false, x, center.y + radius * 0.6, z, 1, 0.1, 0.1, 0.1, 0.0);
+				// Keep the apex pop inside the shell: a column base at 0.8r horizontally
+				// used to put the fixed 0.6r-high apex at ~1.0r, straddling the wall.
+				double ax = x - center.x;
+				double ay = radius * 0.6;
+				double az = z - center.z;
+				double apexDist = Math.sqrt(ax * ax + ay * ay + az * az);
+				double maxDist = radius * 0.98;
+				if (apexDist > maxDist) {
+					double scale = maxDist / apexDist;
+					ax *= scale;
+					ay *= scale;
+					az *= scale;
+				}
+
+				level.sendParticles(ParticleTypes.SCULK_CHARGE_POP, true, false, center.x + ax, center.y + ay, center.z + az, 1, 0.1, 0.1, 0.1, 0.0);
 			}
 		}
 	}

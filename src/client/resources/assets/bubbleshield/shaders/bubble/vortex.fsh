@@ -18,7 +18,9 @@ float hash21(vec2 p) {
 
 void main() {
     float time = GameTime * 1200.0;
-    vec2 uv = texCoord0;
+    // Defensive: the latitude/longitude sampling below is periodic and assumes
+    // UV in [0,1], so wrap out-of-range UVs instead of letting the pole math explode.
+    vec2 uv = fract(texCoord0);
 
     // Distance from the nearer pole (0 at poles, 1 at equator): the swirl pivot.
     float latDist = 1.0 - abs(uv.y * 2.0 - 1.0);
@@ -33,8 +35,9 @@ void main() {
     float twist2 = uv.x * 6.2831 - latDist * 4.5 + time * 0.6;
     float arms = smoothstep(0.45, 0.95, sin(twist2 * 2.0));
 
-    // The vortex eye at each pole glows and pulses.
-    float eye = pow(1.0 - latDist, 3.0) * (0.6 + 0.4 * sin(time * 1.7));
+    // The vortex eye at each pole glows and pulses. Clamped to [0,1] so a future
+    // UV change (latDist outside [0,1]) can't make the pow() blow out the shell.
+    float eye = clamp(pow(clamp(1.0 - latDist, 0.0, 1.0), 3.0) * (0.6 + 0.4 * sin(time * 1.7)), 0.0, 1.0);
 
     // Faint speckle riding along the bands keeps the funnel from looking flat.
     float grain = 0.12 * hash21(floor(vec2(twist * 3.0, uv.y * 24.0)));

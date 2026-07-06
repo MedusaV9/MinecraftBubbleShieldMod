@@ -40,7 +40,9 @@ float fbm(vec2 p) {
 
 void main() {
     float time = GameTime * 1200.0;
-    vec2 uv = texCoord0;
+    // Defensive: the pole fade (drape) and longitude shimmer below assume UV in
+    // [0,1], so wrap out-of-range UVs back into the periodic domain.
+    vec2 uv = fract(texCoord0);
 
     // Vertical curtains: noise sampled mostly along longitude, drifting over time.
     float curtain = fbm(vec2(uv.x * 8.0 + time * 0.25, uv.y * 2.0 - time * 0.07));

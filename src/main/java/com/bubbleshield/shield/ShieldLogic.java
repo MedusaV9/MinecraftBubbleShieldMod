@@ -206,7 +206,7 @@ public final class ShieldLogic {
 		ContextState ctx = computeContext(level, center, radius, state, def);
 		InsideEffectBehavior behavior = InsideEffectBehavior.get(def.insideBehaviorId());
 		if (behavior != null) {
-			behavior.tick(level, center, radius, def, gameTime, ctx);
+			behavior.tick(level, center, radius, state.shape, def, gameTime, ctx);
 		}
 
 		if (ctx.extraSparks() && gameTime % 10L == 0L) {
@@ -299,7 +299,9 @@ public final class ShieldLogic {
 			boolean broke = applyDamage(state, damage, level.getGameTime(), breakCooldownTicks);
 			changed = true;
 
-			level.sendParticles(ParticleTypes.CRIT, current.x, current.y, current.z, 20, 0.3, 0.3, 0.3, 0.1);
+			// overrideLimiter=true lifts the 32-block send limit so the hit burst is
+			// visible to players far from the projector on large bubbles.
+			level.sendParticles(ParticleTypes.CRIT, true, false, current.x, current.y, current.z, 20, 0.3, 0.3, 0.3, 0.1);
 			level.playSound(null, pos, SoundEvents.SHIELD_BLOCK.value(), SoundSource.BLOCKS, 1.0F, 1.0F);
 			if (broke) {
 				level.playSound(null, pos, SoundEvents.SHIELD_BREAK.value(), SoundSource.BLOCKS, 1.0F, 1.0F);

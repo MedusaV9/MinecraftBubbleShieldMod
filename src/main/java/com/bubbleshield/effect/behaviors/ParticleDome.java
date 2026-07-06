@@ -3,6 +3,7 @@ package com.bubbleshield.effect.behaviors;
 import com.bubbleshield.effect.ContextModifier.ContextState;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.InsideEffectBehavior;
+import com.bubbleshield.shield.ShieldShape;
 
 import net.minecraft.core.particles.DustColorTransitionOptions;
 import net.minecraft.core.particles.DustParticleOptions;
@@ -26,7 +27,7 @@ public final class ParticleDome implements InsideEffectBehavior {
 	private static final int MAX_POINTS = 128;
 
 	@Override
-	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
+	public void tick(ServerLevel level, Vec3 center, float radius, ShieldShape shape, EffectDefinition def, long gameTime, ContextState ctx) {
 		if (gameTime % ctx.effectiveThrottle(10L) != 0L) {
 			return;
 		}

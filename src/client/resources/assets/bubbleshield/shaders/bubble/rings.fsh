@@ -18,7 +18,9 @@ float hash21(vec2 p) {
 
 void main() {
     float time = GameTime * 1200.0;
-    vec2 uv = texCoord0;
+    // Defensive: the latitude bands, pole-to-pole sweep and longitude seams below
+    // assume UV in [0,1], so wrap out-of-range UVs back into the periodic domain.
+    vec2 uv = fract(texCoord0);
 
     // Stack of latitude rings: sharp bright bands on a fine latitude grating,
     // each ring slightly offset in phase so the stack shimmers.

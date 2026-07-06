@@ -3,6 +3,7 @@ package com.bubbleshield.effect.behaviors;
 import com.bubbleshield.effect.ContextModifier.ContextState;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.InsideEffectBehavior;
+import com.bubbleshield.shield.ShieldShape;
 
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
@@ -24,7 +25,7 @@ public final class EnchantStream implements InsideEffectBehavior {
 	public static final String ID = "enchant_stream";
 
 	@Override
-	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
+	public void tick(ServerLevel level, Vec3 center, float radius, ShieldShape shape, EffectDefinition def, long gameTime, ContextState ctx) {
 		if (gameTime % ctx.effectiveThrottle(10L) != 0L) {
 			return;
 		}

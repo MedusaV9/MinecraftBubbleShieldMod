@@ -3,6 +3,7 @@ package com.bubbleshield.effect.behaviors;
 import com.bubbleshield.effect.ContextModifier.ContextState;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.InsideEffectBehavior;
+import com.bubbleshield.shield.ShieldShape;
 
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.particles.SimpleParticleType;
@@ -22,9 +23,11 @@ import net.minecraft.world.phys.Vec3;
 public final class OrbitingShards implements InsideEffectBehavior {
 	public static final String ID = "orbiting_shards";
 	private static final int MAX_POINTS = 128;
+	/** Emitted points are rescaled to at most this fraction of the radius (stay inside the shell). */
+	private static final double MAX_DIST_FRAC = 0.98;
 
 	@Override
-	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
+	public void tick(ServerLevel level, Vec3 center, float radius, ShieldShape shape, EffectDefinition def, long gameTime, ContextState ctx) {
 		if (gameTime % ctx.effectiveThrottle(10L) != 0L) {
 			return;
 		}
@@ -48,10 +51,22 @@ public final class OrbitingShards implements InsideEffectBehavior {
 				double px = Math.cos(angle) * orbitRadius;
 				double py = Math.sin(angle) * orbitRadius * sinTilt;
 				double pz = Math.sin(angle) * orbitRadius * cosTilt;
-				double x = center.x + px * cosAzimuth - pz * sinAzimuth;
-				double z = center.z + px * sinAzimuth + pz * cosAzimuth;
-				// Anchor the orbits mid-bubble so the tilted rings stay inside the sphere.
-				level.sendParticles(particle, true, false, x, center.y + radius * 0.5 + py, z, 1, 0.0, 0.0, 0.0, 0.0);
+				// Offset from the shield center: orbits are anchored mid-bubble.
+				double dx = px * cosAzimuth - pz * sinAzimuth;
+				double dy = radius * 0.5 + py;
+				double dz = px * sinAzimuth + pz * cosAzimuth;
+				// The mid-bubble anchor plus the tilted orbit can reach ~1.2r; rescale any
+				// point beyond 0.98r back inside so shards never render outside the shell.
+				double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+				double maxDist = radius * MAX_DIST_FRAC;
+				if (dist > maxDist) {
+					double scale = maxDist / dist;
+					dx *= scale;
+					dy *= scale;
+					dz *= scale;
+				}
+
+				level.sendParticles(particle, true, false, center.x + dx, center.y + dy, center.z + dz, 1, 0.0, 0.0, 0.0, 0.0);
 			}
 		}
 	}

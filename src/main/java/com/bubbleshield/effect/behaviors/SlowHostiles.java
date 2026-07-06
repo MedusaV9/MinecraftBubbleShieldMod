@@ -3,6 +3,8 @@ package com.bubbleshield.effect.behaviors;
 import com.bubbleshield.effect.ContextModifier.ContextState;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.InsideEffectBehavior;
+import com.bubbleshield.shield.ShieldGeometry;
+import com.bubbleshield.shield.ShieldShape;
 
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -26,7 +28,7 @@ public final class SlowHostiles implements InsideEffectBehavior {
 	private static final int DURATION_TICKS = 60;
 
 	@Override
-	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
+	public void tick(ServerLevel level, Vec3 center, float radius, ShieldShape shape, EffectDefinition def, long gameTime, ContextState ctx) {
 		if (gameTime % ctx.effectiveThrottle(10L) != 0L) {
 			return;
 		}
@@ -37,7 +39,7 @@ public final class SlowHostiles implements InsideEffectBehavior {
 		// extend Monster.
 		AABB box = AABB.ofSize(center, radius * 2.0, radius * 2.0, radius * 2.0);
 		for (Mob mob : level.getEntitiesOfClass(Mob.class, box, e -> e instanceof Enemy)) {
-			if (mob.position().distanceTo(center) > radius) {
+			if (!ShieldGeometry.isInside(shape, center, radius, mob.position())) {
 				continue;
 			}
 

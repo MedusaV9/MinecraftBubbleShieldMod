@@ -3,6 +3,8 @@ package com.bubbleshield.effect.behaviors;
 import com.bubbleshield.effect.ContextModifier.ContextState;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.InsideEffectBehavior;
+import com.bubbleshield.shield.ShieldGeometry;
+import com.bubbleshield.shield.ShieldShape;
 
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
@@ -27,7 +29,7 @@ public final class PurgePulse implements InsideEffectBehavior {
 	private static final double MAX_HORIZONTAL_SPEED = 1.2;
 
 	@Override
-	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
+	public void tick(ServerLevel level, Vec3 center, float radius, ShieldShape shape, EffectDefinition def, long gameTime, ContextState ctx) {
 		// Every 4th %10 window, so the purge reads as a distinct pulse.
 		if (gameTime % ctx.effectiveThrottle(40L) != 0L) {
 			return;
@@ -43,7 +45,7 @@ public final class PurgePulse implements InsideEffectBehavior {
 		// Query Mob + Enemy instead of Monster so Enemy-only hostiles are covered too.
 		AABB box = AABB.ofSize(center, radius * 2.0, radius * 2.0, radius * 2.0);
 		for (Mob mob : level.getEntitiesOfClass(Mob.class, box, e -> e instanceof Enemy)) {
-			if (mob.position().distanceTo(center) > radius) {
+			if (!ShieldGeometry.isInside(shape, center, radius, mob.position())) {
 				continue;
 			}
 

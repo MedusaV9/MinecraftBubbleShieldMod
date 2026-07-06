@@ -3,6 +3,7 @@ package com.bubbleshield.effect.behaviors;
 import com.bubbleshield.effect.ContextModifier.ContextState;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.InsideEffectBehavior;
+import com.bubbleshield.shield.ShieldShape;
 
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
@@ -28,7 +29,7 @@ public final class HeartbeatPulse implements InsideEffectBehavior {
 	private static final int MAX_POINTS = 128;
 
 	@Override
-	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
+	public void tick(ServerLevel level, Vec3 center, float radius, ShieldShape shape, EffectDefinition def, long gameTime, ContextState ctx) {
 		if (gameTime % ctx.effectiveThrottle(10L) != 0L) {
 			return;
 		}
@@ -54,7 +55,9 @@ public final class HeartbeatPulse implements InsideEffectBehavior {
 			}
 		}
 
-		double ringRadius = variant == 2 ? radius * (0.3 + 0.3 * phase) : radius * (0.25 + 0.25 * phase);
+		// Cap the expanding ring inside the shell: v2's last phase used to reach 1.2r.
+		// v2 stays distinct from v0 via its larger dust scale and deeper beat pitch.
+		double ringRadius = Math.min(variant == 2 ? radius * (0.3 + 0.3 * phase) : radius * (0.25 + 0.25 * phase), radius * 0.98);
 		float dustScale = variant == 2 ? 2.0F : 1.4F;
 		// Keep the point spacing roughly constant along the ring so the pulse stays
 		// visible instead of turning sparse at large radii.
