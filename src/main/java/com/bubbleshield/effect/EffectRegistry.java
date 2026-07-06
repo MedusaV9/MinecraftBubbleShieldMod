@@ -45,27 +45,6 @@ public final class EffectRegistry {
 			"heathaze", "wobble"
 	);
 
-	// TODO(S2): remove — behaviors that are not implemented yet fall back to one of the
-	// 10 registered behaviors. The definition keeps the FINAL behavior id + variant; the
-	// fallback is only consulted at tick-dispatch time (ShieldLogic) and in validate().
-	private static final Map<String, String> TEMP_BEHAVIOR_FALLBACK = Map.ofEntries(
-			Map.entry("orbiting_shards", "particle_dome"),
-			Map.entry("rising_souls", "particle_spiral"),
-			Map.entry("falling_petals", "snowfall"),
-			Map.entry("bubble_veil", "mist_layer"),
-			Map.entry("music_pulse", "heartbeat_pulse"),
-			Map.entry("static_field", "firefly_swarm"),
-			Map.entry("meteor_burst", "ember_rain"),
-			Map.entry("spore_drift", "mist_layer"),
-			Map.entry("enchant_stream", "particle_spiral"),
-			Map.entry("haste_aura", "speed_aura"),
-			Map.entry("resist_aura", "regen_aura"),
-			Map.entry("night_glow_aura", "regen_aura"),
-			Map.entry("fire_ward", "ember_rain"),
-			Map.entry("frost_intruders", "snowfall"),
-			Map.entry("purge_pulse", "slow_hostiles")
-	);
-
 	// TODO(S6): remove — once all surface shaders exist, the authored surface name equals
 	// def.surface().name().toLowerCase(Locale.ROOT) and this side table becomes redundant.
 	private static final String[] FINAL_SURFACE_NAMES = new String[COUNT];
@@ -195,15 +174,6 @@ public final class EffectRegistry {
 	}
 
 	/**
-	 * The behavior id to dispatch for the given definition: the authored (final)
-	 * behavior id when registered, otherwise its temporary fallback.
-	 */
-	// TODO(S2): remove the fallback indirection once all 25 behaviors are registered.
-	public static String resolvedBehaviorId(EffectDefinition def) {
-		return TEMP_BEHAVIOR_FALLBACK.getOrDefault(def.insideBehaviorId(), def.insideBehaviorId());
-	}
-
-	/**
 	 * The screen-fx template whose shader file actually backs the given definition's
 	 * {@code post_effect/effect_NN.json}: the authored (final) template when its shader
 	 * exists, otherwise its temporary fallback. tools/gen_post_effects.py mirrors this
@@ -231,10 +201,10 @@ public final class EffectRegistry {
 	/**
 	 * Fails fast when the catalogue is malformed. Enforces: exactly {@link #COUNT}
 	 * entries with ids 0..COUNT-1; all palette pairs pairwise distinct; all
-	 * (insideBehaviorId, behaviorVariant) pairs pairwise distinct with each behavior id
-	 * used at most 3 times; ambientPeriodTicks positive; every
-	 * (ambientSoundId, ambientPitch, ambientPeriodTicks) triple distinct; and every
-	 * resolved behavior id registered in {@link InsideEffectBehavior#REGISTRY}.
+	 * (insideBehaviorId, behaviorVariant) pairs pairwise distinct with every behavior id
+	 * used EXACTLY 3 times covering variants {0, 1, 2}; ambientPeriodTicks positive;
+	 * every (ambientSoundId, ambientPitch, ambientPeriodTicks) triple distinct; and
+	 * every behavior id registered in {@link InsideEffectBehavior#REGISTRY}.
 	 */
 	public static void validate() {
 		if (ALL.size() != COUNT) {
@@ -242,8 +212,7 @@ public final class EffectRegistry {
 		}
 
 		Set<Long> palettes = new HashSet<>();
-		Set<String> behaviorVariants = new HashSet<>();
-		Map<String, Integer> behaviorUses = new HashMap<>();
+		Map<String, Set<Integer>> behaviorVariants = new HashMap<>();
 		Set<String> soundTriples = new HashSet<>();
 		for (int i = 0; i < ALL.size(); i++) {
 			EffectDefinition def = ALL.get(i);
@@ -256,13 +225,8 @@ public final class EffectRegistry {
 				throw new IllegalStateException("Effect " + def.id() + " reuses another effect's palette pair");
 			}
 
-			String behaviorVariant = def.insideBehaviorId() + "@" + def.behaviorVariant();
-			if (!behaviorVariants.add(behaviorVariant)) {
-				throw new IllegalStateException("Effect " + def.id() + " reuses behavior/variant pair: " + behaviorVariant);
-			}
-
-			if (behaviorUses.merge(def.insideBehaviorId(), 1, Integer::sum) > 3) {
-				throw new IllegalStateException("Behavior used more than 3 times: " + def.insideBehaviorId());
+			if (!behaviorVariants.computeIfAbsent(def.insideBehaviorId(), b -> new HashSet<>()).add(def.behaviorVariant())) {
+				throw new IllegalStateException("Effect " + def.id() + " reuses behavior/variant pair: " + def.insideBehaviorId() + "@" + def.behaviorVariant());
 			}
 
 			if (def.ambientPeriodTicks() <= 0) {
@@ -274,9 +238,15 @@ public final class EffectRegistry {
 				throw new IllegalStateException("Effect " + def.id() + " reuses ambient sound triple: " + soundTriple);
 			}
 
-			String resolvedBehavior = resolvedBehaviorId(def);
-			if (!InsideEffectBehavior.REGISTRY.containsKey(resolvedBehavior)) {
-				throw new IllegalStateException("Effect " + def.id() + " references unregistered inside behavior: " + resolvedBehavior);
+			if (!InsideEffectBehavior.REGISTRY.containsKey(def.insideBehaviorId())) {
+				throw new IllegalStateException("Effect " + def.id() + " references unregistered inside behavior: " + def.insideBehaviorId());
+			}
+		}
+
+		// Every behavior id must appear exactly 3 times, once per variant {0, 1, 2}.
+		for (Map.Entry<String, Set<Integer>> entry : behaviorVariants.entrySet()) {
+			if (!entry.getValue().equals(Set.of(0, 1, 2))) {
+				throw new IllegalStateException("Behavior " + entry.getKey() + " must be used exactly 3 times with variants {0,1,2}, found variants " + entry.getValue());
 			}
 		}
 	}

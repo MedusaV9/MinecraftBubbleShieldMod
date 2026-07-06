@@ -12,7 +12,13 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Applies brief Slowness to every hostile monster caught inside the shield.
+ * Applies brief debuffs to every hostile monster caught inside the shield.
+ *
+ * <ul>
+ * <li>v0: Slowness II</li>
+ * <li>v1: Slowness I plus Weakness I</li>
+ * <li>v2: Slowness III plus Mining Fatigue I</li>
+ * </ul>
  */
 public final class SlowHostiles implements InsideEffectBehavior {
 	public static final String ID = "slow_hostiles";
@@ -24,13 +30,26 @@ public final class SlowHostiles implements InsideEffectBehavior {
 			return;
 		}
 
+		int variant = def.behaviorVariant();
 		// Query Mob + Enemy instead of Monster: hostiles like Ghast, Phantom, Slime,
 		// MagmaCube, Hoglin, Shulker and the Ender Dragon implement Enemy but do not
 		// extend Monster.
 		AABB box = AABB.ofSize(center, radius * 2.0, radius * 2.0, radius * 2.0);
 		for (Mob mob : level.getEntitiesOfClass(Mob.class, box, e -> e instanceof Enemy)) {
-			if (mob.position().distanceTo(center) <= radius) {
-				mob.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, DURATION_TICKS, 1));
+			if (mob.position().distanceTo(center) > radius) {
+				continue;
+			}
+
+			int slownessAmplifier = switch (variant) {
+				case 1 -> 0;
+				case 2 -> 2;
+				default -> 1;
+			};
+			mob.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, DURATION_TICKS, slownessAmplifier));
+			if (variant == 1) {
+				mob.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, DURATION_TICKS, 0));
+			} else if (variant == 2) {
+				mob.addEffect(new MobEffectInstance(MobEffects.MINING_FATIGUE, DURATION_TICKS, 0));
 			}
 		}
 	}

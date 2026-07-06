@@ -8,7 +8,10 @@ import com.bubbleshield.effect.InsideEffectBehavior;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
@@ -142,7 +145,8 @@ public final class ShieldLogic {
 	}
 
 	/**
-	 * Runs the selected effect's ambient inside behaviour (particles, auras, sounds).
+	 * Runs the selected effect's ambient inside behaviour (particles, auras, sounds)
+	 * and its looping ambient sound.
 	 */
 	private static void tickInsideEffect(ServerLevel level, Vec3 center, float radius, int effectId, long gameTime) {
 		EffectDefinition def = EffectRegistry.get(effectId);
@@ -150,13 +154,31 @@ public final class ShieldLogic {
 			return;
 		}
 
-		// TODO(S2): dispatch def.insideBehaviorId() directly once all 25 behaviors exist.
-		InsideEffectBehavior behavior = InsideEffectBehavior.get(EffectRegistry.resolvedBehaviorId(def));
-		if (behavior == null) {
+		InsideEffectBehavior behavior = InsideEffectBehavior.get(def.insideBehaviorId());
+		if (behavior != null) {
+			behavior.tick(level, center, radius, def, gameTime);
+		}
+
+		playAmbientSound(level, center, radius, def, gameTime);
+	}
+
+	/**
+	 * Plays the effect's ambient sound at the projector center every
+	 * {@code ambientPeriodTicks}. Volume scales with the radius (volume &gt; 1 extends
+	 * the audible range ~16 * volume blocks, same trick as the heartbeat behaviour).
+	 */
+	private static void playAmbientSound(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime) {
+		if (gameTime % def.ambientPeriodTicks() != 0L) {
 			return;
 		}
 
-		behavior.tick(level, center, radius, def, gameTime);
+		SoundEvent sound = BuiltInRegistries.SOUND_EVENT.getValue(Identifier.parse("minecraft:" + def.ambientSoundId()));
+		if (sound == null) {
+			return;
+		}
+
+		float volume = Mth.clamp(radius / 12.0F, 0.6F, 8.0F);
+		level.playSound(null, center.x, center.y, center.z, sound, SoundSource.AMBIENT, volume, def.ambientPitch());
 	}
 
 	private static boolean interceptProjectiles(ServerLevel level, BlockPos pos, Vec3 center, double radius, ShieldState state, AABB area) {

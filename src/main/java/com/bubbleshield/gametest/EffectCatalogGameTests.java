@@ -9,16 +9,23 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import com.bubbleshield.block.BubbleShieldBlockEntity;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.EffectRegistry;
 import com.bubbleshield.effect.InsideEffectBehavior;
+import com.bubbleshield.registry.ModBlocks;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * Machine-enforcement of the 75-effect catalogue invariants: registry validity,
@@ -30,7 +37,37 @@ public class EffectCatalogGameTests {
 		EffectRegistry.validate();
 		helper.assertTrue(EffectRegistry.COUNT == 75, "catalogue should contain exactly 75 effects");
 		helper.assertTrue(EffectRegistry.ALL.size() == EffectRegistry.COUNT, "registry should expose exactly " + EffectRegistry.COUNT + " effect definitions");
-		helper.assertTrue(InsideEffectBehavior.REGISTRY.size() == 10, "exactly 10 inside behaviors should be registered");
+		helper.assertTrue(InsideEffectBehavior.REGISTRY.size() == 25, "exactly 25 inside behaviors should be registered");
+		helper.succeed();
+	}
+
+	/**
+	 * Ticks every effect's inside behavior directly for several game times and checks
+	 * that every effect's ambient sound id resolves in the vanilla sound registry.
+	 */
+	@GameTest(padding = 16)
+	public void allBehaviorsSmoke(GameTestHelper helper) {
+		BlockPos projectorPos = new BlockPos(4, 2, 4);
+		helper.setBlock(projectorPos, ModBlocks.BUBBLE_SHIELD_PROJECTOR);
+		BubbleShieldBlockEntity be = helper.getBlockEntity(projectorPos, BubbleShieldBlockEntity.class);
+		ServerLevel level = helper.getLevel();
+		Vec3 center = Vec3.atCenterOf(helper.absolutePos(projectorPos));
+
+		for (EffectDefinition def : EffectRegistry.ALL) {
+			be.getShieldState().effectId = def.id();
+
+			InsideEffectBehavior behavior = InsideEffectBehavior.get(def.insideBehaviorId());
+			helper.assertTrue(behavior != null, "effect " + def.id() + " references unregistered behavior " + def.insideBehaviorId());
+			for (long gameTime : new long[] {0L, 10L, 20L, 30L, 40L}) {
+				behavior.tick(level, center, 6.0F, def, gameTime);
+			}
+
+			Identifier soundId = Identifier.parse("minecraft:" + def.ambientSoundId());
+			helper.assertTrue(
+					BuiltInRegistries.SOUND_EVENT.containsKey(soundId),
+					"effect " + def.id() + " ambient sound does not resolve: " + soundId);
+		}
+
 		helper.succeed();
 	}
 

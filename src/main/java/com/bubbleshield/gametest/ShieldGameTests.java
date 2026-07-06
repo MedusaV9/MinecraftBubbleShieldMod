@@ -26,6 +26,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.arrow.Arrow;
@@ -316,6 +317,42 @@ public class ShieldGameTests {
 		helper.runAfterDelay(30, () -> {
 			helper.assertTrue(be.getShieldState().active, "shield should still be active after the effect behavior ran");
 			helper.succeed();
+		});
+	}
+
+	@GameTest(maxTicks = 200, padding = 16)
+	public void behaviorEffectsApply(GameTestHelper helper) {
+		helper.assertTrue("regen_aura".equals(EffectRegistry.get(11).insideBehaviorId()), "effect 11 should be regen_aura");
+		helper.assertTrue("haste_aura".equals(EffectRegistry.get(9).insideBehaviorId()), "effect 9 should be haste_aura");
+
+		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
+		be.addFuelSeconds(PLENTY_OF_FUEL);
+		be.getShieldState().effectId = 11; // regen_aura@0
+
+		// An in-level ServerPlayer so the aura's level.getEntitiesOfClass query finds it.
+		// Whitelist it (mock players are named "test-mock-player") so the barrier does
+		// not expel it, then park it inside the radius-4 bubble.
+		ServerPlayer player = helper.makeMockServerPlayerInLevel();
+		be.whitelistAdd(helper.getLevel().getServer(), player.getGameProfile().name());
+		helper.assertTrue(be.tryActivate(), "shield should activate");
+
+		Vec3 center = Vec3.atCenterOf(helper.absolutePos(PROJECTOR_POS));
+		player.snapTo(center.x + 1.5, center.y, center.z);
+
+		helper.runAfterDelay(30, () -> {
+			boolean hasRegen = player.hasEffect(MobEffects.REGENERATION);
+			if (!hasRegen) {
+				helper.getLevel().getServer().getPlayerList().remove(player);
+			}
+			helper.assertTrue(hasRegen, "a player inside a regen_aura shield should have Regeneration");
+
+			be.getShieldState().effectId = 9; // haste_aura@0
+			helper.runAfterDelay(30, () -> {
+				boolean hasHaste = player.hasEffect(MobEffects.HASTE);
+				helper.getLevel().getServer().getPlayerList().remove(player);
+				helper.assertTrue(hasHaste, "a player inside a haste_aura shield should have Haste");
+				helper.succeed();
+			});
 		});
 	}
 

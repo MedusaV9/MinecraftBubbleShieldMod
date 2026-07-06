@@ -3,7 +3,7 @@ package com.bubbleshield.effect.behaviors;
 import com.bubbleshield.effect.InsideEffectBehavior;
 
 /**
- * Registers the ten built-in {@link InsideEffectBehavior} implementations.
+ * Registers the 25 built-in {@link InsideEffectBehavior} implementations.
  */
 public final class EffectBehaviors {
 	private EffectBehaviors() {
@@ -25,5 +25,20 @@ public final class EffectBehaviors {
 		InsideEffectBehavior.register(FireflySwarm.ID, new FireflySwarm());
 		InsideEffectBehavior.register(HeartbeatPulse.ID, new HeartbeatPulse());
 		InsideEffectBehavior.register(MistLayer.ID, new MistLayer());
+		InsideEffectBehavior.register(OrbitingShards.ID, new OrbitingShards());
+		InsideEffectBehavior.register(RisingSouls.ID, new RisingSouls());
+		InsideEffectBehavior.register(FallingPetals.ID, new FallingPetals());
+		InsideEffectBehavior.register(BubbleVeil.ID, new BubbleVeil());
+		InsideEffectBehavior.register(MusicPulse.ID, new MusicPulse());
+		InsideEffectBehavior.register(StaticField.ID, new StaticField());
+		InsideEffectBehavior.register(MeteorBurst.ID, new MeteorBurst());
+		InsideEffectBehavior.register(SporeDrift.ID, new SporeDrift());
+		InsideEffectBehavior.register(EnchantStream.ID, new EnchantStream());
+		InsideEffectBehavior.register(HasteAura.ID, new HasteAura());
+		InsideEffectBehavior.register(ResistAura.ID, new ResistAura());
+		InsideEffectBehavior.register(NightGlowAura.ID, new NightGlowAura());
+		InsideEffectBehavior.register(FireWard.ID, new FireWard());
+		InsideEffectBehavior.register(FrostIntruders.ID, new FrostIntruders());
+		InsideEffectBehavior.register(PurgePulse.ID, new PurgePulse());
 	}
 }

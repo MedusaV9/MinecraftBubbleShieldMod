@@ -3,7 +3,6 @@ package com.bubbleshield.effect.behaviors;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.InsideEffectBehavior;
 
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
@@ -12,17 +11,22 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Grants brief Regeneration to every player standing inside the shield.
+ * Grants night-time comfort buffs to every player standing inside the shield.
  *
  * <ul>
- * <li>v0: Regeneration I</li>
- * <li>v1: Regeneration I plus heart particles above each player</li>
- * <li>v2: Regeneration I plus Absorption I</li>
+ * <li>v0: Night Vision</li>
+ * <li>v1: Night Vision plus Slow Falling</li>
+ * <li>v2: Night Vision plus Luck</li>
  * </ul>
  */
-public final class RegenAura implements InsideEffectBehavior {
-	public static final String ID = "regen_aura";
+public final class NightGlowAura implements InsideEffectBehavior {
+	public static final String ID = "night_glow_aura";
 	private static final int DURATION_TICKS = 60;
+	/**
+	 * Night Vision blinks client-side when under 200 ticks remain, so it gets a longer
+	 * duration than the other aura effects (still refreshed every 10 ticks).
+	 */
+	private static final int NIGHT_VISION_DURATION_TICKS = 260;
 
 	@Override
 	public void tick(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime) {
@@ -37,11 +41,11 @@ public final class RegenAura implements InsideEffectBehavior {
 				continue;
 			}
 
-			player.addEffect(new MobEffectInstance(MobEffects.REGENERATION, DURATION_TICKS, 0));
+			player.addEffect(new MobEffectInstance(MobEffects.NIGHT_VISION, NIGHT_VISION_DURATION_TICKS, 0));
 			if (variant == 1) {
-				level.sendParticles(ParticleTypes.HEART, true, false, player.getX(), player.getY() + 1.5, player.getZ(), 2, 0.3, 0.3, 0.3, 0.0);
+				player.addEffect(new MobEffectInstance(MobEffects.SLOW_FALLING, DURATION_TICKS, 0));
 			} else if (variant == 2) {
-				player.addEffect(new MobEffectInstance(MobEffects.ABSORPTION, DURATION_TICKS, 0));
+				player.addEffect(new MobEffectInstance(MobEffects.LUCK, DURATION_TICKS, 0));
 			}
 		}
 	}
