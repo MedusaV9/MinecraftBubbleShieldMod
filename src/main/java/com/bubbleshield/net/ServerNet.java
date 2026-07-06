@@ -217,7 +217,8 @@ public final class ServerNet {
 				state.effectId,
 				state.targetRadius,
 				ShieldLogic.currentRadius(state),
-				healthFrac
+				healthFrac,
+				shield.tier()
 			),
 			List.copyOf(state.whitelistUuids),
 			List.copyOf(state.whitelistNames),

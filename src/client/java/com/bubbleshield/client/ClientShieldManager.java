@@ -61,6 +61,10 @@ public final class ClientShieldManager {
 		public float healthFrac() {
 			return this.visual.healthFrac();
 		}
+
+		public int tier() {
+			return this.visual.tier();
+		}
 	}
 
 	private static final Map<GlobalPos, ClientShield> SHIELDS = new HashMap<>();

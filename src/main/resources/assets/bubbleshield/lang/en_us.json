@@ -1,6 +1,9 @@
 {
   "block.bubbleshield.bubble_shield_projector": "Bubble Shield Projector",
+  "item.bubbleshield.resonant_core": "Resonant Core",
+  "item.bubbleshield.prismatic_core": "Prismatic Core",
   "gui.bubbleshield.title": "Bubble Shield Projector",
+  "gui.bubbleshield.tier": "Tier: %s",
   "gui.bubbleshield.activate": "Activate",
   "gui.bubbleshield.deactivate": "Deactivate",
   "gui.bubbleshield.whitelist": "Whitelist...",

@@ -1,6 +1,9 @@
 {
   "block.bubbleshield.bubble_shield_projector": "Schildblasen-Projektor",
+  "item.bubbleshield.resonant_core": "Resonanzkern",
+  "item.bubbleshield.prismatic_core": "Prismenkern",
   "gui.bubbleshield.title": "Schildblasen-Projektor",
+  "gui.bubbleshield.tier": "Stufe: %s",
   "gui.bubbleshield.activate": "Aktivieren",
   "gui.bubbleshield.deactivate": "Deaktivieren",
   "gui.bubbleshield.whitelist": "Weiße Liste...",

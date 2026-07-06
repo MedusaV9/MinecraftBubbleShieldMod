@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "key": {
+    "A": "minecraft:amethyst_shard",
+    "I": "minecraft:iron_ingot",
+    "D": "minecraft:diamond"
+  },
+  "pattern": [
+    "AIA",
+    "IDI",
+    "AIA"
+  ],
+  "result": {
+    "count": 1,
+    "id": "bubbleshield:resonant_core"
+  }
+}

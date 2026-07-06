@@ -37,6 +37,10 @@ public final class ShieldLogic {
 	public static final long BREAK_COOLDOWN_TICKS = 36000L;
 	public static final int TICKS_PER_FUEL_SECOND = 20;
 	public static final double PUSHBACK_MARGIN = 0.75;
+	/** A tier-1+ shield regenerates once every 2 seconds while active and fueled. */
+	public static final int REGEN_PERIOD_TICKS = 40;
+	public static final float TIER_1_REGEN_PER_PULSE = 1.0F;
+	public static final float TIER_2_REGEN_PER_PULSE = 2.5F;
 
 	private ShieldLogic() {
 	}
@@ -82,29 +86,45 @@ public final class ShieldLogic {
 	}
 
 	/**
-	 * Applies damage to the shield. When health is depleted the shield breaks: it deactivates,
-	 * health is restored for the next activation and a cooldown starts.
+	 * Applies damage to the shield using the default break cooldown (tier 0/1).
 	 *
 	 * @return true if the shield broke.
 	 */
 	public static boolean applyDamage(ShieldState state, float amount, long gameTime) {
+		return applyDamage(state, amount, gameTime, BREAK_COOLDOWN_TICKS);
+	}
+
+	/**
+	 * Applies damage to the shield. When health is depleted the shield breaks: it deactivates,
+	 * health is restored for the next activation and the given cooldown starts.
+	 *
+	 * @param cooldownTicks break cooldown to apply; see {@link #breakCooldownTicks(int)}.
+	 * @return true if the shield broke.
+	 */
+	public static boolean applyDamage(ShieldState state, float amount, long gameTime, long cooldownTicks) {
 		state.health -= amount;
 		if (state.health <= 0.0F) {
 			state.active = false;
 			state.health = state.maxHealth;
-			state.cooldownUntil = gameTime + BREAK_COOLDOWN_TICKS;
+			state.cooldownUntil = gameTime + cooldownTicks;
 			return true;
 		}
 
 		return false;
 	}
 
+	/** @return the break cooldown for the given shield tier; tier 2 halves the default. */
+	public static long breakCooldownTicks(int tier) {
+		return tier >= 2 ? BREAK_COOLDOWN_TICKS / 2 : BREAK_COOLDOWN_TICKS;
+	}
+
 	/**
 	 * Runs one server tick of shield logic for the projector at {@code pos}.
 	 *
+	 * @param tier the projector's upgrade-core tier (0..2); drives regeneration and break cooldown.
 	 * @return true if the shield state changed and should be saved/synced.
 	 */
-	public static boolean serverTick(ServerLevel level, BlockPos pos, ShieldState state) {
+	public static boolean serverTick(ServerLevel level, BlockPos pos, ShieldState state, int tier) {
 		if (!state.active) {
 			return false;
 		}
@@ -123,12 +143,24 @@ public final class ShieldLogic {
 			}
 		}
 
+		// Fueled regeneration: tier-1+ shields heal every 2 seconds, each pulse
+		// burning one extra fuel-second on top of the runtime drain.
+		if (tier >= 1 && state.health < state.maxHealth && state.fuelSeconds > 0 && gameTime % REGEN_PERIOD_TICKS == 0) {
+			state.health = Math.min(state.maxHealth, state.health + (tier == 1 ? TIER_1_REGEN_PER_PULSE : TIER_2_REGEN_PER_PULSE));
+			state.fuelSeconds = Math.max(0, state.fuelSeconds - 1);
+			changed = true;
+			if (state.fuelSeconds <= 0) {
+				state.active = false;
+				return true;
+			}
+		}
+
 		Vec3 center = Vec3.atCenterOf(pos);
 		double radius = currentRadius(state);
 		double areaSize = 2.0 * radius + 8.0;
 		AABB area = AABB.ofSize(center, areaSize, areaSize, areaSize);
 
-		if (interceptProjectiles(level, pos, center, radius, state, area)) {
+		if (interceptProjectiles(level, pos, center, radius, state, area, breakCooldownTicks(tier))) {
 			changed = true;
 		}
 
@@ -212,7 +244,7 @@ public final class ShieldLogic {
 		level.playSound(null, center.x, center.y, center.z, sound, SoundSource.AMBIENT, volume, def.ambientPitch());
 	}
 
-	private static boolean interceptProjectiles(ServerLevel level, BlockPos pos, Vec3 center, double radius, ShieldState state, AABB area) {
+	private static boolean interceptProjectiles(ServerLevel level, BlockPos pos, Vec3 center, double radius, ShieldState state, AABB area, long breakCooldownTicks) {
 		boolean changed = false;
 
 		for (Projectile projectile : level.getEntitiesOfClass(Projectile.class, area)) {
@@ -234,7 +266,7 @@ public final class ShieldLogic {
 			}
 
 			projectile.discard();
-			boolean broke = applyDamage(state, PROJECTILE_DAMAGE, level.getGameTime());
+			boolean broke = applyDamage(state, PROJECTILE_DAMAGE, level.getGameTime(), breakCooldownTicks);
 			changed = true;
 
 			level.sendParticles(ParticleTypes.CRIT, current.x, current.y, current.z, 20, 0.3, 0.3, 0.3, 0.1);

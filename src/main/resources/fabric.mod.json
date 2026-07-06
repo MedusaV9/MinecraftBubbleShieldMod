@@ -24,7 +24,8 @@
 		"fabric-gametest": [
 			"com.bubbleshield.gametest.ShieldGameTests",
 			"com.bubbleshield.gametest.EffectCatalogGameTests",
-			"com.bubbleshield.gametest.GuardContextGameTests"
+			"com.bubbleshield.gametest.GuardContextGameTests",
+			"com.bubbleshield.gametest.TierGameTests"
 		]
 	},
 	"mixins": [

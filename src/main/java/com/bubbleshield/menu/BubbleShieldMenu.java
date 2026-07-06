@@ -1,6 +1,7 @@
 package com.bubbleshield.menu;
 
 import com.bubbleshield.block.BubbleShieldBlockEntity;
+import com.bubbleshield.registry.ModItems;
 import com.bubbleshield.registry.ModMenus;
 import com.bubbleshield.shield.FuelMap;
 
@@ -18,8 +19,8 @@ import net.minecraft.world.item.ItemStack;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Furnace-like menu for the bubble shield projector: one fuel slot plus the
- * player inventory, and a six-value {@link ContainerData} snapshot of the shield.
+ * Furnace-like menu for the bubble shield projector: one fuel slot, one upgrade-core
+ * slot, the player inventory, and a {@link ContainerData} snapshot of the shield.
  *
  * <p>All time values are synced in SECONDS (not ticks) because container data
  * slots are replicated as 16-bit signed values.
@@ -31,15 +32,18 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 	public static final int DATA_EFFECT_ID = 3;
 	public static final int DATA_ACTIVE = 4;
 	public static final int DATA_COOLDOWN_SECONDS = 5;
-	public static final int DATA_COUNT = 6;
+	public static final int DATA_TIER = 6;
+	public static final int DATA_COUNT = 7;
 
 	public static final int FUEL_SLOT = 0;
-	private static final int INV_SLOT_START = 1;
-	private static final int INV_SLOT_END = 28;
-	private static final int HOTBAR_SLOT_START = 28;
-	private static final int HOTBAR_SLOT_END = 37;
+	public static final int CORE_SLOT = 1;
+	private static final int INV_SLOT_START = 2;
+	private static final int INV_SLOT_END = 29;
+	private static final int HOTBAR_SLOT_START = 29;
+	private static final int HOTBAR_SLOT_END = 38;
 
-	private final Container container;
+	private final Container fuelContainer;
+	private final Container coreContainer;
 	private final ContainerData data;
 	private final BlockPos pos;
 	/** The projector this menu is attached to; null on the client. */
@@ -47,38 +51,52 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 
 	/** Client-side constructor, invoked by the ExtendedMenuType with the synced BlockPos. */
 	public BubbleShieldMenu(int containerId, Inventory inventory, BlockPos pos) {
-		this(containerId, inventory, pos, new SimpleContainer(1), new SimpleContainerData(DATA_COUNT), null);
+		this(containerId, inventory, pos, new SimpleContainer(1), new SimpleContainer(1), new SimpleContainerData(DATA_COUNT), null);
 	}
 
 	/** Server-side constructor. */
 	public BubbleShieldMenu(int containerId, Inventory inventory, BubbleShieldBlockEntity blockEntity) {
-		this(containerId, inventory, blockEntity.getBlockPos(), blockEntity.getFuelContainer(), blockEntity.getMenuData(), blockEntity);
+		this(containerId, inventory, blockEntity.getBlockPos(), blockEntity.getFuelContainer(), blockEntity.getCoreContainer(), blockEntity.getMenuData(), blockEntity);
 	}
 
 	private BubbleShieldMenu(
 		int containerId,
 		Inventory inventory,
 		BlockPos pos,
-		Container container,
+		Container fuelContainer,
+		Container coreContainer,
 		ContainerData data,
 		@Nullable BubbleShieldBlockEntity blockEntity
 	) {
 		super(ModMenus.BUBBLE_SHIELD, containerId);
-		checkContainerSize(container, 1);
+		checkContainerSize(fuelContainer, 1);
+		checkContainerSize(coreContainer, 1);
 		checkContainerDataCount(data, DATA_COUNT);
-		this.container = container;
+		this.fuelContainer = fuelContainer;
+		this.coreContainer = coreContainer;
 		this.data = data;
 		this.pos = pos;
 		this.blockEntity = blockEntity;
 
-		this.addSlot(new Slot(container, 0, 56, 35) {
+		this.addSlot(new Slot(fuelContainer, 0, 56, 35) {
 			@Override
 			public boolean mayPlace(ItemStack stack) {
 				return FuelMap.fuelSeconds(stack.getItem()) > 0;
 			}
 		});
+		this.addSlot(new Slot(coreContainer, 0, 56, 53) {
+			@Override
+			public boolean mayPlace(ItemStack stack) {
+				return isCore(stack);
+			}
+		});
 		this.addStandardInventorySlots(inventory, 8, 84);
 		this.addDataSlots(data);
+	}
+
+	/** @return true for the two upgrade-core items accepted by the core slot. */
+	private static boolean isCore(ItemStack stack) {
+		return stack.is(ModItems.RESONANT_CORE) || stack.is(ModItems.PRISMATIC_CORE);
 	}
 
 	public BlockPos pos() {
@@ -109,6 +127,10 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 		return this.data.get(DATA_COOLDOWN_SECONDS);
 	}
 
+	public int tier() {
+		return this.data.get(DATA_TIER);
+	}
+
 	@Override
 	public ItemStack quickMoveStack(Player player, int slotIndex) {
 		ItemStack clicked = ItemStack.EMPTY;
@@ -116,12 +138,16 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 		if (slot != null && slot.hasItem()) {
 			ItemStack stack = slot.getItem();
 			clicked = stack.copy();
-			if (slotIndex == FUEL_SLOT) {
+			if (slotIndex == FUEL_SLOT || slotIndex == CORE_SLOT) {
 				if (!this.moveItemStackTo(stack, INV_SLOT_START, HOTBAR_SLOT_END, true)) {
 					return ItemStack.EMPTY;
 				}
 			} else if (this.slots.get(FUEL_SLOT).mayPlace(stack)) {
 				if (!this.moveItemStackTo(stack, FUEL_SLOT, FUEL_SLOT + 1, false)) {
+					return ItemStack.EMPTY;
+				}
+			} else if (isCore(stack)) {
+				if (!this.moveItemStackTo(stack, CORE_SLOT, CORE_SLOT + 1, false)) {
 					return ItemStack.EMPTY;
 				}
 			} else if (slotIndex >= INV_SLOT_START && slotIndex < INV_SLOT_END) {

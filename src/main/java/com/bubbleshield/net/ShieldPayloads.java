@@ -85,7 +85,8 @@ public final class ShieldPayloads {
 		int effectId,
 		float targetRadius,
 		float currentRadius,
-		float healthFrac
+		float healthFrac,
+		int tier
 	) {
 		public static final StreamCodec<ByteBuf, ShieldVisual> STREAM_CODEC = StreamCodec.composite(
 			ByteBufCodecs.BOOL, ShieldVisual::active,
@@ -93,6 +94,7 @@ public final class ShieldPayloads {
 			ByteBufCodecs.FLOAT, ShieldVisual::targetRadius,
 			ByteBufCodecs.FLOAT, ShieldVisual::currentRadius,
 			ByteBufCodecs.FLOAT, ShieldVisual::healthFrac,
+			ByteBufCodecs.VAR_INT, ShieldVisual::tier,
 			ShieldVisual::new
 		);
 	}

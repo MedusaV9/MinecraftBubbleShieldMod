@@ -4,6 +4,7 @@ import com.bubbleshield.menu.BubbleShieldMenu;
 import com.bubbleshield.net.ServerNet;
 import com.bubbleshield.net.ShieldPayloads;
 import com.bubbleshield.registry.ModBlockEntities;
+import com.bubbleshield.registry.ModItems;
 import com.bubbleshield.shield.FuelMap;
 import com.bubbleshield.shield.ShieldLogic;
 import com.bubbleshield.shield.ShieldState;
@@ -44,6 +45,10 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	private final ShieldState shieldState = new ShieldState();
 	/** One-slot fuel inventory shown in the projector menu; consumed into fuel-seconds each tick. */
 	private final SimpleContainer fuelContainer = new SimpleContainer(1);
+	/** One-slot upgrade-core inventory; its content derives the shield tier (see {@link #tier()}). */
+	private final SimpleContainer coreContainer = new SimpleContainer(1);
+	/** Tier applied by the last {@link #refreshTier()} pass; -1 forces a refresh on the first tick. */
+	private int lastTier = -1;
 	/** Live server-side snapshot for the menu; values in SECONDS (data slots sync 16-bit signed). */
 	private final ContainerData menuData = new ContainerData() {
 		@Override
@@ -56,6 +61,7 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 				case BubbleShieldMenu.DATA_EFFECT_ID -> state.effectId;
 				case BubbleShieldMenu.DATA_ACTIVE -> state.active ? 1 : 0;
 				case BubbleShieldMenu.DATA_COOLDOWN_SECONDS -> (int) Math.min(Short.MAX_VALUE, BubbleShieldBlockEntity.this.cooldownTicksLeft() / ShieldLogic.TICKS_PER_FUEL_SECOND);
+				case BubbleShieldMenu.DATA_TIER -> BubbleShieldBlockEntity.this.tier();
 				default -> 0;
 			};
 		}
@@ -86,6 +92,23 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		return this.fuelContainer;
 	}
 
+	public SimpleContainer getCoreContainer() {
+		return this.coreContainer;
+	}
+
+	/**
+	 * @return the shield tier derived from the upgrade-core slot: 0 without a core,
+	 * 1 with a resonant core, 2 with a prismatic core.
+	 */
+	public int tier() {
+		ItemStack core = this.coreContainer.getItem(0);
+		if (core.is(ModItems.PRISMATIC_CORE)) {
+			return 2;
+		}
+
+		return core.is(ModItems.RESONANT_CORE) ? 1 : 0;
+	}
+
 	public ContainerData getMenuData() {
 		return this.menuData;
 	}
@@ -104,9 +127,27 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	 */
 	public void serverTick() {
 		this.consumeFuelSlot();
-		if (this.level instanceof ServerLevel serverLevel && ShieldLogic.serverTick(serverLevel, this.worldPosition, this.shieldState)) {
+		this.refreshTier();
+		if (this.level instanceof ServerLevel serverLevel && ShieldLogic.serverTick(serverLevel, this.worldPosition, this.shieldState, this.tier())) {
 			this.markUpdated();
 		}
+	}
+
+	/**
+	 * Applies the tier derived from the core slot to the shield's max health whenever the
+	 * slot content changed (including the first tick after load): {@code maxHealth = 100 * (1 + tier)},
+	 * clamping current health down when a core is removed.
+	 */
+	private void refreshTier() {
+		int tier = this.tier();
+		if (tier == this.lastTier) {
+			return;
+		}
+
+		this.lastTier = tier;
+		this.shieldState.maxHealth = ShieldState.DEFAULT_MAX_HEALTH * (1 + tier);
+		this.shieldState.health = Math.min(this.shieldState.health, this.shieldState.maxHealth);
+		this.markUpdated();
 	}
 
 	/**
@@ -183,11 +224,12 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	}
 
 	/**
-	 * Applies damage to the shield, breaking it (deactivate + cooldown) when health is depleted.
+	 * Applies damage to the shield, breaking it (deactivate + tier-scaled cooldown) when
+	 * health is depleted.
 	 */
 	public void applyShieldDamage(float amount) {
 		long gameTime = this.level != null ? this.level.getGameTime() : 0L;
-		boolean broke = ShieldLogic.applyDamage(this.shieldState, amount, gameTime);
+		boolean broke = ShieldLogic.applyDamage(this.shieldState, amount, gameTime, ShieldLogic.breakCooldownTicks(this.tier()));
 		if (broke && this.level instanceof ServerLevel serverLevel) {
 			serverLevel.playSound(null, this.worldPosition, SoundEvents.SHIELD_BREAK.value(), SoundSource.BLOCKS, 1.0F, 1.0F);
 		}
@@ -302,7 +344,8 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 				state.effectId,
 				state.targetRadius,
 				ShieldLogic.currentRadius(state),
-				state.maxHealth > 0.0F ? state.health / state.maxHealth : 0.0F
+				state.maxHealth > 0.0F ? state.health / state.maxHealth : 0.0F,
+				this.tier()
 			),
 			Set.copyOf(state.whitelistUuids),
 			Set.copyOf(state.whitelistNames),
@@ -348,6 +391,7 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		super.preRemoveSideEffects(pos, state);
 		if (this.level != null) {
 			Containers.dropContents(this.level, pos, this.fuelContainer);
+			Containers.dropContents(this.level, pos, this.coreContainer);
 		}
 	}
 
@@ -373,6 +417,7 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		super.saveAdditional(output);
 		this.shieldState.save(output);
 		this.fuelContainer.storeAsItemList(output.list("fuel_items", ItemStack.CODEC));
+		this.coreContainer.storeAsItemList(output.list("core_items", ItemStack.CODEC));
 	}
 
 	@Override
@@ -380,6 +425,9 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		super.loadAdditional(input);
 		this.shieldState.load(input);
 		this.fuelContainer.fromItemList(input.listOrEmpty("fuel_items", ItemStack.CODEC));
+		this.coreContainer.fromItemList(input.listOrEmpty("core_items", ItemStack.CODEC));
+		// Re-derive tier-dependent fields on the next tick (covers cores edited while unloaded).
+		this.lastTier = -1;
 	}
 
 	@Override
