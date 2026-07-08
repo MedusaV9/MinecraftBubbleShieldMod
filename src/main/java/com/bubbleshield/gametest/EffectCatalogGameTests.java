@@ -39,7 +39,7 @@ public class EffectCatalogGameTests {
 		EffectRegistry.validate();
 		helper.assertTrue(EffectRegistry.COUNT == 75, "catalogue should contain exactly 75 effects");
 		helper.assertTrue(EffectRegistry.ALL.size() == EffectRegistry.COUNT, "registry should expose exactly " + EffectRegistry.COUNT + " effect definitions");
-		helper.assertTrue(InsideEffectBehavior.REGISTRY.size() == 25, "exactly 25 inside behaviors should be registered");
+		helper.assertTrue(InsideEffectBehavior.REGISTRY.size() == 35, "exactly 35 inside behaviors should be registered");
 		helper.succeed();
 	}
 
@@ -140,7 +140,7 @@ public class EffectCatalogGameTests {
 
 	/**
 	 * Every axis label used by the effect-picker tooltips resolves to a lang key:
-	 * 12 surface templates, 25 inside behaviors, 7 guard styles and 6 context profiles.
+	 * 12 surface templates, 35 inside behaviors, 7 guard styles and 6 context profiles.
 	 * Keys are derived from the live enums/registry so the tooltip composition in
 	 * {@code EffectPickerScreen} and the lang files cannot drift apart.
 	 */
@@ -153,7 +153,7 @@ public class EffectCatalogGameTests {
 			helper.assertTrue(enKeys.contains(key), "missing lang key: " + key);
 		}
 
-		helper.assertTrue(InsideEffectBehavior.REGISTRY.size() == 25, "expected 25 registered behaviors");
+		helper.assertTrue(InsideEffectBehavior.REGISTRY.size() == 35, "expected 35 registered behaviors");
 		for (String behaviorId : InsideEffectBehavior.REGISTRY.keySet()) {
 			String key = "behavior.bubbleshield." + behaviorId;
 			helper.assertTrue(enKeys.contains(key), "missing lang key: " + key);

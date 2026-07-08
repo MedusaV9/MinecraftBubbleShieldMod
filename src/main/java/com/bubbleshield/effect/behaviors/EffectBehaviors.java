@@ -3,7 +3,7 @@ package com.bubbleshield.effect.behaviors;
 import com.bubbleshield.effect.InsideEffectBehavior;
 
 /**
- * Registers the 25 built-in {@link InsideEffectBehavior} implementations.
+ * Registers the 35 built-in {@link InsideEffectBehavior} implementations.
  */
 public final class EffectBehaviors {
 	private EffectBehaviors() {
@@ -40,5 +40,15 @@ public final class EffectBehaviors {
 		InsideEffectBehavior.register(FireWard.ID, new FireWard());
 		InsideEffectBehavior.register(FrostIntruders.ID, new FrostIntruders());
 		InsideEffectBehavior.register(PurgePulse.ID, new PurgePulse());
+		InsideEffectBehavior.register(LeapAura.ID, new LeapAura());
+		InsideEffectBehavior.register(TideAura.ID, new TideAura());
+		InsideEffectBehavior.register(EmberGuard.ID, new EmberGuard());
+		InsideEffectBehavior.register(LuckyCharm.ID, new LuckyCharm());
+		InsideEffectBehavior.register(EchoPulse.ID, new EchoPulse());
+		InsideEffectBehavior.register(PrismaticRays.ID, new PrismaticRays());
+		InsideEffectBehavior.register(VoidTendrils.ID, new VoidTendrils());
+		InsideEffectBehavior.register(HoneyDrip.ID, new HoneyDrip());
+		InsideEffectBehavior.register(WaxGlow.ID, new WaxGlow());
+		InsideEffectBehavior.register(StormCage.ID, new StormCage());
 	}
 }
