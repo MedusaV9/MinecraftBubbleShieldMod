@@ -10,6 +10,7 @@ import java.util.UUID;
 import com.mojang.serialization.Codec;
 
 import net.minecraft.core.UUIDUtil;
+import net.minecraft.util.StringUtil;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
 
@@ -23,6 +24,11 @@ public class ShieldState {
 	public static final float DEFAULT_MAX_HEALTH = 100.0F;
 	/** Sentinel for {@link #colorOverride}: no recolor, use the effect's authored palette. */
 	public static final int NO_COLOR_OVERRIDE = -1;
+	/**
+	 * Hard cap on the custom shield name, matching the SetNameC2S/ShieldSyncS2C codecs
+	 * ({@code stringUtf8(32)} throws an EncoderException on longer strings).
+	 */
+	public static final int MAX_NAME_LENGTH = 32;
 
 	public boolean active;
 	public int effectId;
@@ -58,6 +64,35 @@ public class ShieldState {
 	public long cooldownUntil;
 
 	private static final Codec<Map<String, UUID>> NAME_TO_UUID_CODEC = Codec.unboundedMap(Codec.STRING, UUIDUtil.CODEC);
+
+	/**
+	 * Sanitizes a custom shield name: control/formatting characters are stripped
+	 * ({@link StringUtil#filterText}), surrounding whitespace is trimmed and the
+	 * result is capped at {@link #MAX_NAME_LENGTH} characters. May return an empty
+	 * string, which means "no custom name". Applied to every write path (C2S
+	 * requests via {@code ServerNet}) AND on NBT load, so a name smuggled in via
+	 * /data or an NBT editor can never break the sync payload's bounded codec.
+	 */
+	public static String sanitizeName(String raw) {
+		String name = StringUtil.filterText(raw).trim();
+		if (name.length() > MAX_NAME_LENGTH) {
+			name = name.substring(0, MAX_NAME_LENGTH).trim();
+		}
+
+		return name;
+	}
+
+	/**
+	 * Pure validation for a shield color override: {@link #NO_COLOR_OVERRIDE} (-1)
+	 * means "use the effect's authored palette", every other accepted value must be a
+	 * fully opaque ARGB color (alpha byte 0xFF). Translucent or alpha-less colors are
+	 * rejected so neither a hostile client nor edited NBT can make the bubble
+	 * surface/HUD invisible. Shared by {@code ServerNet} (C2S requests) and
+	 * {@link #load} (NBT).
+	 */
+	public static boolean isValidColorOverride(int argb) {
+		return argb == NO_COLOR_OVERRIDE || (argb & 0xFF000000) == 0xFF000000;
+	}
 
 	/** Records a locally learned name-to-UUID association (lowercase key). */
 	public void rememberWhitelistUuid(String name, UUID uuid) {
@@ -111,8 +146,14 @@ public class ShieldState {
 		this.health = input.getFloatOr("health", DEFAULT_MAX_HEALTH);
 		this.maxHealth = input.getFloatOr("max_health", DEFAULT_MAX_HEALTH);
 		this.ownerUuid = input.read("owner_uuid", UUIDUtil.CODEC).orElse(null);
-		this.customName = input.getStringOr("custom_name", "");
-		this.colorOverride = input.getIntOr("color_override", NO_COLOR_OVERRIDE);
+		// Re-sanitize on load: a >32-char (or control-char) name edited into the NBT
+		// would throw an EncoderException in ShieldSyncS2C's stringUtf8(32) codec on
+		// every broadcast, breaking shield sync for the whole level.
+		this.customName = sanitizeName(input.getStringOr("custom_name", ""));
+		int loadedColorOverride = input.getIntOr("color_override", NO_COLOR_OVERRIDE);
+		// Reject non-opaque overrides edited into the NBT: a translucent/zero-alpha
+		// value would render an invisible HUD bar. Same rule as the C2S validation.
+		this.colorOverride = isValidColorOverride(loadedColorOverride) ? loadedColorOverride : NO_COLOR_OVERRIDE;
 
 		this.whitelistNames.clear();
 		for (String name : input.listOrEmpty("whitelist_names", Codec.STRING)) {

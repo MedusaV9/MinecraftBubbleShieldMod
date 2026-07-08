@@ -41,7 +41,7 @@ public final class ParticleSpiral implements InsideEffectBehavior {
 	/** v0: the original double helix (semantics unchanged from the 10-behavior era). */
 	private static void tickDoubleHelix(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
 		DustParticleOptions primary = new DustParticleOptions(ctx.pickColor(def.argbPrimary(), def.argbSecondary()) & 0xFFFFFF, 1.0F);
-		DustParticleOptions secondary = new DustParticleOptions(def.argbSecondary() & 0xFFFFFF, 1.0F);
+		DustParticleOptions secondary = new DustParticleOptions(ctx.secondaryColor(def.argbSecondary()) & 0xFFFFFF, 1.0F);
 		// Scale helix density with the bubble size so the strands stay visible at radius 100.
 		// Each point emits two particles (one per strand), so 64 points = 128 particles/pulse.
 		int points = ctx.scaleCount(Mth.clamp((int) Math.round(radius * 1.5), MIN_POINTS, MAX_POINTS), MAX_POINTS);
@@ -62,7 +62,7 @@ public final class ParticleSpiral implements InsideEffectBehavior {
 	/** v1: four strands twisting twice as fast; 32 points x 4 strands = 128 particles/pulse max. */
 	private static void tickQuadHelix(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
 		DustParticleOptions primary = new DustParticleOptions(ctx.pickColor(def.argbPrimary(), def.argbSecondary()) & 0xFFFFFF, 1.0F);
-		DustParticleOptions secondary = new DustParticleOptions(def.argbSecondary() & 0xFFFFFF, 1.0F);
+		DustParticleOptions secondary = new DustParticleOptions(ctx.secondaryColor(def.argbSecondary()) & 0xFFFFFF, 1.0F);
 		int points = ctx.scaleCount(Mth.clamp((int) Math.round(radius * 1.2 * def.behaviorStrength()), 12, MAX_POINTS / 2), MAX_POINTS / 2);
 		double phase = gameTime / 10.0 * 0.8;
 		for (int i = 0; i < points; i++) {
@@ -81,7 +81,7 @@ public final class ParticleSpiral implements InsideEffectBehavior {
 	/** v2: one slow wide ribbon; each point is a 3-particle dust chain across the ribbon width. */
 	private static void tickRibbon(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
 		DustColorTransitionOptions ribbon = new DustColorTransitionOptions(
-				ctx.pickColor(def.argbPrimary(), def.argbSecondary()) & 0xFFFFFF, def.argbSecondary() & 0xFFFFFF, Mth.clamp(def.behaviorStrength() + 0.3F, 1.1F, 1.8F));
+				ctx.pickColor(def.argbPrimary(), def.argbSecondary()) & 0xFFFFFF, ctx.secondaryColor(def.argbSecondary()) & 0xFFFFFF, Mth.clamp(def.behaviorStrength() + 0.3F, 1.1F, 1.8F));
 		// 42 points x 3 chain particles = 126 particles/pulse max.
 		int points = ctx.scaleCount(Mth.clamp((int) Math.round(radius * 1.5 * def.behaviorStrength()), MIN_POINTS, 42), 42);
 		double phase = gameTime / 10.0 * 0.5;

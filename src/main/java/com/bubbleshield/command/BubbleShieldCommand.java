@@ -1,6 +1,7 @@
 package com.bubbleshield.command;
 
 import java.util.Locale;
+import java.util.UUID;
 
 import com.bubbleshield.block.BubbleShieldBlockEntity;
 import com.bubbleshield.effect.EffectDefinition;
@@ -98,18 +99,22 @@ public final class BubbleShieldCommand {
 	}
 
 	/**
-	 * Applies the (clamped) effect id to the nearest projector within
-	 * {@link #MAX_TARGET_DISTANCE} blocks of the sender, gated by the same
-	 * owner/claim rule as the GUI payloads, keeping diameter/shape/mode/cycle.
+	 * Applies the (clamped) effect id to the nearest RETUNABLE projector (owned by
+	 * the sender, or still ownerless) within {@link #MAX_TARGET_DISTANCE} blocks of
+	 * the sender, gated by the same owner/claim rule as the GUI payloads, keeping
+	 * diameter/shape/mode/cycle. Filtering during the search means a neighbor's
+	 * closer projector never shadows your own.
 	 */
 	private static int set(CommandSourceStack source, int rawId) throws CommandSyntaxException {
 		ServerPlayer player = source.getPlayerOrException();
-		BubbleShieldBlockEntity nearest = nearestProjector(player, source.getPosition());
+		BubbleShieldBlockEntity nearest = nearestRetunableProjector(player);
 		if (nearest == null) {
 			source.sendFailure(Component.translatable("command.bubbleshield.set.no_projector", (int) MAX_TARGET_DISTANCE));
 			return 0;
 		}
 
+		// The claim side-effect (an ownerless shield adopts the sender) fires exactly
+		// once, on the selected shield only; the search itself is side-effect free.
 		if (!ServerNet.isOwner(player, nearest)) {
 			source.sendFailure(Component.translatable("command.bubbleshield.set.not_owner"));
 			return 0;
@@ -130,16 +135,25 @@ public final class BubbleShieldCommand {
 	}
 
 	/**
-	 * @return the loaded projector nearest to {@code position} in the player's level,
-	 * or null when none sits within {@link #MAX_TARGET_DISTANCE} blocks. Only consults
+	 * @return the loaded retunable (owned by the player, or ownerless) projector
+	 * nearest to the player, or null when none sits within
+	 * {@link #MAX_TARGET_DISTANCE} blocks. The player's level and position are used
+	 * as ONE consistent frame. The ownership filter is a PURE predicate — the
+	 * claiming side-effect of {@link ServerNet#isOwner} must only fire on the single
+	 * selected shield, never on every candidate scanned. Only consults
 	 * already-loaded shields ({@link ServerNet#loadedShields}), so the command can
 	 * never force a chunk load.
 	 */
-	private static @Nullable BubbleShieldBlockEntity nearestProjector(ServerPlayer player, Vec3 position) {
+	private static @Nullable BubbleShieldBlockEntity nearestRetunableProjector(ServerPlayer player) {
 		BubbleShieldBlockEntity nearest = null;
 		double best = MAX_TARGET_DISTANCE;
 		for (BubbleShieldBlockEntity shield : ServerNet.loadedShields(player.level())) {
-			double distance = position.distanceTo(Vec3.atCenterOf(shield.getBlockPos()));
+			UUID owner = shield.getShieldState().ownerUuid;
+			if (owner != null && !owner.equals(player.getUUID())) {
+				continue;
+			}
+
+			double distance = player.position().distanceTo(Vec3.atCenterOf(shield.getBlockPos()));
 			if (distance <= best) {
 				best = distance;
 				nearest = shield;

@@ -17,6 +17,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.phys.Vec3;
 
@@ -163,6 +164,57 @@ public class CapacitorGameTests {
 				helper.succeed();
 			}
 		});
+	}
+
+	/**
+	 * (c') Every device-slot change (capacitor, core, fuel — insert AND remove) marks
+	 * the projector's chunk unsaved. SimpleContainer.setChanged() is a no-op in 26.2,
+	 * so without the block entity hook an inactive projector's menu edits would never
+	 * dirty the chunk: a capacitor could vanish on reload (inserted but never saved)
+	 * or be duplicated (removed item kept in hand + resurrected from the stale save).
+	 * The synchronous tryMarkSaved -> mutate -> isUnsaved probe is race-free: gametest
+	 * bodies run on the server thread, so nothing else touches the chunk in between.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, padding = 16)
+	public void deviceSlotChangesMarkChunkDirty(GameTestHelper helper) {
+		BubbleShieldBlockEntity be = placeProjector(helper, PROJECTOR_POS, 4.0F);
+		LevelChunk chunk = helper.getLevel().getChunkAt(helper.absolutePos(PROJECTOR_POS));
+
+		// Insert: the capacitor landing in the slot must dirty the chunk immediately.
+		chunk.tryMarkSaved();
+		be.getCapacitorContainer().setItem(0, new ItemStack(ModItems.FLUX_CAPACITOR));
+		helper.assertTrue(chunk.isUnsaved(), "inserting a capacitor must mark the projector's chunk unsaved");
+
+		// Simulated save while the capacitor sits in the slot: it must round-trip
+		// without vanishing (the "lost on reload" half of the defect).
+		var registries = helper.getLevel().registryAccess();
+		CompoundTag tag = be.saveCustomOnly(registries);
+		BubbleShieldBlockEntity reloaded = new BubbleShieldBlockEntity(helper.absolutePos(PROJECTOR_POS), be.getBlockState());
+		reloaded.loadCustomOnly(TagValueInput.create(ProblemReporter.DISCARDING, registries, tag));
+		helper.assertTrue(
+				reloaded.getCapacitorContainer().getItem(0).is(ModItems.FLUX_CAPACITOR),
+				"the capacitor must survive a save/load round-trip after a slot insert");
+
+		// Remove: taking the capacitor out must dirty the chunk too, or a stale save
+		// would resurrect it next load (the "duplicated" half of the defect).
+		chunk.tryMarkSaved();
+		be.getCapacitorContainer().removeItem(0, 1);
+		helper.assertTrue(chunk.isUnsaved(), "removing the capacitor must mark the projector's chunk unsaved");
+		BubbleShieldBlockEntity reloadedAfterRemove = new BubbleShieldBlockEntity(helper.absolutePos(PROJECTOR_POS), be.getBlockState());
+		reloadedAfterRemove.loadCustomOnly(TagValueInput.create(ProblemReporter.DISCARDING, registries, be.saveCustomOnly(registries)));
+		helper.assertTrue(
+				reloadedAfterRemove.getCapacitorContainer().getItem(0).isEmpty(),
+				"a save taken after the removal must no longer resurrect the capacitor");
+
+		// The fuel and core device slots share the same container hook.
+		chunk.tryMarkSaved();
+		be.getFuelContainer().setItem(0, new ItemStack(Items.COAL));
+		helper.assertTrue(chunk.isUnsaved(), "inserting fuel must mark the projector's chunk unsaved");
+
+		chunk.tryMarkSaved();
+		be.getCoreContainer().setItem(0, new ItemStack(ModItems.RESONANT_CORE));
+		helper.assertTrue(chunk.isUnsaved(), "inserting an upgrade core must mark the projector's chunk unsaved");
+		helper.succeed();
 	}
 
 	/** (c) The capacitor slot round-trips through block entity NBT as capacitor_items. */

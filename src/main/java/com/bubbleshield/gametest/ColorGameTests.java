@@ -95,6 +95,38 @@ public class ColorGameTests {
 		helper.succeed();
 	}
 
+	/**
+	 * (a') secondaryColor resolves a dual-color behavior's SECOND strand/gradient
+	 * color: the derived override secondary when an override is set, the authored
+	 * secondary otherwise — so a recolor covers BOTH strands, not just the
+	 * pickColor-routed primary. Pure.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT)
+	public void secondaryColorHonorsOverride(GameTestHelper helper) {
+		int authoredSecondary = 0xFF1E9E6E;
+
+		// Unset: the authored secondary flows through untouched.
+		ContextState unset = new ContextState(1.0F, 1, false, false);
+		helper.assertTrue(unset.secondaryColor(authoredSecondary) == authoredSecondary,
+				"without an override, secondaryColor should return the authored secondary");
+		helper.assertTrue(ContextState.NEUTRAL.secondaryColor(authoredSecondary) == authoredSecondary,
+				"NEUTRAL should stay override-free for secondaryColor");
+
+		// Set: the derived (x0.55) override secondary replaces the authored one.
+		int expectedSecondary = ContextModifier.deriveOverrideSecondary(OPAQUE_RED);
+		helper.assertTrue(unset.withColorOverride(OPAQUE_RED).secondaryColor(authoredSecondary) == expectedSecondary,
+				"with an override, secondaryColor should return the derived override secondary");
+
+		// Unlike pickColor, secondaryColor is independent of useSecondaryColor: it is
+		// the fixed second color of a dual-color pattern, not the context-picked one.
+		helper.assertTrue(new ContextState(1.0F, 1, true, false).withColorOverride(OPAQUE_RED)
+						.secondaryColor(authoredSecondary) == expectedSecondary,
+				"secondaryColor must resolve the override secondary regardless of useSecondaryColor");
+		helper.assertTrue(new ContextState(1.0F, 1, true, false).secondaryColor(authoredSecondary) == authoredSecondary,
+				"secondaryColor must resolve the authored secondary regardless of useSecondaryColor");
+		helper.succeed();
+	}
+
 	/** (b) colorOverride NBT round-trip, including the -1 default for pre-V5 data. */
 	@GameTest(environment = ISOLATED_ENVIRONMENT)
 	public void colorOverrideNbtRoundTrip(GameTestHelper helper) {
@@ -118,6 +150,26 @@ public class ColorGameTests {
 		legacy.load(TagValueInput.create(ProblemReporter.DISCARDING, registries, new CompoundTag()));
 		helper.assertTrue(legacy.colorOverride == ShieldState.NO_COLOR_OVERRIDE,
 				"NBT without color_override should load as -1 (no override)");
+
+		// NBT is untrusted (editable via /data): a translucent or zero-alpha value
+		// edited into color_override would render an invisible HUD bar, so load
+		// applies the same isValidColorOverride rule as the C2S path and resets
+		// anything non-opaque back to the -1 sentinel.
+		for (int invalid : new int[] {0, 0x00C81414, 0x7FC81414, 0x00FFFFFF}) {
+			tag.putInt("color_override", invalid);
+			ShieldState tampered = new ShieldState();
+			tampered.load(TagValueInput.create(ProblemReporter.DISCARDING, registries, tag));
+			helper.assertTrue(tampered.colorOverride == ShieldState.NO_COLOR_OVERRIDE,
+					"a non-opaque color_override (" + Integer.toHexString(invalid)
+							+ ") edited into the NBT must reset to -1 on load, got "
+							+ Integer.toHexString(tampered.colorOverride));
+		}
+
+		// The shared rule is one and the same object of truth for both paths.
+		helper.assertTrue(ShieldState.isValidColorOverride(ShieldState.NO_COLOR_OVERRIDE)
+						&& ShieldState.isValidColorOverride(OPAQUE_RED)
+						&& !ShieldState.isValidColorOverride(0x7FC81414),
+				"ShieldState.isValidColorOverride should accept -1/opaque and reject translucent");
 		helper.succeed();
 	}
 

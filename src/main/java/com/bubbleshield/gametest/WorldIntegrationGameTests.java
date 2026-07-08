@@ -212,6 +212,114 @@ public class WorldIntegrationGameTests {
 	}
 
 	/**
+	 * (b') Break-by-damage is sculk-audible: {@code applyShieldDamage} depletes the
+	 * active shield's health directly (the path linked partners take when another
+	 * shield's tick splits damage to them), which flips {@code state.active} without
+	 * going through {@code setActive(false)}. The sensor is placed AFTER activation
+	 * so the BLOCK_ACTIVATE vibration is never heard and the deactivation is the
+	 * only candidate vibration.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 200, padding = 16)
+	public void sculkSensorHearsBreakByDamage(GameTestHelper helper) {
+		BubbleShieldBlockEntity be = placeProjector(helper);
+		be.addFuelSeconds(PLENTY_OF_FUEL);
+		helper.assertTrue(be.tryActivate(), "the fueled shield should activate");
+
+		helper.setBlock(SENSOR_POS, Blocks.SCULK_SENSOR);
+		helper.startSequence()
+				.thenExecuteAfter(SENSOR_SETTLE_TICKS, () -> {
+					helper.assertTrue(
+							SculkSensorBlock.getPhase(helper.getBlockState(SENSOR_POS)) == SculkSensorPhase.INACTIVE,
+							"the settled sensor should be inactive before the break");
+					be.applyShieldDamage(1000.0F);
+					helper.assertTrue(!be.getShieldState().active, "1000 damage should break the active shield");
+				})
+				.thenWaitUntil(() -> helper.assertTrue(
+						SculkSensorBlock.getPhase(helper.getBlockState(SENSOR_POS)) == SculkSensorPhase.ACTIVE,
+						"the sensor should hear the BLOCK_DEACTIVATE vibration of a shield broken by damage"))
+				.thenSucceed();
+	}
+
+	/**
+	 * (b'') Fuel-out is sculk-audible: the passive drain inside ShieldLogic.serverTick
+	 * flips {@code state.active} directly when the last fuel-second burns, which the
+	 * block entity's wasActive snapshot turns into a BLOCK_DEACTIVATE. Same
+	 * sensor-after-activation trick as the break test.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 200, padding = 16)
+	public void sculkSensorHearsFuelOutDeactivation(GameTestHelper helper) {
+		BubbleShieldBlockEntity be = placeProjector(helper);
+		// Enough fuel that the shield outlives the sensor's 10-tick settling window
+		// (first drain within 20 ticks of activation, one more every 20 after), but
+		// runs dry well within maxTicks: deactivation ~81-100 ticks after activation.
+		be.addFuelSeconds(5);
+		helper.assertTrue(be.tryActivate(), "the fueled shield should activate");
+
+		helper.setBlock(SENSOR_POS, Blocks.SCULK_SENSOR);
+		helper.startSequence()
+				.thenExecuteAfter(SENSOR_SETTLE_TICKS, () -> helper.assertTrue(
+						SculkSensorBlock.getPhase(helper.getBlockState(SENSOR_POS)) == SculkSensorPhase.INACTIVE,
+						"the settled sensor should be inactive while the shield burns its fuel"))
+				.thenWaitUntil(() -> helper.assertTrue(
+						!be.getShieldState().active,
+						"the shield should deactivate when the fuel runs out"))
+				.thenWaitUntil(() -> helper.assertTrue(
+						SculkSensorBlock.getPhase(helper.getBlockState(SENSOR_POS)) == SculkSensorPhase.ACTIVE,
+						"the sensor should hear the fuel-out BLOCK_DEACTIVATE vibration"))
+				.thenSucceed();
+	}
+
+	/**
+	 * (a''') The set command targets the nearest RETUNABLE projector: a neighbor's
+	 * (differently owned) projector standing closer to the sender must not shadow
+	 * the sender's own — the ownership filter applies during the nearest search,
+	 * not after it.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 200, padding = 16)
+	public void commandSetPrefersOwnedProjectorOverCloserForeign(GameTestHelper helper) {
+		BubbleShieldBlockEntity foreign = placeProjectorAt(helper, new BlockPos(1, 2, 4));
+		UUID neighborUuid = UUID.randomUUID();
+		foreign.getShieldState().ownerUuid = neighborUuid;
+
+		BubbleShieldBlockEntity own = placeProjectorAt(helper, new BlockPos(7, 2, 4));
+
+		// The player stands right next to the NEIGHBOR's projector, ~6 blocks from
+		// their own; both are within the command's 16-block reach.
+		ServerPlayer player = helper.makeMockServerPlayerInLevel();
+		Vec3 foreignCenter = Vec3.atCenterOf(helper.absolutePos(new BlockPos(1, 2, 4)));
+		player.snapTo(foreignCenter.x + 1.5, foreignCenter.y - 0.5, foreignCenter.z);
+		own.getShieldState().ownerUuid = player.getUUID();
+
+		runCommand(helper, player, "bubbleshield set 42");
+
+		helper.runAfterDelay(2, () -> {
+			try {
+				helper.assertTrue(
+						own.getShieldState().effectId == 42,
+						"the sender's own projector should be retuned even though a foreign one is closer, got effect "
+								+ own.getShieldState().effectId);
+				helper.assertTrue(
+						foreign.getShieldState().effectId == 0,
+						"the closer foreign projector must stay untouched, got effect " + foreign.getShieldState().effectId);
+				helper.assertTrue(
+						neighborUuid.equals(foreign.getShieldState().ownerUuid),
+						"the foreign projector's owner must never change during the search");
+			} finally {
+				helper.getLevel().getServer().getPlayerList().remove(player);
+			}
+
+			helper.succeed();
+		});
+	}
+
+	private static BubbleShieldBlockEntity placeProjectorAt(GameTestHelper helper, BlockPos pos) {
+		helper.setBlock(pos, ModBlocks.BUBBLE_SHIELD_PROJECTOR);
+		BubbleShieldBlockEntity be = helper.getBlockEntity(pos, BubbleShieldBlockEntity.class);
+		be.getShieldState().targetRadius = 4.0F;
+		return be;
+	}
+
+	/**
 	 * (c) The loot injection: 200 fresh-context draws of the Ancient City and End City
 	 * treasure tables each surface at least one Resonant Core (the injected pool is a
 	 * 1-in-10 per chest; 200 misses would be a ~7e-10 fluke), while an untouched table

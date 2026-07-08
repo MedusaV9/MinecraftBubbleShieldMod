@@ -63,7 +63,7 @@ public final class HeartbeatPulse implements InsideEffectBehavior {
 		// visible instead of turning sparse at large radii.
 		int points = ctx.scaleCount(Mth.clamp((int) Math.round(Math.PI * 2.0 * ringRadius / 2.0), MIN_POINTS, MAX_POINTS), MAX_POINTS);
 		DustParticleOptions dust = new DustParticleOptions(
-				(phase % 2L == 0L ? ctx.pickColor(def.argbPrimary(), def.argbSecondary()) : def.argbSecondary()) & 0xFFFFFF, dustScale);
+				(phase % 2L == 0L ? ctx.pickColor(def.argbPrimary(), def.argbSecondary()) : ctx.secondaryColor(def.argbSecondary())) & 0xFFFFFF, dustScale);
 		for (int i = 0; i < points; i++) {
 			double angle = Math.PI * 2.0 * i / points;
 			double x = center.x + Math.cos(angle) * ringRadius;

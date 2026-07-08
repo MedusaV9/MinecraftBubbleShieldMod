@@ -46,7 +46,7 @@ public final class ServerNet {
 	/** Hard cap on whitelist entries to keep payloads and NBT bounded. */
 	public static final int MAX_WHITELIST_SIZE = 64;
 	/** Hard cap on the custom shield name, matching the SetNameC2S/ShieldSyncS2C codecs. */
-	public static final int MAX_SHIELD_NAME_LENGTH = 32;
+	public static final int MAX_SHIELD_NAME_LENGTH = ShieldState.MAX_NAME_LENGTH;
 
 	/**
 	 * Loaded shield projectors per level, used to sync existing shields to joining players.
@@ -200,27 +200,25 @@ public final class ServerNet {
 
 	/**
 	 * Sanitizes a requested custom shield name: control/formatting characters are
-	 * stripped ({@link StringUtil#filterText}), surrounding whitespace is trimmed and
-	 * the result is capped at {@link #MAX_SHIELD_NAME_LENGTH} characters. May return
-	 * an empty string, which means "clear the custom name".
+	 * stripped, surrounding whitespace is trimmed and the result is capped at
+	 * {@link #MAX_SHIELD_NAME_LENGTH} characters. May return an empty string, which
+	 * means "clear the custom name". Delegates to {@link ShieldState#sanitizeName}
+	 * so the C2S request path and the NBT load path share the exact same rule.
 	 */
 	public static String sanitizeShieldName(String raw) {
-		String name = StringUtil.filterText(raw).trim();
-		if (name.length() > MAX_SHIELD_NAME_LENGTH) {
-			name = name.substring(0, MAX_SHIELD_NAME_LENGTH).trim();
-		}
-
-		return name;
+		return ShieldState.sanitizeName(raw);
 	}
 
 	/**
 	 * Pure validation for a requested shield color override: -1 means "reset to the
 	 * effect's authored palette", every other accepted value must be a fully opaque
 	 * ARGB color (alpha byte 0xFF). Translucent or alpha-less colors are rejected so
-	 * a hostile client can never make the bubble surface/HUD invisible.
+	 * a hostile client can never make the bubble surface/HUD invisible. Delegates to
+	 * {@link ShieldState#isValidColorOverride} so the C2S request path and the NBT
+	 * load path share the exact same rule.
 	 */
 	public static boolean isValidColorOverride(int argb) {
-		return argb == ShieldState.NO_COLOR_OVERRIDE || (argb & 0xFF000000) == 0xFF000000;
+		return ShieldState.isValidColorOverride(argb);
 	}
 
 	private static boolean containsIgnoreCase(Set<String> names, String name) {

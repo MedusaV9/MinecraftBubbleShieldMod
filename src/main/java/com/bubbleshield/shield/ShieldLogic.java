@@ -406,8 +406,10 @@ public final class ShieldLogic {
 
 			Vec3 prev = new Vec3(projectile.xo, projectile.yo, projectile.zo);
 			Vec3 current = projectile.position();
-			// Only inbound boundary crossings trigger; a projectile that was deflected
-			// back out (both positions inside, then inside->outside) is never re-hit.
+			// Only inbound boundary crossings trigger. Already-intercepted projectiles
+			// never re-trigger: their prev-position was snapped onto the current
+			// position below, so from this tick on prev is inside (and the deflected
+			// outbound flight is inside->outside, which never counts as crossing in).
 			if (!ShieldGeometry.crossedInto(state.shape, center, radius, prev, current)) {
 				continue;
 			}
@@ -445,9 +447,25 @@ public final class ShieldLogic {
 				damage = PROJECTILE_DAMAGE;
 			}
 
+			// Neutralize this projectile's boundary crossing for the rest of the tick:
+			// a DEFLECTED projectile keeps existing with its old prev-tick position, so
+			// a second overlapping shield ticking later in the same server tick would
+			// see the same outside->inside crossing and intercept it AGAIN (double
+			// damage split). Snapping the prev-position fields (xo/yo/zo and their
+			// xOld/yOld/zOld mirrors) to the current position makes crossedInto false
+			// for every other shield this tick, and next tick prev is inside, so the
+			// outbound flight never re-triggers either.
+			projectile.xo = projectile.getX();
+			projectile.yo = projectile.getY();
+			projectile.zo = projectile.getZ();
+			projectile.xOld = projectile.getX();
+			projectile.yOld = projectile.getY();
+			projectile.zOld = projectile.getZ();
+
 			// Resonance link: same-owner active shields overlapping this one split the
-			// damage evenly. The projectile was already discarded/deflected above, so a
-			// linked partner's own tick can never re-intercept it for double damage.
+			// damage evenly. Discarded projectiles are gone; deflected ones had their
+			// crossing neutralized above, so a linked partner's own tick can never
+			// re-intercept the same projectile for a second damage split.
 			// Partners take their share through applyShieldDamage (their own tier's
 			// break cooldown, break sound and criteria); the hit shield keeps the local
 			// applyDamage path so this loop's state/broke handling stays authoritative.

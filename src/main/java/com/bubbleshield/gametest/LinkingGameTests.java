@@ -16,6 +16,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.projectile.arrow.Arrow;
+import net.minecraft.world.entity.projectile.hurtingprojectile.SmallFireball;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -154,6 +155,65 @@ public class LinkingGameTests {
 					helper.assertTrue(
 							stateB.health == stateB.maxHealth,
 							"the far same-owner shield must be untouched, health is " + stateB.health);
+				})
+				.thenSucceed();
+	}
+
+	/**
+	 * (a') Two overlapping linked shields must intercept the SAME projectile only
+	 * ONCE. A DEFLECTED projectile (unlike a discarded arrow) keeps existing with its
+	 * stale prev-tick position, so before the prev-position neutralization both
+	 * shields' ticks saw the same outside->inside crossing in one server tick and
+	 * each ran its own damage split (double damage, and the double-reversed fireball
+	 * kept flying inward). The fireball drops on the exact x-midplane between the two
+	 * projectors, so by symmetry it crosses BOTH shield boundaries on the SAME tick —
+	 * the worst case. Total damage must be HURTING_PROJECTILE_DAMAGE, split once.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, structure = ARENA_STRUCTURE, maxTicks = 200, padding = 16)
+	public void linkedShieldsInterceptFireballOnce(GameTestHelper helper) {
+		UUID owner = UUID.randomUUID();
+		BubbleShieldBlockEntity shieldA = placeProjector(helper, SHIELD_A_POS, owner);
+		// 2 blocks east of A: heavily overlapping, and the boundary crossing on the
+		// midplane (x offset 1 from each center) sits at relative y ~10.44 — safely
+		// above the framework's barrier ceiling at the structure top (y 8).
+		BubbleShieldBlockEntity shieldB = placeProjector(helper, SHIELD_A_POS.east(2), owner);
+		helper.assertTrue(shieldA.tryActivate(), "shield A should activate");
+		helper.assertTrue(shieldB.tryActivate(), "shield B should activate");
+		helper.assertTrue(
+				ShieldLinking.findLinked(shieldA, List.of(shieldA, shieldB)).size() == 2,
+				"the two overlapping same-owner shields should be linked");
+
+		// On the x-midplane between the centers (4.5 and 6.5): equidistant from both,
+		// falling slowly enough (0.75/tick) that the first inside sample stays above
+		// the barrier ceiling. Deflection keeps the fireball alive (never absorbed).
+		SmallFireball fireball = helper.spawn(EntityTypes.SMALL_FIREBALL, new Vec3(5.5, 14.5, 4.5));
+		fireball.setDeltaMovement(0.0, -0.75, 0.0);
+
+		ShieldState stateA = shieldA.getShieldState();
+		ShieldState stateB = shieldB.getShieldState();
+		float expected = ShieldState.DEFAULT_MAX_HEALTH - ShieldLogic.HURTING_PROJECTILE_DAMAGE / 2.0F;
+		helper.startSequence()
+				.thenWaitUntil(() -> helper.assertTrue(stateA.health < stateA.maxHealth, "shield A should take damage from the intercepted fireball"))
+				// Extra ticks so a second interception (by the partner's tick on the
+				// same crossing) would be caught by the exact-value asserts.
+				.thenExecuteAfter(10, () -> {
+					helper.assertTrue(
+							Math.abs(stateA.health - expected) <= TOLERANCE,
+							"one interception split once: shield A should lose exactly "
+									+ ShieldLogic.HURTING_PROJECTILE_DAMAGE / 2.0F + ", health is " + stateA.health);
+					helper.assertTrue(
+							Math.abs(stateB.health - expected) <= TOLERANCE,
+							"one interception split once: shield B should lose exactly "
+									+ ShieldLogic.HURTING_PROJECTILE_DAMAGE / 2.0F + ", health is " + stateB.health);
+					float totalDamage = (stateA.maxHealth - stateA.health) + (stateB.maxHealth - stateB.health);
+					helper.assertTrue(
+							Math.abs(totalDamage - ShieldLogic.HURTING_PROJECTILE_DAMAGE) <= TOLERANCE,
+							"the total damage across both linked shields must be " + ShieldLogic.HURTING_PROJECTILE_DAMAGE
+									+ " (split once, not twice), got " + totalDamage);
+					helper.assertTrue(fireball.isAlive(), "the deflected fireball must stay alive (not be absorbed)");
+					helper.assertTrue(
+							fireball.getDeltaMovement().y > 0.0,
+							"the fireball must be neutralized outbound (single REVERSE deflection), not re-reversed inward");
 				})
 				.thenSucceed();
 	}

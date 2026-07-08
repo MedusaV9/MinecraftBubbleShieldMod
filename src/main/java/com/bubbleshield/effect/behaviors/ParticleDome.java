@@ -42,7 +42,7 @@ public final class ParticleDome implements InsideEffectBehavior {
 	/** v0: the original single rotating ring (semantics unchanged from the 10-behavior era). */
 	private static void tickSingleRing(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
 		DustParticleOptions primary = new DustParticleOptions(ctx.pickColor(def.argbPrimary(), def.argbSecondary()) & 0xFFFFFF, 1.0F);
-		DustParticleOptions secondary = new DustParticleOptions(def.argbSecondary() & 0xFFFFFF, 0.7F);
+		DustParticleOptions secondary = new DustParticleOptions(ctx.secondaryColor(def.argbSecondary()) & 0xFFFFFF, 0.7F);
 		// Keep the point spacing roughly constant (one point per ~2 blocks of circumference)
 		// so the ring does not look sparse at radius 100.
 		int points = ctx.scaleCount(Mth.clamp((int) Math.round(Math.PI * 2.0 * radius / 2.0), MIN_POINTS, MAX_POINTS), MAX_POINTS);
@@ -77,7 +77,7 @@ public final class ParticleDome implements InsideEffectBehavior {
 	/** v2: latitude rings of color-transition dust forming a slowly spinning dome-cap grid. */
 	private static void tickDomeCap(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
 		DustColorTransitionOptions dust = new DustColorTransitionOptions(
-				ctx.pickColor(def.argbPrimary(), def.argbSecondary()) & 0xFFFFFF, def.argbSecondary() & 0xFFFFFF, Mth.clamp(def.behaviorStrength(), 0.8F, 1.5F));
+				ctx.pickColor(def.argbPrimary(), def.argbSecondary()) & 0xFFFFFF, ctx.secondaryColor(def.argbSecondary()) & 0xFFFFFF, Mth.clamp(def.behaviorStrength(), 0.8F, 1.5F));
 		double spin = gameTime / 10.0 * 0.15;
 		int latRows = 4;
 		int sent = 0;

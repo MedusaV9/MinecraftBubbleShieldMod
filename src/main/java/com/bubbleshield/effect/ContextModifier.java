@@ -68,6 +68,18 @@ public final class ContextModifier {
 
 			return this.useSecondaryColor ? argbSecondary : argbPrimary;
 		}
+
+		/**
+		 * Resolves a behavior's SECOND dust strand/gradient color: the derived override
+		 * secondary when the owner-picked override pair is set, else the authored
+		 * {@code argbSecondary}. Dual-color behaviors (spiral strands, dome rings,
+		 * heartbeat alternation, transition gradients) must route their second color
+		 * through this so a color override recolors BOTH strands, as the recolor
+		 * tooltip promises — not just the {@link #pickColor}-routed primary.
+		 */
+		public int secondaryColor(int argbSecondary) {
+			return this.overridePrimary != -1 ? this.overrideSecondary : argbSecondary;
+		}
 	}
 
 	/**

@@ -16,8 +16,11 @@ import com.bubbleshield.shield.ShieldShape;
 import com.bubbleshield.shield.ShieldState;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+
+import com.mojang.serialization.Codec;
 
 import net.fabricmc.fabric.api.menu.v1.ExtendedMenuProvider;
 
@@ -62,11 +65,11 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 
 	private final ShieldState shieldState = new ShieldState();
 	/** One-slot fuel inventory shown in the projector menu; consumed into fuel-seconds each tick. */
-	private final SimpleContainer fuelContainer = new SimpleContainer(1);
+	private final SimpleContainer fuelContainer = this.deviceContainer();
 	/** One-slot upgrade-core inventory; its content derives the shield tier (see {@link #tier()}). */
-	private final SimpleContainer coreContainer = new SimpleContainer(1);
+	private final SimpleContainer coreContainer = this.deviceContainer();
 	/** One-slot flux-capacitor inventory; its content drives {@link #hasCapacitor()}. */
-	private final SimpleContainer capacitorContainer = new SimpleContainer(1);
+	private final SimpleContainer capacitorContainer = this.deviceContainer();
 	/** Tier applied by the last {@link #refreshTier()} pass; -1 forces a refresh on the first tick. */
 	private int lastTier = -1;
 	/** Last observed redstone level; persisted so chunk reloads do not fake an edge. */
@@ -121,6 +124,25 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 
 	public BubbleShieldBlockEntity(BlockPos worldPosition, BlockState blockState) {
 		super(ModBlockEntities.BUBBLE_SHIELD_PROJECTOR, worldPosition, blockState);
+	}
+
+	/**
+	 * A one-slot device inventory (fuel/core/capacitor) that marks this block entity
+	 * dirty on every content change. {@link SimpleContainer#setChanged()} is a no-op
+	 * in 26.2, so without this hook a menu-driven insert/remove would never flag the
+	 * chunk unsaved while the projector is otherwise idle — a capacitor could vanish
+	 * on reload or be duplicated from a stale save. {@link BlockEntity#setChanged()}
+	 * no-ops while {@code level == null} (i.e. during load), so
+	 * {@code fromItemList}'s {@code clearContent} stays safe.
+	 */
+	private SimpleContainer deviceContainer() {
+		return new SimpleContainer(1) {
+			@Override
+			public void setChanged() {
+				super.setChanged();
+				BubbleShieldBlockEntity.this.setChanged();
+			}
+		};
 	}
 
 	public ShieldState getShieldState() {
@@ -191,8 +213,15 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		this.consumeFuelSlot();
 		this.refreshTier();
 		if (this.level instanceof ServerLevel serverLevel) {
+			// ShieldLogic flips state.active directly on fuel-out and break-by-damage;
+			// snapshot the flag so those paths stay sculk-audible like setActive(false).
+			boolean wasActive = this.shieldState.active;
 			if (ShieldLogic.serverTick(serverLevel, this.worldPosition, this.shieldState, this.tier(), this.hasCapacitor(), this)) {
 				this.markUpdated();
+			}
+
+			if (wasActive && !this.shieldState.active) {
+				serverLevel.gameEvent(GameEvent.BLOCK_DEACTIVATE, this.worldPosition, GameEvent.Context.of(this.getBlockState()));
 			}
 
 			// Runs even when the shield logic reported no change: deactivations from any
@@ -471,10 +500,18 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	 */
 	public void applyShieldDamage(float amount) {
 		long gameTime = this.level != null ? this.level.getGameTime() : 0L;
+		boolean wasActive = this.shieldState.active;
 		boolean broke = ShieldLogic.applyDamage(this.shieldState, amount, gameTime, ShieldLogic.breakCooldownTicks(this.tier()));
 		if (broke && this.level instanceof ServerLevel serverLevel) {
 			serverLevel.playSound(null, this.worldPosition, SoundEvents.SHIELD_BREAK.value(), SoundSource.BLOCKS, 1.0F, 1.0F);
 			ModCriteria.fireShieldBroken(serverLevel, this.shieldState.ownerUuid);
+			// A break here is a real active->inactive transition and must stay
+			// sculk-audible: this path covers linked-partner damage applied from
+			// ANOTHER shield's tick, which this shield's own serverTick snapshot
+			// cannot see (the flag is already false by the time it ticks).
+			if (wasActive) {
+				serverLevel.gameEvent(GameEvent.BLOCK_DEACTIVATE, this.worldPosition, GameEvent.Context.of(this.getBlockState()));
+			}
 		}
 
 		this.markUpdated();
@@ -782,9 +819,13 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	protected void loadAdditional(ValueInput input) {
 		super.loadAdditional(input);
 		this.shieldState.load(input);
-		this.powered = input.getBooleanOr("powered", false);
-		// The persisted level counts as an observation; do not re-seed on the first tick.
-		this.poweredInitialized = true;
+		// Presence-gated: only a save that actually recorded the level counts as an
+		// observation. A legacy (pre-"powered") save next to a steady redstone source
+		// must re-seed from the live signal on the first tick (see serverTick), or the
+		// next unrelated neighbor update would be misread as a rising edge.
+		Optional<Boolean> savedPowered = input.read("powered", Codec.BOOL);
+		this.powered = savedPowered.orElse(false);
+		this.poweredInitialized = savedPowered.isPresent();
 		this.fuelContainer.fromItemList(input.listOrEmpty("fuel_items", ItemStack.CODEC));
 		this.coreContainer.fromItemList(input.listOrEmpty("core_items", ItemStack.CODEC));
 		this.capacitorContainer.fromItemList(input.listOrEmpty("capacitor_items", ItemStack.CODEC));
