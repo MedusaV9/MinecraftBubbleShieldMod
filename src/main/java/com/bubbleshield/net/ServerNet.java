@@ -147,10 +147,20 @@ public final class ServerNet {
 			syncLevelShields(handler.player, handler.player.level());
 		});
 
+		// Boss-bar membership hardening: shields normally diff their boss event members
+		// only when the projector chunk ticks, so a logged-out player's ServerPlayer ref
+		// would otherwise be held (and packets attempted) until the next projector tick.
+		// Sweep the player out of every loaded shield's boss event immediately.
+		ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> removeFromBossEvents(handler.player));
+
 		// The client clears its shield replica whenever it gets a new ClientLevel, so every
 		// server-side path that moves a player to a (new) level must re-send the snapshots.
-		ServerEntityLevelChangeEvents.AFTER_PLAYER_CHANGE_LEVEL.register(
-			(player, origin, destination) -> syncLevelShields(player, destination));
+		// The same sweep applies: the origin level's shields would keep the teleported
+		// player on their boss bars until their projector chunk next ticks.
+		ServerEntityLevelChangeEvents.AFTER_PLAYER_CHANGE_LEVEL.register((player, origin, destination) -> {
+			removeFromBossEvents(player);
+			syncLevelShields(player, destination);
+		});
 		ServerPlayerEvents.AFTER_RESPAWN.register(
 			(oldPlayer, newPlayer, alive) -> syncLevelShields(newPlayer, newPlayer.level()));
 
@@ -173,6 +183,23 @@ public final class ServerNet {
 
 		for (BubbleShieldBlockEntity shield : shields) {
 			ServerPlayNetworking.send(player, syncPayload(shield, level));
+		}
+	}
+
+	/**
+	 * Removes the player from every loaded shield's boss event, across all levels
+	 * ({@code ServerBossEvent.removePlayer} is a no-op for non-members). A player
+	 * still (or newly) inside a shield is re-added by the projector's next
+	 * {@code updateBossBar} tick, so sweeping broadly is safe.
+	 */
+	private static void removeFromBossEvents(ServerPlayer player) {
+		for (Set<BubbleShieldBlockEntity> shields : LOADED_SHIELDS.values()) {
+			for (BubbleShieldBlockEntity shield : shields) {
+				var bossEvent = shield.getBossEvent();
+				if (bossEvent != null) {
+					bossEvent.removePlayer(player);
+				}
+			}
 		}
 	}
 

@@ -32,9 +32,9 @@ public class CapacitorGameTests {
 	/**
 	 * A dedicated (but otherwise vanilla-default) test environment,
 	 * {@code data/bubbleshield/test_environment/capacitor.json}. Same rationale as
-	 * {@code ColorGameTests.ISOLATED_ENVIRONMENT}: this class spawns identically-named
-	 * "test-mock-player" mocks, so it gets its own batch instead of reshuffling the
-	 * shared default batch and risking PlayerList name collisions.
+	 * {@code ColorGameTests.ISOLATED_ENVIRONMENT}: its own batch avoids reshuffling
+	 * the shared default batch past the runner's 50-test cap. (Mock players are now
+	 * uniquely named via {@link MockPlayers}, so PlayerList name collisions are gone.)
 	 */
 	private static final String ISOLATED_ENVIRONMENT = "bubbleshield:capacitor";
 	private static final BlockPos PROJECTOR_POS = new BlockPos(4, 2, 4);
@@ -245,7 +245,7 @@ public class CapacitorGameTests {
 	public void quickMoveRoutesCapacitor(GameTestHelper helper) {
 		BubbleShieldBlockEntity be = placeProjector(helper, PROJECTOR_POS, 4.0F);
 
-		ServerPlayer player = helper.makeMockServerPlayerInLevel();
+		ServerPlayer player = MockPlayers.createUniqueMockPlayer(helper);
 		try {
 			Vec3 center = Vec3.atCenterOf(helper.absolutePos(PROJECTOR_POS));
 			player.snapTo(center.x + 1.5, center.y - 0.5, center.z);
@@ -280,7 +280,7 @@ public class CapacitorGameTests {
 					menu.getSlot(BubbleShieldMenu.FUEL_SLOT).getItem().is(Items.COAL),
 					"quickMove should still route fuels into slot 0");
 		} finally {
-			helper.getLevel().getServer().getPlayerList().remove(player);
+			MockPlayers.removeMockPlayer(helper, player);
 		}
 
 		helper.succeed();

@@ -1,9 +1,7 @@
 package com.bubbleshield.client.hud;
 
 import com.bubbleshield.client.ClientShieldManager;
-import com.bubbleshield.effect.EffectDefinition;
-import com.bubbleshield.effect.EffectRegistry;
-import com.bubbleshield.shield.ShieldState;
+import com.bubbleshield.client.mixin.BossHealthOverlayAccessor;
 
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElement;
 
@@ -11,21 +9,26 @@ import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
-import net.minecraft.util.Mth;
 
 /**
  * Top-center HUD status shown while the local player stands inside an active bubble
- * shield: the effect name, a 100px health bar tinted with the effect's primary color,
- * and the shield tier (when upgraded with a core).
+ * shield: the shield tier (when upgraded with a core).
+ *
+ * <p>The shield's name and health are deliberately NOT drawn here: the server-side
+ * boss bar (v3) already shows both — name above a health-progress bar — for exactly
+ * the same "inside an active shield" condition, so drawing them again would overlap
+ * the vanilla boss-bar stack. Only the tier, which the boss bar does not carry, is
+ * rendered, and it is positioned directly below the boss-bar stack (whose rows start
+ * at y = 12 and step 19px per bar, per {@code BossHealthOverlay.extractRenderState}).
  *
  * <p>Registered via Fabric's {@code HudElementRegistry.addLast}, so it renders after
  * the vanilla HUD layers and is hidden together with them (F1).
  */
 public final class ShieldHudElement implements HudElement {
-	private static final int TOP_MARGIN = 4;
-	private static final int BAR_WIDTH = 100;
-	private static final int BAR_HEIGHT = 5;
-	private static final int BAR_BACKGROUND = 0xE0101010;
+	/** First boss-bar row: name text at y = 12 - 9, bar at y = 12 (see BossHealthOverlay). */
+	private static final int BOSS_BAR_STACK_TOP = 12;
+	/** Vertical distance between two boss-bar rows (10px gap + 9px name line). */
+	private static final int BOSS_BAR_ROW_STEP = 10 + 9;
 	private static final int TEXT_COLOR = 0xFFFFFFFF;
 
 	@Override
@@ -36,34 +39,34 @@ public final class ShieldHudElement implements HudElement {
 		}
 
 		ClientShieldManager.ClientShield shield = ClientShieldManager.findSurroundingShield(mc);
-		if (shield == null) {
+		if (shield == null || shield.tier() <= 0) {
 			return;
 		}
 
-		EffectDefinition def = EffectRegistry.get(shield.effectId());
 		int centerX = graphics.guiWidth() / 2;
-		int y = TOP_MARGIN;
+		int y = bossBarStackBottom(mc, graphics.guiHeight());
+		graphics.centeredText(mc.font, Component.translatable("gui.bubbleshield.tier", shield.tier()), centerX, y, TEXT_COLOR);
+	}
 
-		// The owner-set custom name takes precedence; unset shields show the effect name.
-		Component title = shield.customName().isEmpty()
-				? Component.translatable(def.nameKey())
-				: Component.literal(shield.customName());
-		graphics.centeredText(mc.font, title, centerX, y, TEXT_COLOR);
-		y += mc.font.lineHeight + 2;
-
-		// 100px health bar: dark backdrop (1px frame) + primary-colored fill. The
-		// owner's recolor (opaque ARGB; -1 = unset) replaces the authored primary.
-		int barX = centerX - BAR_WIDTH / 2;
-		int fill = Mth.clamp(Math.round(BAR_WIDTH * shield.healthFrac()), 0, BAR_WIDTH);
-		int fillColor = shield.colorOverride() != ShieldState.NO_COLOR_OVERRIDE ? shield.colorOverride() : def.argbPrimary();
-		graphics.fill(barX - 1, y - 1, barX + BAR_WIDTH + 1, y + BAR_HEIGHT + 1, BAR_BACKGROUND);
-		if (fill > 0) {
-			graphics.fill(barX, y, barX + fill, y + BAR_HEIGHT, fillColor);
+	/**
+	 * The y coordinate of the first free row below the vanilla boss-bar stack,
+	 * mirroring {@code BossHealthOverlay.extractRenderState}'s layout loop: rows start
+	 * at yOffset = 12 (name at yOffset - 9, 5px bar at yOffset), advance 19px per bar
+	 * and stop once yOffset passes a third of the screen height. The returned value is
+	 * where the NEXT row's name line would start, so the tier text can never collide
+	 * with any rendered bar (ours or another boss's). With no bars at all this floors
+	 * at the stack top (y = 12) rather than drifting into the very top edge.
+	 */
+	private static int bossBarStackBottom(Minecraft mc, int guiHeight) {
+		int events = ((BossHealthOverlayAccessor) mc.gui.hud.getBossOverlay()).bubbleshield$events().size();
+		int yOffset = BOSS_BAR_STACK_TOP;
+		for (int i = 0; i < events; i++) {
+			yOffset += BOSS_BAR_ROW_STEP;
+			if (yOffset >= guiHeight / 3) {
+				break;
+			}
 		}
-		y += BAR_HEIGHT + 3;
 
-		if (shield.tier() > 0) {
-			graphics.centeredText(mc.font, Component.translatable("gui.bubbleshield.tier", shield.tier()), centerX, y, TEXT_COLOR);
-		}
+		return Math.max(yOffset - 9, BOSS_BAR_STACK_TOP);
 	}
 }

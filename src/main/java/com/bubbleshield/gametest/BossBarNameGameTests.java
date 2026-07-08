@@ -37,12 +37,12 @@ public class BossBarNameGameTests {
 		be.addFuelSeconds(PLENTY_OF_FUEL);
 
 		// An in-level ServerPlayer: boss bar membership requires a real connection
-		// (addPlayer sends packets) and the level's player list. Whitelist it (mock
-		// players are named "test-mock-player") so the barrier does not expel it,
-		// then park it inside the radius-4 bubble. The player is removed from the
-		// PlayerList on every exit path so later crowd-scale tests see no phantoms.
-		ServerPlayer player = helper.makeMockServerPlayerInLevel();
-		Runnable cleanup = () -> helper.getLevel().getServer().getPlayerList().remove(player);
+		// (addPlayer sends packets) and the level's player list. Whitelist it (by its
+		// unique per-call mock name) so the barrier does not expel it, then park it
+		// inside the radius-4 bubble. The player is removed from the PlayerList on
+		// every exit path so later crowd-scale tests see no phantoms.
+		ServerPlayer player = MockPlayers.createUniqueMockPlayer(helper);
+		Runnable cleanup = () -> MockPlayers.removeMockPlayer(helper, player);
 		be.whitelistAdd(helper.getLevel().getServer(), player.getGameProfile().name());
 		helper.assertTrue(be.tryActivate(), "shield should activate");
 

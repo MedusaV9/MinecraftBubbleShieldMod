@@ -7,6 +7,7 @@ import com.bubbleshield.shield.ShieldGeometry;
 import com.bubbleshield.shield.ShieldShape;
 
 import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.core.particles.SimpleParticleType;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.AABB;
@@ -23,6 +24,8 @@ import net.minecraft.world.phys.Vec3;
  */
 public final class WaxGlow implements InsideEffectBehavior {
 	public static final String ID = "wax_glow";
+	/** Ring points stay within this fraction of the radius (inside the shell). */
+	private static final double MAX_DIST_FRAC = 0.98;
 
 	@Override
 	public void tick(ServerLevel level, Vec3 center, float radius, ShieldShape shape, EffectDefinition def, long gameTime, ContextState ctx) {
@@ -47,17 +50,34 @@ public final class WaxGlow implements InsideEffectBehavior {
 				double z = player.getZ() + Math.sin(angle) * orbitRadius;
 				// v2 bobs the whole ring up and down the player's body like a helix scan.
 				double y = player.getY() + (variant == 2 ? 0.2 + 1.4 * (0.5 + 0.5 * Math.sin(spin + i)) : 1.1);
-				level.sendParticles(ParticleTypes.WAX_ON, true, false, x, y, z, 1, 0.02, 0.02, 0.02, 0.0);
+				// A player hugging the wall puts parts of their orbit ring outside the
+				// shell; pull any such point back to 0.98r like the other behaviors.
+				sendContained(level, ParticleTypes.WAX_ON, center, radius, x, y, z);
 				if (variant == 1) {
 					// The counter-rotating partner ring uses wax-off sparks.
 					double counterAngle = -angle + Math.PI / points;
-					level.sendParticles(
-							ParticleTypes.WAX_OFF,
-							true, false,
-							player.getX() + Math.cos(counterAngle) * orbitRadius, player.getY() + 0.6, player.getZ() + Math.sin(counterAngle) * orbitRadius,
-							1, 0.02, 0.02, 0.02, 0.0);
+					sendContained(
+							level, ParticleTypes.WAX_OFF, center, radius,
+							player.getX() + Math.cos(counterAngle) * orbitRadius, player.getY() + 0.6, player.getZ() + Math.sin(counterAngle) * orbitRadius);
 				}
 			}
 		}
+	}
+
+	/** Emits one ring particle, rescaled toward the center onto 0.98r when outside it. */
+	private static void sendContained(ServerLevel level, SimpleParticleType particle, Vec3 center, float radius, double x, double y, double z) {
+		double dx = x - center.x;
+		double dy = y - center.y;
+		double dz = z - center.z;
+		double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+		double maxDist = radius * MAX_DIST_FRAC;
+		if (dist > maxDist) {
+			double scale = maxDist / dist;
+			x = center.x + dx * scale;
+			y = center.y + dy * scale;
+			z = center.z + dz * scale;
+		}
+
+		level.sendParticles(particle, true, false, x, y, z, 1, 0.02, 0.02, 0.02, 0.0);
 	}
 }

@@ -41,10 +41,10 @@ import net.minecraft.world.phys.Vec3;
 public class WorldIntegrationGameTests {
 	/**
 	 * A dedicated (but otherwise vanilla-default) test environment,
-	 * {@code data/bubbleshield/test_environment/world_integration.json}. This class
-	 * spawns identically-named "test-mock-player" mocks, so it gets its own batch
-	 * instead of reshuffling the shared default one (see
-	 * ColorGameTests.ISOLATED_ENVIRONMENT for the full story).
+	 * {@code data/bubbleshield/test_environment/world_integration.json}. Its own batch
+	 * avoids reshuffling the shared default one past the runner's 50-test cap (see
+	 * ColorGameTests.ISOLATED_ENVIRONMENT for the full story; mocks are now uniquely
+	 * named via {@link MockPlayers}).
 	 */
 	private static final String ISOLATED_ENVIRONMENT = "bubbleshield:world_integration";
 	private static final BlockPos PROJECTOR_POS = new BlockPos(4, 2, 4);
@@ -67,7 +67,7 @@ public class WorldIntegrationGameTests {
 
 	/** An online (PlayerList-registered) mock player standing right next to the projector. */
 	private static ServerPlayer mockPlayerNearProjector(GameTestHelper helper) {
-		ServerPlayer player = helper.makeMockServerPlayerInLevel();
+		ServerPlayer player = MockPlayers.createUniqueMockPlayer(helper);
 		Vec3 center = Vec3.atCenterOf(helper.absolutePos(PROJECTOR_POS));
 		player.snapTo(center.x + 1.5, center.y - 0.5, center.z);
 		return player;
@@ -102,7 +102,7 @@ public class WorldIntegrationGameTests {
 				helper.assertTrue(state.mode == ShieldMode.ECO, "set must keep the mode, got " + state.mode);
 				helper.assertTrue(state.cycleEffect, "set must keep the cycle toggle");
 			} finally {
-				helper.getLevel().getServer().getPlayerList().remove(player);
+				MockPlayers.removeMockPlayer(helper, player);
 			}
 
 			helper.succeed();
@@ -146,7 +146,7 @@ public class WorldIntegrationGameTests {
 						helper.assertTrue(state.effectId == EffectRegistry.COUNT - 1,
 								"a projector farther than 16 blocks must be out of reach, got effect " + state.effectId);
 					} finally {
-						helper.getLevel().getServer().getPlayerList().remove(player);
+						MockPlayers.removeMockPlayer(helper, player);
 					}
 
 					helper.succeed();
@@ -158,7 +158,7 @@ public class WorldIntegrationGameTests {
 	/** (a'') list/info execute successfully and print the expected number of entries. */
 	@GameTest(environment = ISOLATED_ENVIRONMENT, padding = 16)
 	public void commandListAndInfoExecute(GameTestHelper helper) {
-		ServerPlayer player = helper.makeMockServerPlayerInLevel();
+		ServerPlayer player = MockPlayers.createUniqueMockPlayer(helper);
 		try {
 			CommandDispatcher<CommandSourceStack> dispatcher = helper.getLevel().getServer().getCommands().getDispatcher();
 			int firstPage = dispatcher.execute("bubbleshield list", player.createCommandSourceStack());
@@ -174,7 +174,7 @@ public class WorldIntegrationGameTests {
 		} catch (CommandSyntaxException e) {
 			helper.assertTrue(false, "list/info should parse and execute: " + e.getMessage());
 		} finally {
-			helper.getLevel().getServer().getPlayerList().remove(player);
+			MockPlayers.removeMockPlayer(helper, player);
 		}
 
 		helper.succeed();
@@ -285,7 +285,7 @@ public class WorldIntegrationGameTests {
 
 		// The player stands right next to the NEIGHBOR's projector, ~6 blocks from
 		// their own; both are within the command's 16-block reach.
-		ServerPlayer player = helper.makeMockServerPlayerInLevel();
+		ServerPlayer player = MockPlayers.createUniqueMockPlayer(helper);
 		Vec3 foreignCenter = Vec3.atCenterOf(helper.absolutePos(new BlockPos(1, 2, 4)));
 		player.snapTo(foreignCenter.x + 1.5, foreignCenter.y - 0.5, foreignCenter.z);
 		own.getShieldState().ownerUuid = player.getUUID();
@@ -305,7 +305,7 @@ public class WorldIntegrationGameTests {
 						neighborUuid.equals(foreign.getShieldState().ownerUuid),
 						"the foreign projector's owner must never change during the search");
 			} finally {
-				helper.getLevel().getServer().getPlayerList().remove(player);
+				MockPlayers.removeMockPlayer(helper, player);
 			}
 
 			helper.succeed();

@@ -177,7 +177,7 @@ public class ShieldGameTests {
 		ShieldState state = be.getShieldState();
 
 		// An online (PlayerList-registered) player so whitelistAdd/Remove can resolve name -> UUID.
-		ServerPlayer player = helper.makeMockServerPlayerInLevel();
+		ServerPlayer player = MockPlayers.createUniqueMockPlayer(helper);
 		try {
 			UUID uuid = player.getUUID();
 			String name = player.getGameProfile().name();
@@ -192,7 +192,7 @@ public class ShieldGameTests {
 			helper.assertTrue(ShieldLogic.shouldBlock(state, null, uuid, false), "the removed player's UUID should no longer be admitted");
 			helper.assertTrue(ShieldLogic.shouldBlock(state, name, uuid, false), "the removed player should be blocked by name and UUID");
 		} finally {
-			helper.getLevel().getServer().getPlayerList().remove(player);
+			MockPlayers.removeMockPlayer(helper, player);
 		}
 
 		helper.succeed();
@@ -236,7 +236,7 @@ public class ShieldGameTests {
 		// makeMockPlayer(GameType) returns a bare Player whose openMenu() is a no-op, so a
 		// ServerPlayer placed in the level (with a working connection) is required to observe
 		// containerMenu changing when the block is used.
-		ServerPlayer player = helper.makeMockServerPlayerInLevel();
+		ServerPlayer player = MockPlayers.createUniqueMockPlayer(helper);
 		try {
 			Vec3 center = Vec3.atCenterOf(helper.absolutePos(PROJECTOR_POS));
 			player.snapTo(center.x + 1.5, center.y - 0.5, center.z);
@@ -248,7 +248,7 @@ public class ShieldGameTests {
 			helper.assertTrue(menu.pos().equals(helper.absolutePos(PROJECTOR_POS)), "the menu should know the projector position");
 			helper.assertTrue(menu.stillValid(player), "the menu should be valid for a player next to the projector");
 		} finally {
-			helper.getLevel().getServer().getPlayerList().remove(player);
+			MockPlayers.removeMockPlayer(helper, player);
 		}
 
 		helper.succeed();
@@ -382,9 +382,9 @@ public class ShieldGameTests {
 		be.getShieldState().effectId = 11; // regen_aura@0
 
 		// An in-level ServerPlayer so the aura's level.getEntitiesOfClass query finds it.
-		// Whitelist it (mock players are named "test-mock-player") so the barrier does
-		// not expel it, then park it inside the radius-4 bubble.
-		ServerPlayer player = helper.makeMockServerPlayerInLevel();
+		// Whitelist it (by its unique per-call mock name) so the barrier does not expel
+		// it, then park it inside the radius-4 bubble.
+		ServerPlayer player = MockPlayers.createUniqueMockPlayer(helper);
 		be.whitelistAdd(helper.getLevel().getServer(), player.getGameProfile().name());
 		helper.assertTrue(be.tryActivate(), "shield should activate");
 
@@ -394,14 +394,14 @@ public class ShieldGameTests {
 		helper.runAfterDelay(30, () -> {
 			boolean hasRegen = player.hasEffect(MobEffects.REGENERATION);
 			if (!hasRegen) {
-				helper.getLevel().getServer().getPlayerList().remove(player);
+				MockPlayers.removeMockPlayer(helper, player);
 			}
 			helper.assertTrue(hasRegen, "a player inside a regen_aura shield should have Regeneration");
 
 			be.getShieldState().effectId = 9; // haste_aura@0
 			helper.runAfterDelay(30, () -> {
 				boolean hasHaste = player.hasEffect(MobEffects.HASTE);
-				helper.getLevel().getServer().getPlayerList().remove(player);
+				MockPlayers.removeMockPlayer(helper, player);
 				helper.assertTrue(hasHaste, "a player inside a haste_aura shield should have Haste");
 				helper.succeed();
 			});

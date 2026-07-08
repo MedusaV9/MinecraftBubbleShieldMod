@@ -28,10 +28,12 @@ public class AdvancementGameTests {
 	/**
 	 * Dedicated (but otherwise vanilla-default) environment for the V9 tests below,
 	 * {@code data/bubbleshield/test_environment/advancement.json}. The shared default
-	 * batch already runs at the runner's 50-tests-per-batch limit (49 mod tests plus
-	 * Fabric API's built-in gametest), so the three new mock-player tests get their
+	 * batch runs at the runner's 50-tests-per-batch limit, so these tests get their
 	 * own batch instead of splitting/reshuffling the pre-existing suite (see
-	 * ColorGameTests.ISOLATED_ENVIRONMENT for the full story).
+	 * ColorGameTests.ISOLATED_ENVIRONMENT for the full story; mocks are now uniquely
+	 * named via {@link MockPlayers}). advancementMaximalist also lives here — see its
+	 * own javadoc for why its diameter-200 shield must not share a batch with tests
+	 * that park mock players across ticks.
 	 */
 	private static final String ISOLATED_ENVIRONMENT = "bubbleshield:advancement";
 	private static final BlockPos PROJECTOR_POS = new BlockPos(4, 2, 4);
@@ -74,30 +76,39 @@ public class AdvancementGameTests {
 		be.addFuelSeconds(PLENTY_OF_FUEL);
 
 		AdvancementHolder shieldRaised = advancement(helper, "shield_raised");
-		ServerPlayer player = helper.makeMockServerPlayerInLevel();
+		ServerPlayer player = MockPlayers.createUniqueMockPlayer(helper);
 		try {
 			helper.assertTrue(!isDone(player, shieldRaised), "a fresh player should not have shield_raised yet");
 			helper.assertTrue(be.tryActivate(player), "activation with fuel should succeed");
 			helper.assertTrue(isDone(player, shieldRaised), "activating a shield should award shield_raised");
 		} finally {
-			helper.getLevel().getServer().getPlayerList().remove(player);
+			MockPlayers.removeMockPlayer(helper, player);
 		}
 
 		// A no-op re-activation of the already-active shield is not an activation edge
 		// and must not award the criterion to a second player.
-		ServerPlayer second = helper.makeMockServerPlayerInLevel();
+		ServerPlayer second = MockPlayers.createUniqueMockPlayer(helper);
 		try {
 			helper.assertTrue(be.getShieldState().active, "the shield should still be active");
 			helper.assertTrue(be.tryActivate(second), "re-activating an active shield should report success");
 			helper.assertTrue(!isDone(second, shieldRaised), "a no-op re-activation should NOT award shield_raised");
 		} finally {
-			helper.getLevel().getServer().getPlayerList().remove(second);
+			MockPlayers.removeMockPlayer(helper, second);
 		}
 
 		helper.succeed();
 	}
 
-	@GameTest(padding = 16)
+	/**
+	 * Runs in the isolated advancement batch, NOT the shared default one: the
+	 * diameter-200 activation's {@code expelBlockedPlayers} sweep reaches ~100 blocks
+	 * — several structures over in the shared test grid (structures sit ~45 blocks
+	 * apart) — and would teleport away mock players that concurrent tests (boss bar
+	 * membership, behavior auras) park inside their own bubbles across ticks. Every
+	 * test in the advancement batch creates and removes its mocks within a single
+	 * synchronous tick, so the sweep can never hit a foreign player there.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, padding = 16)
 	public void advancementMaximalist(GameTestHelper helper) {
 		// A diameter-16 activation must NOT complete maximalist (fresh player)...
 		BubbleShieldBlockEntity be = placeProjector(helper, 8.0F);
@@ -105,24 +116,27 @@ public class AdvancementGameTests {
 
 		AdvancementHolder maximalist = advancement(helper, "maximalist");
 		AdvancementHolder shieldRaised = advancement(helper, "shield_raised");
-		ServerPlayer smallPlayer = helper.makeMockServerPlayerInLevel();
+		ServerPlayer smallPlayer = MockPlayers.createUniqueMockPlayer(helper);
 		try {
 			helper.assertTrue(be.tryActivate(smallPlayer), "diameter-16 activation should succeed");
 			helper.assertTrue(isDone(smallPlayer, shieldRaised), "a diameter-16 activation should still award shield_raised");
 			helper.assertTrue(!isDone(smallPlayer, maximalist), "a diameter-16 activation should NOT award maximalist");
 		} finally {
-			helper.getLevel().getServer().getPlayerList().remove(smallPlayer);
+			MockPlayers.removeMockPlayer(helper, smallPlayer);
 		}
 
 		// ...while a diameter-200 activation must complete it.
 		be.setActive(false);
 		be.getShieldState().targetRadius = 100.0F;
-		ServerPlayer maxPlayer = helper.makeMockServerPlayerInLevel();
+		ServerPlayer maxPlayer = MockPlayers.createUniqueMockPlayer(helper);
 		try {
 			helper.assertTrue(be.tryActivate(maxPlayer), "diameter-200 activation should succeed");
 			helper.assertTrue(isDone(maxPlayer, maximalist), "a diameter-200 activation should award maximalist");
 		} finally {
-			helper.getLevel().getServer().getPlayerList().remove(maxPlayer);
+			MockPlayers.removeMockPlayer(helper, maxPlayer);
+			// Don't leave a 100-block expel sweep ticking after the test: batch chunks
+			// stay loaded briefly past the batch end and could reach later structures.
+			be.setActive(false);
 		}
 
 		helper.succeed();
@@ -133,7 +147,7 @@ public class AdvancementGameTests {
 		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
 
 		AdvancementHolder friendZone = advancement(helper, "friend_zone");
-		ServerPlayer player = helper.makeMockServerPlayerInLevel();
+		ServerPlayer player = MockPlayers.createUniqueMockPlayer(helper);
 		try {
 			helper.assertTrue(!isDone(player, friendZone), "a fresh player should not have friend_zone yet");
 
@@ -145,16 +159,16 @@ public class AdvancementGameTests {
 			be.whitelistAdd(helper.getLevel().getServer(), "SomeFriend", player);
 			helper.assertTrue(isDone(player, friendZone), "whitelisting a player should award friend_zone");
 		} finally {
-			helper.getLevel().getServer().getPlayerList().remove(player);
+			MockPlayers.removeMockPlayer(helper, player);
 		}
 
 		// A duplicate add (different casing) is a no-op and must not award the criterion.
-		ServerPlayer second = helper.makeMockServerPlayerInLevel();
+		ServerPlayer second = MockPlayers.createUniqueMockPlayer(helper);
 		try {
 			be.whitelistAdd(helper.getLevel().getServer(), "SOMEFRIEND", second);
 			helper.assertTrue(!isDone(second, friendZone), "re-adding an existing name should NOT award friend_zone");
 		} finally {
-			helper.getLevel().getServer().getPlayerList().remove(second);
+			MockPlayers.removeMockPlayer(helper, second);
 		}
 
 		helper.succeed();
@@ -166,7 +180,7 @@ public class AdvancementGameTests {
 		be.addFuelSeconds(PLENTY_OF_FUEL);
 
 		AdvancementHolder bubbleBurst = advancement(helper, "bubble_burst");
-		ServerPlayer owner = helper.makeMockServerPlayerInLevel();
+		ServerPlayer owner = MockPlayers.createUniqueMockPlayer(helper);
 		try {
 			be.getShieldState().ownerUuid = owner.getUUID();
 			helper.assertTrue(be.tryActivate(owner), "shield should activate");
@@ -176,7 +190,7 @@ public class AdvancementGameTests {
 			helper.assertTrue(!be.getShieldState().active, "the shield should have broken");
 			helper.assertTrue(isDone(owner, bubbleBurst), "breaking the shield should award bubble_burst to the online owner");
 		} finally {
-			helper.getLevel().getServer().getPlayerList().remove(owner);
+			MockPlayers.removeMockPlayer(helper, owner);
 		}
 
 		helper.succeed();
@@ -185,7 +199,7 @@ public class AdvancementGameTests {
 	@GameTest(environment = ISOLATED_ENVIRONMENT, padding = 16)
 	public void advancementChristened(GameTestHelper helper) {
 		AdvancementHolder christened = advancement(helper, "christened");
-		ServerPlayer player = helper.makeMockServerPlayerInLevel();
+		ServerPlayer player = MockPlayers.createUniqueMockPlayer(helper);
 		try {
 			helper.assertTrue(!isDone(player, christened), "a fresh player should not have christened yet");
 
@@ -194,7 +208,7 @@ public class AdvancementGameTests {
 			ModCriteria.SHIELD_NAMED.trigger(player);
 			helper.assertTrue(isDone(player, christened), "naming a shield should award christened");
 		} finally {
-			helper.getLevel().getServer().getPlayerList().remove(player);
+			MockPlayers.removeMockPlayer(helper, player);
 		}
 
 		helper.succeed();
@@ -203,7 +217,7 @@ public class AdvancementGameTests {
 	@GameTest(environment = ISOLATED_ENVIRONMENT, padding = 16)
 	public void advancementFullSpectrum(GameTestHelper helper) {
 		AdvancementHolder fullSpectrum = advancement(helper, "full_spectrum");
-		ServerPlayer player = helper.makeMockServerPlayerInLevel();
+		ServerPlayer player = MockPlayers.createUniqueMockPlayer(helper);
 		try {
 			helper.assertTrue(!isDone(player, fullSpectrum), "a fresh player should not have full_spectrum yet");
 
@@ -212,7 +226,7 @@ public class AdvancementGameTests {
 			ModCriteria.SHIELD_RECOLORED.trigger(player);
 			helper.assertTrue(isDone(player, fullSpectrum), "recoloring a shield should award full_spectrum");
 		} finally {
-			helper.getLevel().getServer().getPlayerList().remove(player);
+			MockPlayers.removeMockPlayer(helper, player);
 		}
 
 		helper.succeed();
@@ -221,7 +235,7 @@ public class AdvancementGameTests {
 	@GameTest(environment = ISOLATED_ENVIRONMENT, padding = 16)
 	public void advancementLinkedUp(GameTestHelper helper) {
 		AdvancementHolder linkedUp = advancement(helper, "linked_up");
-		ServerPlayer owner = helper.makeMockServerPlayerInLevel();
+		ServerPlayer owner = MockPlayers.createUniqueMockPlayer(helper);
 		try {
 			// Two overlapping same-owner active shields: exactly the findLinked-size>1
 			// condition that gates the damage-split fire site in interceptProjectiles.
@@ -249,7 +263,7 @@ public class AdvancementGameTests {
 			ModCriteria.fireShieldsLinked(helper.getLevel(), shieldA.getShieldState().ownerUuid);
 			helper.assertTrue(isDone(owner, linkedUp), "a damage split across linked shields should award linked_up to the online owner");
 		} finally {
-			helper.getLevel().getServer().getPlayerList().remove(owner);
+			MockPlayers.removeMockPlayer(helper, owner);
 		}
 
 		helper.succeed();

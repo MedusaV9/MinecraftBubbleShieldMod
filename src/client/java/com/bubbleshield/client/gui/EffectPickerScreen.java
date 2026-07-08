@@ -4,6 +4,7 @@ import java.util.Locale;
 
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.EffectRegistry;
+import com.bubbleshield.menu.BubbleShieldMenu;
 import com.bubbleshield.net.ShieldPayloads;
 
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
@@ -12,13 +13,20 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 
 /**
  * Paged 5x5 grid of the selectable shield effects (ids 0..{@link EffectRegistry#COUNT} - 1).
  * Clicking an effect sends {@code SetSettingsC2S} keeping the current diameter.
+ *
+ * <p>All echoed-back settings (diameter/effect/shape/mode/cycle) are read LIVE from the
+ * still-open {@link BubbleShieldMenu} at send time, never captured at construction:
+ * the menu keeps receiving ContainerData updates while this screen is open, and the
+ * server may change settings underneath it (most notably the effect-cycle timer
+ * re-rolling the effect id) — a stale construction-time snapshot would snap those
+ * server-side changes back. Only the picked effect id (and, for the toggle click, the
+ * locally-flipped cycle flag) are locals.
  */
 public class EffectPickerScreen extends Screen {
 	private static final int EFFECT_COUNT = EffectRegistry.COUNT;
@@ -31,27 +39,15 @@ public class EffectPickerScreen extends Screen {
 	private static final int SPACING = 2;
 
 	private final Screen parent;
-	private final BlockPos pos;
-	private final int diameter;
-	private final int currentEffectId;
-	/** Echoed back unchanged in {@code SetSettingsC2S} so picking an effect keeps the shape. */
-	private final int shapeOrdinal;
-	/** Echoed back unchanged in {@code SetSettingsC2S} so picking an effect keeps the mode. */
-	private final int modeOrdinal;
-	/** Tracks the effect-cycle toggle locally; flipped by the nav-row Cycle button. */
-	private boolean cycleEnabled;
+	/** The open projector menu; the source of truth for every synced setting. */
+	private final BubbleShieldMenu menu;
 	private int page;
 	private Button cycleButton;
 
-	public EffectPickerScreen(Screen parent, BlockPos pos, int diameter, int currentEffectId, int shapeOrdinal, int modeOrdinal, boolean cycleEnabled) {
+	public EffectPickerScreen(Screen parent, BubbleShieldMenu menu) {
 		super(Component.translatable("gui.bubbleshield.effects"));
 		this.parent = parent;
-		this.pos = pos;
-		this.diameter = diameter;
-		this.currentEffectId = currentEffectId;
-		this.shapeOrdinal = shapeOrdinal;
-		this.modeOrdinal = modeOrdinal;
-		this.cycleEnabled = cycleEnabled;
+		this.menu = menu;
 	}
 
 	@Override
@@ -73,7 +69,7 @@ public class EffectPickerScreen extends Screen {
 					.tooltip(effectTooltip(EffectRegistry.get(effectId)))
 					.build()
 			);
-			button.active = effectId != this.currentEffectId;
+			button.active = effectId != this.menu.effectId();
 		}
 
 		int navY = startY + ROWS * (BUTTON_HEIGHT + SPACING) + 8;
@@ -97,7 +93,7 @@ public class EffectPickerScreen extends Screen {
 
 		this.addRenderableWidget(
 			Button.builder(Component.translatable("gui.bubbleshield.color"), b ->
-				this.minecraft.gui.setScreen(new ColorPickerScreen(this, this.pos)))
+				this.minecraft.gui.setScreen(new ColorPickerScreen(this, this.menu.pos())))
 				.bounds(startX + gridWidth / 2 + 2, navY, 76, 20)
 				.tooltip(Tooltip.create(Component.translatable("gui.bubbleshield.color.note")))
 				.build()
@@ -130,22 +126,30 @@ public class EffectPickerScreen extends Screen {
 		this.rebuildWidgets();
 	}
 
+	/** Sends the picked effect, echoing the live (server-synced) diameter/shape/mode/cycle. */
 	private void pick(int effectId) {
 		ClientPlayNetworking.send(new ShieldPayloads.SetSettingsC2S(
-			this.pos, this.diameter, effectId, this.shapeOrdinal, this.modeOrdinal, this.cycleEnabled));
+			this.menu.pos(), this.menu.diameter(), effectId, this.menu.shape(), this.menu.mode(), this.menu.cycleEffect()));
 		this.onClose();
 	}
 
-	/** Flips the effect-cycle toggle and sends it, echoing all other synced settings. */
+	/** Sends the flipped effect-cycle toggle, echoing the live values of everything else. */
 	private void toggleCycle() {
-		this.cycleEnabled = !this.cycleEnabled;
 		ClientPlayNetworking.send(new ShieldPayloads.SetSettingsC2S(
-			this.pos, this.diameter, this.currentEffectId, this.shapeOrdinal, this.modeOrdinal, this.cycleEnabled));
-		this.cycleButton.setMessage(this.cycleLabel());
+			this.menu.pos(), this.menu.diameter(), this.menu.effectId(), this.menu.shape(), this.menu.mode(), !this.menu.cycleEffect()));
 	}
 
 	private Component cycleLabel() {
-		return Component.translatable(this.cycleEnabled ? "gui.bubbleshield.cycle.on" : "gui.bubbleshield.cycle.off");
+		return Component.translatable(this.menu.cycleEffect() ? "gui.bubbleshield.cycle.on" : "gui.bubbleshield.cycle.off");
+	}
+
+	@Override
+	public void tick() {
+		super.tick();
+		// The cycle flag is server-authoritative and arrives via the menu's data slots;
+		// deriving the label every tick resyncs it after a toggle round-trip (or a
+		// rejected request), exactly like BubbleShieldScreen's mode/shape buttons.
+		this.cycleButton.setMessage(this.cycleLabel());
 	}
 
 	@Override

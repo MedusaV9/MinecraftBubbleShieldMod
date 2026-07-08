@@ -36,9 +36,10 @@ public class ColorGameTests {
 	 * {@code data/bubbleshield/test_environment/color.json}. The vanilla runner batches
 	 * tests by environment (50 per batch, ticked in parallel); adding these tests to the
 	 * shared default batch would push the pre-existing suite past 50 and reshuffle which
-	 * tests overlap in time, occasionally colliding two identically-named
-	 * "test-mock-player" mocks in the PlayerList (getPlayerByName then resolves the
-	 * wrong UUID). A separate environment keeps this class in its own batch, leaving
+	 * tests overlap in time. (Historically this reshuffling could also collide two
+	 * identically-named "test-mock-player" mocks in the PlayerList; in-level mocks are
+	 * now uniquely named via {@link MockPlayers}, so only the batch-size rationale
+	 * remains.) A separate environment keeps this class in its own batch, leaving
 	 * the existing 50-test batch exactly as it was.
 	 */
 	private static final String ISOLATED_ENVIRONMENT = "bubbleshield:color";

@@ -30,8 +30,9 @@ public class LinkingGameTests {
 	 * {@code data/bubbleshield/test_environment/linking.json}. The vanilla runner
 	 * batches tests by environment (50 per batch, ticked in parallel); keeping this
 	 * class out of the shared default batch avoids reshuffling the pre-existing suite
-	 * and the known identically-named "test-mock-player" PlayerList collisions
-	 * (see ColorGameTests.ISOLATED_ENVIRONMENT for the full story).
+	 * (see ColorGameTests.ISOLATED_ENVIRONMENT for the full story; the historical
+	 * "test-mock-player" PlayerList collisions are gone now that in-level mocks are
+	 * uniquely named via {@link MockPlayers}).
 	 */
 	private static final String ISOLATED_ENVIRONMENT = "bubbleshield:linking";
 	/**

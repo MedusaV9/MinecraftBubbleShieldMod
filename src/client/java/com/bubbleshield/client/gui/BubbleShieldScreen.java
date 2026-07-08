@@ -71,9 +71,7 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 
 		this.addRenderableWidget(
 			Button.builder(Component.translatable("gui.bubbleshield.effects"), button ->
-				this.minecraft.gui.setScreen(new EffectPickerScreen(
-					this, this.menu.pos(), this.menu.diameter(), this.menu.effectId(),
-					this.menu.shape(), this.menu.mode(), this.menu.cycleEffect()))
+				this.minecraft.gui.setScreen(new EffectPickerScreen(this, this.menu))
 			).bounds(x, this.topPos + 54, width, 13).build()
 		);
 
@@ -84,10 +82,14 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 		);
 
 		// Left column, between the fuel (y=20) and tier (y=44) labels: a free 13px spot.
+		// Width 44 ends the button at x=52, safely left of the device slot column
+		// (the capacitor/fuel/core frames start at x=55, hit-regions at x=56): a 64px
+		// button used to reach x=72 and steal clicks on the capacitor slot's bottom
+		// edge (y 30..33 of its 17..32 hit-region).
 		this.addRenderableWidget(
 			Button.builder(Component.translatable("gui.bubbleshield.name"), button ->
 				this.minecraft.gui.setScreen(new ShieldNameScreen(this, this.menu.pos()))
-			).bounds(this.leftPos + 8, this.topPos + 30, 64, 13).build()
+			).bounds(this.leftPos + 8, this.topPos + 30, 44, 13).build()
 		);
 	}
 
@@ -159,10 +161,25 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 		graphics.fill(cx + 1, cy + 1, cx + 17, cy + 17, 0xFF8B8B8B);
 	}
 
+	/** Left-column labels must end before the device slot frames, which start at x = 55. */
+	private static final int LABEL_MAX_WIDTH = 55 - 8 - 1;
+
 	@Override
 	protected void extractLabels(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
 		super.extractLabels(graphics, mouseX, mouseY);
-		graphics.text(this.font, Component.translatable("gui.bubbleshield.fuel", this.menu.fuelSeconds()), 8, 20, LABEL_COLOR, false);
+		// The fuel row (y 20..28) sits beside the capacitor slot frame (x 55..72,
+		// y 16..33), so a wide value would render under the slot. Degrade gracefully:
+		// full "Fuel: Ns" label when it fits, the bare "Ns" value when the prefix
+		// does not, and an elided value only for absurdly large numbers.
+		String fuel = Component.translatable("gui.bubbleshield.fuel", this.menu.fuelSeconds()).getString();
+		if (this.font.width(fuel) > LABEL_MAX_WIDTH) {
+			fuel = this.menu.fuelSeconds() + "s";
+		}
+		if (this.font.width(fuel) > LABEL_MAX_WIDTH) {
+			fuel = this.font.plainSubstrByWidth(fuel, LABEL_MAX_WIDTH - this.font.width("...")) + "...";
+		}
+
+		graphics.text(this.font, fuel, 8, 20, LABEL_COLOR, false);
 		graphics.text(this.font, Component.translatable("gui.bubbleshield.tier", this.menu.tier()), 8, 44, LABEL_COLOR, false);
 		graphics.text(this.font, Component.translatable("gui.bubbleshield.health", String.format("%.1f", this.menu.health())), 8, 56, LABEL_COLOR, false);
 		graphics.text(this.font, Component.translatable("gui.bubbleshield.cooldown", this.menu.cooldownSeconds()), 8, 66, LABEL_COLOR, false);

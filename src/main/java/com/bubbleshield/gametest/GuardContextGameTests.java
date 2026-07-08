@@ -68,8 +68,8 @@ public class GuardContextGameTests {
 
 		// An in-level mock ServerPlayer (same pattern as whitelistBlocksAndAdmits, but
 		// registered in the level so the barrier's getEntitiesOfClass query finds it).
-		// Mock players are named "test-mock-player" and are not whitelisted.
-		ServerPlayer stranger = helper.makeMockServerPlayerInLevel();
+		// The uniquely-named mock player is not whitelisted.
+		ServerPlayer stranger = MockPlayers.createUniqueMockPlayer(helper);
 		try {
 			stranger.snapTo(inside.x, inside.y, inside.z);
 			stranger.xo = outside.x;
@@ -86,7 +86,7 @@ public class GuardContextGameTests {
 					stranger.hasEffect(guardEffect),
 					"the expelled player should have " + label + " after effect " + effectId + " retaliated");
 		} finally {
-			helper.getLevel().getServer().getPlayerList().remove(stranger);
+			MockPlayers.removeMockPlayer(helper, stranger);
 		}
 	}
 
