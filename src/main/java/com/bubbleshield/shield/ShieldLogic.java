@@ -1,14 +1,17 @@
 package com.bubbleshield.shield;
 
+import java.util.List;
 import java.util.UUID;
 
 import com.bubbleshield.advancements.ModCriteria;
+import com.bubbleshield.block.BubbleShieldBlockEntity;
 import com.bubbleshield.effect.ContextModifier;
 import com.bubbleshield.effect.ContextModifier.ContextState;
 import com.bubbleshield.effect.ContextProfile;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.EffectRegistry;
 import com.bubbleshield.effect.InsideEffectBehavior;
+import com.bubbleshield.net.ServerNet;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.DustParticleOptions;
@@ -155,9 +158,11 @@ public final class ShieldLogic {
 	 * Runs one server tick of shield logic for the projector at {@code pos}.
 	 *
 	 * @param tier the projector's upgrade-core tier (0..2); drives regeneration and break cooldown.
+	 * @param self the ticking projector's block entity ({@code state} is its shield state);
+	 * used to resolve resonance-linked partners for the projectile damage split.
 	 * @return true if the shield state changed and should be saved/synced.
 	 */
-	public static boolean serverTick(ServerLevel level, BlockPos pos, ShieldState state, int tier) {
+	public static boolean serverTick(ServerLevel level, BlockPos pos, ShieldState state, int tier, BubbleShieldBlockEntity self) {
 		if (!state.active) {
 			return false;
 		}
@@ -204,7 +209,7 @@ public final class ShieldLogic {
 		double areaSize = 2.0 * radius + 8.0;
 		AABB area = AABB.ofSize(center, areaSize, areaSize, areaSize);
 
-		if (interceptProjectiles(level, pos, center, radius, state, area, breakCooldownTicks(tier))) {
+		if (interceptProjectiles(level, pos, center, radius, state, area, breakCooldownTicks(tier), self)) {
 			changed = true;
 		}
 
@@ -374,7 +379,7 @@ public final class ShieldLogic {
 		level.playSound(null, center.x, center.y, center.z, sound, SoundSource.AMBIENT, volume, def.ambientPitch());
 	}
 
-	private static boolean interceptProjectiles(ServerLevel level, BlockPos pos, Vec3 center, double radius, ShieldState state, AABB area, long breakCooldownTicks) {
+	private static boolean interceptProjectiles(ServerLevel level, BlockPos pos, Vec3 center, double radius, ShieldState state, AABB area, long breakCooldownTicks, BubbleShieldBlockEntity self) {
 		boolean changed = false;
 
 		for (Projectile projectile : level.getEntitiesOfClass(Projectile.class, area)) {
@@ -423,7 +428,26 @@ public final class ShieldLogic {
 				damage = PROJECTILE_DAMAGE;
 			}
 
-			boolean broke = applyDamage(state, damage, level.getGameTime(), breakCooldownTicks);
+			// Resonance link: same-owner active shields overlapping this one split the
+			// damage evenly. The projectile was already discarded/deflected above, so a
+			// linked partner's own tick can never re-intercept it for double damage.
+			// Partners take their share through applyShieldDamage (their own tier's
+			// break cooldown, break sound and criteria); the hit shield keeps the local
+			// applyDamage path so this loop's state/broke handling stays authoritative.
+			List<BubbleShieldBlockEntity> linked = ShieldLinking.findLinked(self, ServerNet.loadedShields(level));
+			boolean broke;
+			if (linked.size() > 1) {
+				float split = damage / linked.size();
+				broke = applyDamage(state, split, level.getGameTime(), breakCooldownTicks);
+				for (BubbleShieldBlockEntity partner : linked) {
+					if (partner != self) {
+						partner.applyShieldDamage(split);
+					}
+				}
+			} else {
+				broke = applyDamage(state, damage, level.getGameTime(), breakCooldownTicks);
+			}
+
 			changed = true;
 
 			// overrideLimiter=true lifts the 32-block send limit so the hit burst is

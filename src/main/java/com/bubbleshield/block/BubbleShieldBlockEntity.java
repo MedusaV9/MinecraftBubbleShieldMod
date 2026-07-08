@@ -9,6 +9,7 @@ import com.bubbleshield.registry.ModBlockEntities;
 import com.bubbleshield.registry.ModItems;
 import com.bubbleshield.shield.FuelMap;
 import com.bubbleshield.shield.ShieldGeometry;
+import com.bubbleshield.shield.ShieldLinking;
 import com.bubbleshield.shield.ShieldLogic;
 import com.bubbleshield.shield.ShieldMode;
 import com.bubbleshield.shield.ShieldShape;
@@ -22,6 +23,7 @@ import net.fabricmc.fabric.api.menu.v1.ExtendedMenuProvider;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
@@ -52,6 +54,11 @@ import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
 public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenuProvider<BlockPos> {
+	/** An active linked shield redraws its resonance tether once per this many ticks. */
+	public static final int LINK_TETHER_PERIOD_TICKS = 20;
+	/** Particles per tether segment (interior interpolation points, endpoints excluded). */
+	public static final int LINK_TETHER_PARTICLES = 8;
+
 	private final ShieldState shieldState = new ShieldState();
 	/** One-slot fuel inventory shown in the projector menu; consumed into fuel-seconds each tick. */
 	private final SimpleContainer fuelContainer = new SimpleContainer(1);
@@ -167,13 +174,46 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		this.consumeFuelSlot();
 		this.refreshTier();
 		if (this.level instanceof ServerLevel serverLevel) {
-			if (ShieldLogic.serverTick(serverLevel, this.worldPosition, this.shieldState, this.tier())) {
+			if (ShieldLogic.serverTick(serverLevel, this.worldPosition, this.shieldState, this.tier(), this)) {
 				this.markUpdated();
 			}
 
 			// Runs even when the shield logic reported no change: deactivations from any
 			// path (fuel-out, break, GUI, redstone) must empty the boss bar next tick.
 			this.updateBossBar(serverLevel);
+
+			if (this.shieldState.active && serverLevel.getGameTime() % LINK_TETHER_PERIOD_TICKS == 0L) {
+				this.sendLinkTethers(serverLevel);
+			}
+		}
+	}
+
+	/**
+	 * Emits the resonance-link tether: for each linked partner (same owner, active,
+	 * overlapping spheres — see {@link ShieldLinking#findLinked}), a line of
+	 * {@link ParticleTypes#END_ROD} particles interpolated along the center-to-center
+	 * segment. Both linked projectors tick this, so the tether pulses from either end.
+	 */
+	private void sendLinkTethers(ServerLevel level) {
+		List<BubbleShieldBlockEntity> linked = ShieldLinking.findLinked(this, ServerNet.loadedShields(level));
+		if (linked.size() <= 1) {
+			return;
+		}
+
+		Vec3 from = Vec3.atCenterOf(this.worldPosition);
+		for (BubbleShieldBlockEntity partner : linked) {
+			if (partner == this) {
+				continue;
+			}
+
+			Vec3 to = Vec3.atCenterOf(partner.getBlockPos());
+			for (int i = 1; i <= LINK_TETHER_PARTICLES; i++) {
+				// Interior sample points only: the endpoints sit inside the projectors.
+				Vec3 point = from.lerp(to, i / (double) (LINK_TETHER_PARTICLES + 1));
+				// overrideLimiter=true lifts the 32-block send limit; linked projectors
+				// can easily be farther apart than that on large bubbles.
+				level.sendParticles(ParticleTypes.END_ROD, true, false, point.x, point.y, point.z, 1, 0.0, 0.0, 0.0, 0.0);
+			}
 		}
 	}
 

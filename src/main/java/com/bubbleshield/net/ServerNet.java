@@ -255,6 +255,16 @@ public final class ServerNet {
 		}
 	}
 
+	/**
+	 * @return an immutable snapshot of the loaded shield projectors in {@code level}
+	 * (empty when none are loaded). Server thread only; used by the resonance-link
+	 * resolution so a shield can find same-owner overlapping partners.
+	 */
+	public static java.util.Collection<BubbleShieldBlockEntity> loadedShields(ServerLevel level) {
+		Set<BubbleShieldBlockEntity> shields = LOADED_SHIELDS.get(level);
+		return shields == null ? List.of() : List.copyOf(shields);
+	}
+
 	/** Unregisters a shield block entity that is being removed. Server thread only. */
 	public static void untrackShield(BubbleShieldBlockEntity shield) {
 		if (shield.getLevel() instanceof ServerLevel level) {

@@ -1,0 +1,255 @@
+package com.bubbleshield.gametest;
+
+import java.util.List;
+import java.util.UUID;
+
+import com.bubbleshield.block.BubbleShieldBlockEntity;
+import com.bubbleshield.registry.ModBlocks;
+import com.bubbleshield.shield.ShieldLinking;
+import com.bubbleshield.shield.ShieldLogic;
+import com.bubbleshield.shield.ShieldShape;
+import com.bubbleshield.shield.ShieldState;
+
+import net.fabricmc.fabric.api.gametest.v1.GameTest;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.projectile.arrow.Arrow;
+import net.minecraft.world.phys.Vec3;
+
+/**
+ * Coverage for milestone V6: the resonance link between same-owner active shields
+ * with overlapping spheres — the even projectile damage split across linked shields
+ * and the pure {@link ShieldLinking#findLinked} geometry/owner rules.
+ */
+public class LinkingGameTests {
+	/**
+	 * A dedicated (but otherwise vanilla-default) test environment,
+	 * {@code data/bubbleshield/test_environment/linking.json}. The vanilla runner
+	 * batches tests by environment (50 per batch, ticked in parallel); keeping this
+	 * class out of the shared default batch avoids reshuffling the pre-existing suite
+	 * and the known identically-named "test-mock-player" PlayerList collisions
+	 * (see ColorGameTests.ISOLATED_ENVIRONMENT for the full story).
+	 */
+	private static final String ISOLATED_ENVIRONMENT = "bubbleshield:linking";
+	/**
+	 * A 39x8x8 empty arena ({@code data/bubbleshield/gametest/structure/linking_arena.snbt})
+	 * wide enough for two projectors 10 or 30 blocks apart. Height 8 keeps the
+	 * radius-8 boundary crossing (relative y=10.5) above the framework's barrier
+	 * ceiling, the same trick as ShieldGameTests.arrowShrinksShield.
+	 */
+	private static final String ARENA_STRUCTURE = "bubbleshield:linking_arena";
+	private static final BlockPos SHIELD_A_POS = new BlockPos(4, 2, 4);
+	/** 10 blocks east of A: overlaps A (10 < 8 + 8). */
+	private static final BlockPos SHIELD_B_NEAR_POS = new BlockPos(14, 2, 4);
+	/** 30 blocks east of A: disjoint from A (30 >= 8 + 8). */
+	private static final BlockPos SHIELD_B_FAR_POS = new BlockPos(34, 2, 4);
+	private static final float RADIUS = 8.0F;
+	private static final int PLENTY_OF_FUEL = 600;
+	private static final float TOLERANCE = 0.01F;
+
+	private static BubbleShieldBlockEntity placeProjector(GameTestHelper helper, BlockPos pos, UUID owner) {
+		helper.setBlock(pos, ModBlocks.BUBBLE_SHIELD_PROJECTOR);
+		BubbleShieldBlockEntity be = helper.getBlockEntity(pos, BubbleShieldBlockEntity.class);
+		be.getShieldState().targetRadius = RADIUS;
+		be.getShieldState().ownerUuid = owner;
+		be.addFuelSeconds(PLENTY_OF_FUEL);
+		return be;
+	}
+
+	/**
+	 * Copies the arrow-spawn pattern from ShieldGameTests.arrowShrinksShield: spawned
+	 * 12 blocks above shield A's projector (staying in the structure's own force-loaded
+	 * chunk column), shooting straight down into shield A. The interception discards
+	 * the arrow, so no entity cleanup is needed.
+	 */
+	private static void shootArrowIntoShieldA(GameTestHelper helper) {
+		Arrow arrow = helper.spawn(EntityTypes.ARROW, new Vec3(4.5, 14.5, 4.5));
+		arrow.setDeltaMovement(0.0, -1.5, 0.0);
+	}
+
+	/** (a) Same owner, overlapping: the arrow's damage is split evenly across both shields. */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, structure = ARENA_STRUCTURE, maxTicks = 200, padding = 16)
+	public void linkedShieldsSplitDamage(GameTestHelper helper) {
+		UUID owner = UUID.randomUUID();
+		BubbleShieldBlockEntity shieldA = placeProjector(helper, SHIELD_A_POS, owner);
+		BubbleShieldBlockEntity shieldB = placeProjector(helper, SHIELD_B_NEAR_POS, owner);
+		helper.assertTrue(shieldA.tryActivate(), "shield A should activate");
+		helper.assertTrue(shieldB.tryActivate(), "shield B should activate");
+		helper.assertTrue(
+				ShieldLinking.findLinked(shieldA, List.of(shieldA, shieldB)).size() == 2,
+				"the two overlapping same-owner shields should be linked");
+
+		shootArrowIntoShieldA(helper);
+
+		ShieldState stateA = shieldA.getShieldState();
+		ShieldState stateB = shieldB.getShieldState();
+		float expected = ShieldState.DEFAULT_MAX_HEALTH - ShieldLogic.PROJECTILE_DAMAGE / 2.0F;
+		helper.startSequence()
+				.thenWaitUntil(() -> helper.assertTrue(stateA.health < stateA.maxHealth, "shield A should take damage from the intercepted arrow"))
+				// A few extra ticks so a non-discarded arrow (or double application by
+				// the partner's own tick) would be caught by the exact-value asserts.
+				.thenExecuteAfter(10, () -> {
+					helper.assertTrue(
+							Math.abs(stateA.health - expected) <= TOLERANCE,
+							"the hit shield should lose exactly half the arrow damage, health is " + stateA.health);
+					helper.assertTrue(
+							Math.abs(stateB.health - expected) <= TOLERANCE,
+							"the linked partner should lose the other half, health is " + stateB.health);
+				})
+				.thenSucceed();
+	}
+
+	/** (b) Different owners, overlapping: no link, only the hit shield loses health. */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, structure = ARENA_STRUCTURE, maxTicks = 200, padding = 16)
+	public void differentOwnersDoNotLink(GameTestHelper helper) {
+		BubbleShieldBlockEntity shieldA = placeProjector(helper, SHIELD_A_POS, UUID.randomUUID());
+		BubbleShieldBlockEntity shieldB = placeProjector(helper, SHIELD_B_NEAR_POS, UUID.randomUUID());
+		helper.assertTrue(shieldA.tryActivate(), "shield A should activate");
+		helper.assertTrue(shieldB.tryActivate(), "shield B should activate");
+		helper.assertTrue(
+				ShieldLinking.findLinked(shieldA, List.of(shieldA, shieldB)).size() == 1,
+				"overlapping shields with different owners must not link");
+
+		shootArrowIntoShieldA(helper);
+
+		ShieldState stateA = shieldA.getShieldState();
+		ShieldState stateB = shieldB.getShieldState();
+		helper.startSequence()
+				.thenWaitUntil(() -> helper.assertTrue(stateA.health < stateA.maxHealth, "shield A should take damage from the intercepted arrow"))
+				.thenExecuteAfter(10, () -> {
+					helper.assertTrue(
+							stateA.health == stateA.maxHealth - ShieldLogic.PROJECTILE_DAMAGE,
+							"the hit shield should take the full arrow damage, health is " + stateA.health);
+					helper.assertTrue(
+							stateB.health == stateB.maxHealth,
+							"the other owner's shield must be untouched, health is " + stateB.health);
+				})
+				.thenSucceed();
+	}
+
+	/** (c) Same owner but disjoint spheres (30 apart, radius 8 each): independent shields. */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, structure = ARENA_STRUCTURE, maxTicks = 200, padding = 16)
+	public void nonOverlappingShieldsAreIndependent(GameTestHelper helper) {
+		UUID owner = UUID.randomUUID();
+		BubbleShieldBlockEntity shieldA = placeProjector(helper, SHIELD_A_POS, owner);
+		BubbleShieldBlockEntity shieldB = placeProjector(helper, SHIELD_B_FAR_POS, owner);
+		helper.assertTrue(shieldA.tryActivate(), "shield A should activate");
+		helper.assertTrue(shieldB.tryActivate(), "shield B should activate");
+		helper.assertTrue(
+				ShieldLinking.findLinked(shieldA, List.of(shieldA, shieldB)).size() == 1,
+				"same-owner shields with disjoint spheres must not link");
+
+		shootArrowIntoShieldA(helper);
+
+		ShieldState stateA = shieldA.getShieldState();
+		ShieldState stateB = shieldB.getShieldState();
+		helper.startSequence()
+				.thenWaitUntil(() -> helper.assertTrue(stateA.health < stateA.maxHealth, "shield A should take damage from the intercepted arrow"))
+				.thenExecuteAfter(10, () -> {
+					helper.assertTrue(
+							stateA.health == stateA.maxHealth - ShieldLogic.PROJECTILE_DAMAGE,
+							"the hit shield should take the full arrow damage, health is " + stateA.health);
+					helper.assertTrue(
+							stateB.health == stateB.maxHealth,
+							"the far same-owner shield must be untouched, health is " + stateB.health);
+				})
+				.thenSucceed();
+	}
+
+	/**
+	 * A free-standing (never level-attached, so never tracked in LOADED_SHIELDS)
+	 * block entity for pure findLinked geometry checks.
+	 */
+	private static BubbleShieldBlockEntity standalone(BlockPos pos, float targetRadius, UUID owner, boolean active) {
+		BubbleShieldBlockEntity be = new BubbleShieldBlockEntity(pos, ModBlocks.BUBBLE_SHIELD_PROJECTOR.defaultBlockState());
+		ShieldState state = be.getShieldState();
+		state.targetRadius = targetRadius;
+		state.ownerUuid = owner;
+		state.active = active;
+		return be;
+	}
+
+	/** (d) Pure findLinked geometry: overlap strictness, owner/active gating, current radii, order. */
+	@GameTest(environment = ISOLATED_ENVIRONMENT)
+	public void findLinkedGeometry(GameTestHelper helper) {
+		UUID owner = UUID.randomUUID();
+		BlockPos originPos = new BlockPos(0, 64, 0);
+		BubbleShieldBlockEntity origin = standalone(originPos, 8.0F, owner, true);
+
+		// Overlap is strict: touching spheres (distance == r1 + r2) do NOT link.
+		BubbleShieldBlockEntity overlapping = standalone(originPos.east(10), 8.0F, owner, true);
+		BubbleShieldBlockEntity touching = standalone(originPos.east(16), 8.0F, owner, true);
+		BubbleShieldBlockEntity disjoint = standalone(originPos.east(30), 8.0F, owner, true);
+		helper.assertTrue(
+				ShieldLinking.findLinked(origin, List.of(overlapping, touching, disjoint)).equals(List.of(origin, overlapping)),
+				"only the strictly overlapping shield should link (touching/disjoint excluded)");
+
+		// Both shields must be active, and owners must match and be non-null.
+		BubbleShieldBlockEntity inactive = standalone(originPos.east(10), 8.0F, owner, false);
+		BubbleShieldBlockEntity stranger = standalone(originPos.east(10), 8.0F, UUID.randomUUID(), true);
+		BubbleShieldBlockEntity ownerless = standalone(originPos.east(10), 8.0F, null, true);
+		helper.assertTrue(
+				ShieldLinking.findLinked(origin, List.of(inactive, stranger, ownerless)).equals(List.of(origin)),
+				"inactive, different-owner and ownerless shields must not link");
+
+		BubbleShieldBlockEntity ownerlessOrigin = standalone(originPos, 8.0F, null, true);
+		BubbleShieldBlockEntity ownerlessTwin = standalone(originPos.east(1), 8.0F, null, true);
+		helper.assertTrue(
+				ShieldLinking.findLinked(ownerlessOrigin, List.of(ownerlessTwin)).equals(List.of(ownerlessOrigin)),
+				"two ownerless shields must not link even at distance 1");
+		BubbleShieldBlockEntity inactiveOrigin = standalone(originPos, 8.0F, owner, false);
+		helper.assertTrue(
+				ShieldLinking.findLinked(inactiveOrigin, List.of(overlapping)).equals(List.of(inactiveOrigin)),
+				"an inactive origin links to nothing");
+
+		// Linking uses the CURRENT (health-shrunk) radii, not the target radii.
+		BubbleShieldBlockEntity shrunk = standalone(originPos.east(13), 8.0F, owner, true);
+		shrunk.getShieldState().health = 50.0F; // currentRadius = max(4, 8 * 0.5) = 4
+		helper.assertTrue(
+				ShieldLinking.findLinked(origin, List.of(shrunk)).equals(List.of(origin)),
+				"a health-shrunk partner (current radius 4) at distance 13 must not link (8 + 4 < 13)");
+		BubbleShieldBlockEntity shrunkNear = standalone(originPos.east(11), 8.0F, owner, true);
+		shrunkNear.getShieldState().health = 50.0F;
+		helper.assertTrue(
+				ShieldLinking.findLinked(origin, List.of(shrunkNear)).equals(List.of(origin, shrunkNear)),
+				"the same shrunk partner at distance 11 should link (8 + 4 > 11)");
+
+		// Linking uses radii ONLY — shape is ignored. Two DOME shields whose sphere
+		// volumes overlap purely below the center plane (where a dome renders no
+		// surface and admits everything) still resonate: the link is a property of
+		// the projectors' spheres, not of the rendered shell.
+		BubbleShieldBlockEntity domeOrigin = standalone(originPos, 8.0F, owner, true);
+		domeOrigin.getShieldState().shape = ShieldShape.DOME;
+		BubbleShieldBlockEntity domeBelow = standalone(originPos.below(10), 8.0F, owner, true);
+		domeBelow.getShieldState().shape = ShieldShape.DOME;
+		helper.assertTrue(
+				ShieldLinking.findLinked(domeOrigin, List.of(domeBelow)).equals(List.of(domeBelow, domeOrigin)),
+				"dome shields link by their full sphere radii, even through the dome's open underside");
+
+		// Not transitive: C overlaps B but not the origin, so it is not in origin's set.
+		BubbleShieldBlockEntity chained = standalone(originPos.east(20), 8.0F, owner, true);
+		helper.assertTrue(
+				ShieldLinking.findLinked(origin, List.of(overlapping, chained)).equals(List.of(origin, overlapping)),
+				"linking is not transitive: only direct overlap with the origin counts");
+		helper.assertTrue(
+				ShieldLinking.findLinked(overlapping, List.of(origin, chained)).size() == 3,
+				"the middle shield of a chain links to both neighbors");
+
+		// Deterministic order: sorted by BlockPos.asLong(), origin included, regardless
+		// of candidate order or duplicates of the origin in the candidate collection.
+		BubbleShieldBlockEntity west = standalone(originPos.west(9), 8.0F, owner, true);
+		List<BubbleShieldBlockEntity> expected = List.of(west, origin, overlapping);
+		helper.assertTrue(
+				west.getBlockPos().asLong() < originPos.asLong() && originPos.asLong() < overlapping.getBlockPos().asLong(),
+				"the expected order fixture should be ascending by BlockPos.asLong()");
+		helper.assertTrue(
+				ShieldLinking.findLinked(origin, List.of(overlapping, origin, west)).equals(expected),
+				"the link set should be sorted by BlockPos.asLong() and deduplicate the origin");
+		helper.assertTrue(
+				ShieldLinking.findLinked(origin, List.of(west, overlapping)).equals(expected),
+				"candidate order must not change the result");
+		helper.succeed();
+	}
+}
