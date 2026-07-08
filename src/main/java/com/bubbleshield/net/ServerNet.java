@@ -8,6 +8,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import com.bubbleshield.advancements.ModCriteria;
 import com.bubbleshield.block.BubbleShieldBlockEntity;
 import com.bubbleshield.effect.EffectRegistry;
 import com.bubbleshield.shield.ShieldLogic;
@@ -100,7 +101,13 @@ public final class ServerNet {
 
 			// An empty (sanitized) name clears the custom name; the boss bar and HUD
 			// then fall back to the effect name.
-			shield.setCustomName(sanitizeShieldName(payload.name()));
+			String name = sanitizeShieldName(payload.name());
+			shield.setCustomName(name);
+
+			// Only setting an actual name is a christening; clearing it is not.
+			if (!name.isEmpty()) {
+				ModCriteria.SHIELD_NAMED.trigger(ctx.player());
+			}
 		});
 
 		ServerPlayNetworking.registerGlobalReceiver(ShieldPayloads.SetColorC2S.TYPE, (payload, ctx) -> {
@@ -114,6 +121,11 @@ public final class ServerNet {
 			}
 
 			shield.setColorOverride(payload.argb());
+
+			// Only applying a real recolor counts; resetting to the authored palette does not.
+			if (payload.argb() != ShieldState.NO_COLOR_OVERRIDE) {
+				ModCriteria.SHIELD_RECOLORED.trigger(ctx.player());
+			}
 		});
 
 		ServerPlayNetworking.registerGlobalReceiver(ShieldPayloads.SetActiveC2S.TYPE, (payload, ctx) -> {

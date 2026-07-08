@@ -1,0 +1,25 @@
+{
+  "parent": "bubbleshield:shield_raised",
+  "criteria": {
+    "shields_linked": {
+      "trigger": "bubbleshield:shields_linked"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancements.bubbleshield.linked_up.description"
+    },
+    "icon": {
+      "id": "minecraft:end_rod"
+    },
+    "title": {
+      "translate": "advancements.bubbleshield.linked_up.title"
+    }
+  },
+  "requirements": [
+    [
+      "shields_linked"
+    ]
+  ],
+  "sends_telemetry_event": false
+}

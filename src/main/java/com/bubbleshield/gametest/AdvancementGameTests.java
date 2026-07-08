@@ -1,8 +1,13 @@
 package com.bubbleshield.gametest;
 
+import java.util.UUID;
+
 import com.bubbleshield.BubbleShield;
+import com.bubbleshield.advancements.ModCriteria;
 import com.bubbleshield.block.BubbleShieldBlockEntity;
+import com.bubbleshield.net.ServerNet;
 import com.bubbleshield.registry.ModBlocks;
+import com.bubbleshield.shield.ShieldLinking;
 
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 
@@ -15,10 +20,23 @@ import net.minecraft.server.level.ServerPlayer;
 /**
  * Coverage for the mod's advancements: the datapack JSONs load, and each custom
  * criterion trigger (shield_activated with diameter bounds, shield_broken,
- * player_whitelisted) awards its advancement through the real call sites.
+ * player_whitelisted, shield_named, shield_recolored, shields_linked) awards its
+ * advancement through the real call sites (or the exact trigger/fire method those
+ * call sites use where the call site is a network receiver).
  */
 public class AdvancementGameTests {
+	/**
+	 * Dedicated (but otherwise vanilla-default) environment for the V9 tests below,
+	 * {@code data/bubbleshield/test_environment/advancement.json}. The shared default
+	 * batch already runs at the runner's 50-tests-per-batch limit (49 mod tests plus
+	 * Fabric API's built-in gametest), so the three new mock-player tests get their
+	 * own batch instead of splitting/reshuffling the pre-existing suite (see
+	 * ColorGameTests.ISOLATED_ENVIRONMENT for the full story).
+	 */
+	private static final String ISOLATED_ENVIRONMENT = "bubbleshield:advancement";
 	private static final BlockPos PROJECTOR_POS = new BlockPos(4, 2, 4);
+	/** 2 blocks east of {@link #PROJECTOR_POS}: overlaps it at radius 8 (2 &lt; 8 + 8). */
+	private static final BlockPos LINKED_PARTNER_POS = new BlockPos(6, 2, 4);
 	private static final int PLENTY_OF_FUEL = 600;
 
 	private static BubbleShieldBlockEntity placeProjector(GameTestHelper helper, float targetRadius) {
@@ -41,7 +59,9 @@ public class AdvancementGameTests {
 	@GameTest(padding = 16)
 	public void advancementJsonsLoad(GameTestHelper helper) {
 		// tree().get(...) is only non-null when the datapack JSON parsed and linked.
-		for (String path : new String[] {"root", "shield_raised", "maximalist", "bubble_burst", "friend_zone"}) {
+		for (String path : new String[] {
+				"root", "shield_raised", "maximalist", "bubble_burst", "friend_zone",
+				"christened", "full_spectrum", "linked_up"}) {
 			advancement(helper, path);
 		}
 
@@ -155,6 +175,79 @@ public class AdvancementGameTests {
 			be.applyShieldDamage(1000.0F);
 			helper.assertTrue(!be.getShieldState().active, "the shield should have broken");
 			helper.assertTrue(isDone(owner, bubbleBurst), "breaking the shield should award bubble_burst to the online owner");
+		} finally {
+			helper.getLevel().getServer().getPlayerList().remove(owner);
+		}
+
+		helper.succeed();
+	}
+
+	@GameTest(environment = ISOLATED_ENVIRONMENT, padding = 16)
+	public void advancementChristened(GameTestHelper helper) {
+		AdvancementHolder christened = advancement(helper, "christened");
+		ServerPlayer player = helper.makeMockServerPlayerInLevel();
+		try {
+			helper.assertTrue(!isDone(player, christened), "a fresh player should not have christened yet");
+
+			// The exact trigger call the SetNameC2S receiver makes after sanitizing
+			// a NON-empty custom name (clearing the name never fires it).
+			ModCriteria.SHIELD_NAMED.trigger(player);
+			helper.assertTrue(isDone(player, christened), "naming a shield should award christened");
+		} finally {
+			helper.getLevel().getServer().getPlayerList().remove(player);
+		}
+
+		helper.succeed();
+	}
+
+	@GameTest(environment = ISOLATED_ENVIRONMENT, padding = 16)
+	public void advancementFullSpectrum(GameTestHelper helper) {
+		AdvancementHolder fullSpectrum = advancement(helper, "full_spectrum");
+		ServerPlayer player = helper.makeMockServerPlayerInLevel();
+		try {
+			helper.assertTrue(!isDone(player, fullSpectrum), "a fresh player should not have full_spectrum yet");
+
+			// The exact trigger call the SetColorC2S receiver makes for a real recolor
+			// (argb != -1; a reset to the authored palette never fires it).
+			ModCriteria.SHIELD_RECOLORED.trigger(player);
+			helper.assertTrue(isDone(player, fullSpectrum), "recoloring a shield should award full_spectrum");
+		} finally {
+			helper.getLevel().getServer().getPlayerList().remove(player);
+		}
+
+		helper.succeed();
+	}
+
+	@GameTest(environment = ISOLATED_ENVIRONMENT, padding = 16)
+	public void advancementLinkedUp(GameTestHelper helper) {
+		AdvancementHolder linkedUp = advancement(helper, "linked_up");
+		ServerPlayer owner = helper.makeMockServerPlayerInLevel();
+		try {
+			// Two overlapping same-owner active shields: exactly the findLinked-size>1
+			// condition that gates the damage-split fire site in interceptProjectiles.
+			BubbleShieldBlockEntity shieldA = placeProjector(helper, 8.0F);
+			shieldA.addFuelSeconds(PLENTY_OF_FUEL);
+			helper.setBlock(LINKED_PARTNER_POS, ModBlocks.BUBBLE_SHIELD_PROJECTOR);
+			BubbleShieldBlockEntity shieldB = helper.getBlockEntity(LINKED_PARTNER_POS, BubbleShieldBlockEntity.class);
+			shieldB.getShieldState().targetRadius = 8.0F;
+			shieldB.addFuelSeconds(PLENTY_OF_FUEL);
+			shieldA.getShieldState().ownerUuid = owner.getUUID();
+			shieldB.getShieldState().ownerUuid = owner.getUUID();
+			helper.assertTrue(shieldA.tryActivate(), "shield A should activate");
+			helper.assertTrue(shieldB.tryActivate(), "shield B should activate");
+			helper.assertTrue(
+					ShieldLinking.findLinked(shieldA, ServerNet.loadedShields(helper.getLevel())).size() > 1,
+					"the overlapping same-owner shields should be resonance-linked");
+
+			// Same owner-resolution rule as fireShieldBroken: no owner or an offline
+			// owner resolves to nobody and must award nothing (and not throw).
+			ModCriteria.fireShieldsLinked(helper.getLevel(), null);
+			ModCriteria.fireShieldsLinked(helper.getLevel(), UUID.randomUUID());
+			helper.assertTrue(!isDone(owner, linkedUp), "an unresolved owner must not award linked_up");
+
+			// The exact fire-site call the damage split makes when findLinked returns > 1.
+			ModCriteria.fireShieldsLinked(helper.getLevel(), shieldA.getShieldState().ownerUuid);
+			helper.assertTrue(isDone(owner, linkedUp), "a damage split across linked shields should award linked_up to the online owner");
 		} finally {
 			helper.getLevel().getServer().getPlayerList().remove(owner);
 		}

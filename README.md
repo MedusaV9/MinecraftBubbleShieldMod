@@ -10,7 +10,8 @@ Craft and place a **Bubble Shield Projector** (a furnace-like machine block), fu
 raise a shield around it:
 
 - **Fuel**: the projector burns coal (80 s), charcoal (80 s), coal blocks (800 s), blaze rods (120 s) or lava
-  buckets (1000 s). An active shield drains one fuel-second per second and collapses when fuel runs out.
+  buckets (1000 s). An active shield drains one fuel-second per second and collapses when fuel runs out
+  (Eco mode and the Flux Capacitor slow this drain — see the exact rule below).
 - **Size**: the shield diameter is configurable in the projector GUI from 8 up to a maximum of **200 blocks**.
 - **Shape**: a GUI toggle switches between the classic full **sphere** and a **dome** (upper hemisphere only —
   open below the projector's center plane, so anything at or below that height passes underneath freely).
@@ -22,10 +23,22 @@ raise a shield around it:
   (halved at tier 2) before it can be activated again.
 - **Mode**: a GUI cycle button switches between **Defense** (the classic behavior), **Pulse** (every 3 seconds,
   hostile mobs inside the bubble take 2 magic damage and a small outward knockback; each pulse that hits
-  something burns one extra fuel-second) and **Eco** (passive drain halved to 1 fuel-second per 2 seconds, but
-  the radius is capped at 0.75x and tier regeneration is suppressed).
+  something burns one extra fuel-second) and **Eco** (passive drain halved, radius capped at 0.75x, tier
+  regeneration suppressed).
+- **Combined drain rule** (Eco x Flux Capacitor): the active shield burns 1 fuel-second every
+  `20 x (Eco ? 2 : 1) x (Capacitor ? 2 : 1)` ticks, **capped at 80 ticks** — i.e. every second plain, every
+  2 seconds with either Eco mode or a Flux Capacitor, and every 4 seconds (the cap) with both.
 - **Effect cycle**: an optional toggle (in the effect picker) that re-rolls the active shield's effect to a
   random different one every 30 seconds.
+- **Custom name**: the owner can name the shield in the GUI (*Name...*, up to 32 characters); the name shows
+  on the boss bar and in-bubble HUD, and clearing it falls back to the effect name.
+- **Boss bar**: everyone standing inside an active shield sees a boss bar tracking the shield's health,
+  named after the shield (custom name or effect name) and colored to match the effect palette (or the
+  owner's dye override).
+- **Dye color override**: a GUI color picker (*Color...*) recolors the bubble surface, HUD bar, particles
+  and boss bar with any of the 16 dye colors, or resets to the effect's authored palette. Caveat: the
+  in-bubble **screen post-effect keeps the effect's own authored colors** (they are baked into the static
+  post_effect JSON uniforms), so only the world-side visuals recolor.
 
 ### Upgrade cores, tiers and regeneration
 
@@ -39,12 +52,37 @@ The projector has a second slot for an **upgrade core**:
 Each regeneration pulse burns one extra fuel-second on top of the normal drain. Removing the core drops the
 tier (and clamps health) immediately.
 
-### Comparator and redstone
+Besides crafting, **Resonant Cores** also drop from structure loot: End City treasure and Ancient City
+chests each have an extra 1-in-10 chance to contain one.
+
+### Flux Capacitor
+
+A third slot takes a **Flux Capacitor** (crafted from copper ingots, redstone blocks and quartz). While
+installed it **halves the passive fuel drain** (see the combined drain rule above) and makes tier
+regeneration pulses **fuel-free** (they no longer burn the extra fuel-second).
+
+### Resonance linking
+
+Two or more **active shields with the same owner whose spheres overlap** form a resonance link: intercepted
+projectile damage is **split evenly** across all linked shields, and an END_ROD particle tether connects the
+projectors. Linking is not transitive (only shields directly overlapping the hit shield share its damage),
+uses the current health-shrunk radii, and ignores shape (domes link by their full sphere radius).
+
+### Comparator, redstone and sculk
 
 - **Comparator output**: while active, the signal is the shield's health fraction on a 1–15 scale; while
   inactive, it reports stored fuel (one signal step per 200 fuel-seconds, capped at 15).
 - **Redstone control**: a rising redstone edge activates a fueled projector, a falling edge deactivates it.
   Edge-triggered, so GUI toggling still works independently while powered.
+- **Sculk game events**: a real activation emits `BLOCK_ACTIVATE` and a real deactivation emits
+  `BLOCK_DEACTIVATE` (no-op re-toggles emit nothing), so sculk sensors can hear the shield switching.
+
+### The /bubbleshield command
+
+- `/bubbleshield list [page]` — browse the effect catalogue, 10 "id: Name" entries per page.
+- `/bubbleshield info <id>` — print an effect's surface, inside behavior, guard style and context profile.
+- `/bubbleshield set <id>` — retune the nearest projector within 16 blocks to the given effect. Owner-gated
+  with the same claim rule as the GUI; the id is clamped into the catalogue range.
 
 ### Projectile interactions
 
@@ -91,11 +129,13 @@ sound or behave the same.
 
 ## HUD, ambient sounds and advancements
 
-- **In-bubble HUD**: while you stand inside an active shield, a top-center HUD element shows the effect
-  name, a 100px health bar tinted with the effect's primary color, and the shield tier (when cored).
-- **Advancements**: five advancements with custom criteria — obtaining a projector, raising a shield,
-  raising a 200-block-diameter shield ("Maximalist"), having your own shield shatter ("Bubble Burst") and
-  whitelisting a friend ("Friend Zone").
+- **In-bubble HUD**: while you stand inside an active shield, a top-center HUD element shows the shield
+  name (custom or effect name), a 100px health bar tinted with the effect's primary color (or the dye
+  override), and the shield tier (when cored).
+- **Advancements**: eight advancements with custom criteria — obtaining a projector, raising a shield
+  ("Shields Up!"), raising a 200-block-diameter shield ("Maximalist"), having your own shield shatter
+  ("Bubble Burst"), whitelisting a friend ("Friend Zone"), naming a shield ("Christened"), dye-recoloring a
+  shield ("Full Spectrum") and having two linked shields split damage ("Linked Up").
 - Full **English + German** localization for everything, enforced by a key-parity gametest.
 
 ## Building and running
@@ -110,9 +150,10 @@ Requires Java 25. All commands run from the repository root:
 ./gradlew runServer
 
 # Run the automated game tests (shield lifecycle, projectile interactions, whitelist,
-# menu, tiers/regen, comparator/redstone, dome geometry, guard/context, advancements,
-# shield modes/effect cycle, effect catalogue invariants, lang parity, post-effect
-# assets, persistence)
+# menu, tiers/regen, flux capacitor economy, comparator/redstone, dome geometry,
+# guard/context, advancements, boss bar/naming, shield modes/effect cycle, color
+# override, resonance linking, command/sculk/loot integration, effect catalogue
+# invariants, lang parity, post-effect assets, persistence)
 ./gradlew runGameTest
 
 # Compile-validate all bubble + screen-fx GLSL shaders with glslangValidator
@@ -129,9 +170,9 @@ need one; a headless VM will not render them):
 Then create a world, place a Bubble Shield Projector, right-click it, add fuel, pick a diameter, shape and
 effect, and press *Activate*.
 
-Note for worlds from the 50-effect alpha: effect ids are clamped into the new 0–74 range and missing NBT
-fields default sensibly (shape = sphere, no core), so old saves load fine, though a previously selected
-effect may map to a different look.
+Note for worlds from older alphas with smaller catalogues: effect ids are clamped into the current 0–104
+range and missing NBT fields default sensibly (shape = sphere, no core, no custom name/color), so old saves
+load fine, though a previously selected effect may map to a different look.
 
 ## License
 

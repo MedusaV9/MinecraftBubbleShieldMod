@@ -454,6 +454,11 @@ public final class ShieldLogic {
 			List<BubbleShieldBlockEntity> linked = ShieldLinking.findLinked(self, ServerNet.loadedShields(level));
 			boolean broke;
 			if (linked.size() > 1) {
+				// A real damage split across resonance-linked shields awards shields_linked
+				// to the (online) owner; the criterion is idempotent, so re-firing on later
+				// splits is harmless.
+				ModCriteria.fireShieldsLinked(level, state.ownerUuid);
+
 				float split = damage / linked.size();
 				broke = applyDamage(state, split, level.getGameTime(), breakCooldownTicks);
 				for (BubbleShieldBlockEntity partner : linked) {
