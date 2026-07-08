@@ -20,8 +20,10 @@ import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityReference;
+import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.entity.projectile.ProjectileDeflection;
@@ -56,19 +58,35 @@ public final class ShieldLogic {
 	public static final int REGEN_PERIOD_TICKS = 40;
 	public static final float TIER_1_REGEN_PER_PULSE = 1.0F;
 	public static final float TIER_2_REGEN_PER_PULSE = 2.5F;
+	/** PULSE mode zaps hostile mobs inside the bubble once per this many ticks. */
+	public static final int PULSE_PERIOD_TICKS = 60;
+	/** Magic damage dealt to each monster inside the bubble by a PULSE zap. */
+	public static final float PULSE_DAMAGE = 2.0F;
+	/** ECO mode caps the current radius at this fraction of the normal value. */
+	public static final float ECO_RADIUS_FACTOR = 0.75F;
+	/** An active shield with cycleEffect enabled re-rolls its effect once per this many ticks. */
+	public static final int EFFECT_CYCLE_PERIOD_TICKS = 600;
 
 	private ShieldLogic() {
 	}
 
 	/**
-	 * @return the current shield radius; shrinks with health but never below {@link #MIN_RADIUS} while active.
+	 * @return the current shield radius; shrinks with health but never below {@link #MIN_RADIUS} while
+	 * active. In {@link ShieldMode#ECO} the result is capped at {@link #ECO_RADIUS_FACTOR} times the
+	 * normal value; applying the cap here keeps the barrier, renderer sync and projectile interception
+	 * in agreement about the eco bubble's size.
 	 */
 	public static float currentRadius(ShieldState state) {
 		if (!state.active || state.maxHealth <= 0.0F) {
 			return 0.0F;
 		}
 
-		return Math.max(MIN_RADIUS, state.targetRadius * state.health / state.maxHealth);
+		float radius = Math.max(MIN_RADIUS, state.targetRadius * state.health / state.maxHealth);
+		if (state.mode == ShieldMode.ECO) {
+			radius *= ECO_RADIUS_FACTOR;
+		}
+
+		return radius;
 	}
 
 	public static boolean canActivate(ShieldState state, long gameTime) {
@@ -147,20 +165,25 @@ public final class ShieldLogic {
 		boolean changed = false;
 		long gameTime = level.getGameTime();
 
-		// Active shield consumes 1 fuel-second per 20 ticks.
+		// Active shield consumes 1 fuel-second per 20 ticks. In ECO mode every other
+		// drain boundary is skipped, so the passive drain becomes 1 per 40 ticks.
 		if (gameTime % TICKS_PER_FUEL_SECOND == 0) {
-			state.fuelSeconds--;
-			changed = true;
-			if (state.fuelSeconds <= 0) {
-				state.fuelSeconds = 0;
-				state.active = false;
-				return true;
+			boolean ecoSkip = state.mode == ShieldMode.ECO && (gameTime / TICKS_PER_FUEL_SECOND) % 2L != 0L;
+			if (!ecoSkip) {
+				state.fuelSeconds--;
+				changed = true;
+				if (state.fuelSeconds <= 0) {
+					state.fuelSeconds = 0;
+					state.active = false;
+					return true;
+				}
 			}
 		}
 
 		// Fueled regeneration: tier-1+ shields heal every 2 seconds, each pulse
-		// burning one extra fuel-second on top of the runtime drain.
-		if (tier >= 1 && state.health < state.maxHealth && state.fuelSeconds > 0 && gameTime % REGEN_PERIOD_TICKS == 0) {
+		// burning one extra fuel-second on top of the runtime drain. ECO mode
+		// suppresses regeneration entirely as part of its efficiency trade-off.
+		if (tier >= 1 && state.mode != ShieldMode.ECO && state.health < state.maxHealth && state.fuelSeconds > 0 && gameTime % REGEN_PERIOD_TICKS == 0) {
 			state.health = Math.min(state.maxHealth, state.health + (tier == 1 ? TIER_1_REGEN_PER_PULSE : TIER_2_REGEN_PER_PULSE));
 			state.fuelSeconds = Math.max(0, state.fuelSeconds - 1);
 			changed = true;
@@ -170,6 +193,12 @@ public final class ShieldLogic {
 			}
 		}
 
+		// Effect cycle: while active with the toggle on, periodically re-roll the effect.
+		if (state.cycleEffect && gameTime % EFFECT_CYCLE_PERIOD_TICKS == 0L) {
+			cycleEffect(state, level.getRandom());
+			changed = true;
+		}
+
 		Vec3 center = Vec3.atCenterOf(pos);
 		double radius = currentRadius(state);
 		double areaSize = 2.0 * radius + 8.0;
@@ -177,6 +206,16 @@ public final class ShieldLogic {
 
 		if (interceptProjectiles(level, pos, center, radius, state, area, breakCooldownTicks(tier))) {
 			changed = true;
+		}
+
+		// PULSE mode: periodically zap every monster inside the (possibly shrunk) bubble.
+		if (state.active && state.mode == ShieldMode.PULSE && gameTime % PULSE_PERIOD_TICKS == 0L) {
+			if (pulseMonsters(level, center, currentRadius(state), state, area)) {
+				changed = true;
+				if (!state.active) {
+					return true;
+				}
+			}
 		}
 
 		if (state.active) {
@@ -193,6 +232,67 @@ public final class ShieldLogic {
 		}
 
 		return changed;
+	}
+
+	/**
+	 * One PULSE-mode zap: every {@link net.minecraft.world.entity.monster.Monster} inside the
+	 * bubble (shape-aware) takes {@link #PULSE_DAMAGE} magic damage plus a small outward
+	 * knockback. A pulse that hit at least one monster burns one extra fuel-second on top of
+	 * the passive drain; running dry deactivates the shield.
+	 *
+	 * @return true if at least one monster was hit (state changed).
+	 */
+	private static boolean pulseMonsters(ServerLevel level, Vec3 center, double radius, ShieldState state, AABB area) {
+		boolean hitAny = false;
+		for (Monster mob : level.getEntitiesOfClass(Monster.class, area)) {
+			if (!ShieldGeometry.isInside(state.shape, center, radius, mob.position())) {
+				continue;
+			}
+
+			if (!mob.hurtServer(level, level.damageSources().magic(), PULSE_DAMAGE)) {
+				continue;
+			}
+
+			// Small outward knockback, mostly horizontal (same direction convention as
+			// the player barrier). hurtMarked forces the velocity to replicate to clients.
+			Vec3 direction = mob.position().subtract(center);
+			Vec3 horizontal = new Vec3(direction.x, 0.0, direction.z);
+			horizontal = horizontal.lengthSqr() < 1.0E-6 ? new Vec3(1.0, 0.0, 0.0) : horizontal.normalize();
+			mob.setDeltaMovement(horizontal.scale(0.4).add(0.0, 0.1, 0.0));
+			mob.hurtMarked = true;
+
+			// overrideLimiter=true lifts the 32-block send limit on large bubbles.
+			level.sendParticles(ParticleTypes.CRIT, true, false, mob.getX(), mob.getY(0.5), mob.getZ(), 12, 0.3, 0.3, 0.3, 0.1);
+			hitAny = true;
+		}
+
+		if (hitAny) {
+			state.fuelSeconds = Math.max(0, state.fuelSeconds - 1);
+			if (state.fuelSeconds <= 0) {
+				state.active = false;
+			}
+		}
+
+		return hitAny;
+	}
+
+	/**
+	 * Re-rolls the shield's effect to a uniformly random id in [0, {@link EffectRegistry#COUNT})
+	 * that differs from the current one. Pure: mutates only the given state using the given
+	 * random source.
+	 */
+	public static void cycleEffect(ShieldState state, RandomSource random) {
+		if (EffectRegistry.COUNT <= 1) {
+			return;
+		}
+
+		// Draw from COUNT-1 slots and shift past the current id: uniform over all others.
+		int next = random.nextInt(EffectRegistry.COUNT - 1);
+		if (next >= state.effectId) {
+			next++;
+		}
+
+		state.effectId = next;
 	}
 
 	/**

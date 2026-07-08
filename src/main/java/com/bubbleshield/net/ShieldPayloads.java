@@ -27,14 +27,16 @@ public final class ShieldPayloads {
 	private ShieldPayloads() {
 	}
 
-	/** Client asks to change diameter/effect/shape (ordinal) of the projector at {@code pos}. */
-	public record SetSettingsC2S(BlockPos pos, int diameter, int effectId, int shapeOrdinal) implements CustomPacketPayload {
+	/** Client asks to change diameter/effect/shape/mode (ordinals)/effect-cycle of the projector at {@code pos}. */
+	public record SetSettingsC2S(BlockPos pos, int diameter, int effectId, int shapeOrdinal, int modeOrdinal, boolean cycleEnabled) implements CustomPacketPayload {
 		public static final CustomPacketPayload.Type<SetSettingsC2S> TYPE = new CustomPacketPayload.Type<>(BubbleShield.id("set_settings"));
 		public static final StreamCodec<RegistryFriendlyByteBuf, SetSettingsC2S> CODEC = StreamCodec.composite(
 			BlockPos.STREAM_CODEC, SetSettingsC2S::pos,
 			ByteBufCodecs.VAR_INT, SetSettingsC2S::diameter,
 			ByteBufCodecs.VAR_INT, SetSettingsC2S::effectId,
 			ByteBufCodecs.VAR_INT, SetSettingsC2S::shapeOrdinal,
+			ByteBufCodecs.VAR_INT, SetSettingsC2S::modeOrdinal,
+			ByteBufCodecs.BOOL, SetSettingsC2S::cycleEnabled,
 			SetSettingsC2S::new
 		);
 

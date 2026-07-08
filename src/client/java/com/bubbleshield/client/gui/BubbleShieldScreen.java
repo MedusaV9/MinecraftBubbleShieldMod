@@ -3,6 +3,7 @@ package com.bubbleshield.client.gui;
 import com.bubbleshield.BubbleShield;
 import com.bubbleshield.menu.BubbleShieldMenu;
 import com.bubbleshield.net.ShieldPayloads;
+import com.bubbleshield.shield.ShieldMode;
 import com.bubbleshield.shield.ShieldShape;
 
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
@@ -32,6 +33,7 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 	private Button activateButton;
 	private DiameterSlider diameterSlider;
 	private Button shapeButton;
+	private Button modeButton;
 
 	public BubbleShieldScreen(BubbleShieldMenu menu, Inventory inventory, Component title) {
 		super(menu, inventory, title, 176, 166);
@@ -54,15 +56,24 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 
 		this.diameterSlider = this.addRenderableWidget(new DiameterSlider(x, this.topPos + 26, width, 13, this.menu));
 
+		// Shape and mode share the third row: 42px shape + 2px gap + 44px mode = 88px.
 		this.shapeButton = this.addRenderableWidget(
 			Button.builder(this.shapeLabel(), button -> this.toggleShape())
-				.bounds(x, this.topPos + 40, width, 13)
+				.bounds(x, this.topPos + 40, 42, 13)
+				.build()
+		);
+
+		this.modeButton = this.addRenderableWidget(
+			Button.builder(this.modeLabel(), button -> this.cycleMode())
+				.bounds(x + 44, this.topPos + 40, 44, 13)
 				.build()
 		);
 
 		this.addRenderableWidget(
 			Button.builder(Component.translatable("gui.bubbleshield.effects"), button ->
-				this.minecraft.gui.setScreen(new EffectPickerScreen(this, this.menu.pos(), this.menu.diameter(), this.menu.effectId(), this.menu.shape()))
+				this.minecraft.gui.setScreen(new EffectPickerScreen(
+					this, this.menu.pos(), this.menu.diameter(), this.menu.effectId(),
+					this.menu.shape(), this.menu.mode(), this.menu.cycleEffect()))
 			).bounds(x, this.topPos + 54, width, 13).build()
 		);
 
@@ -88,15 +99,31 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 		return Component.translatable(this.menu.isActive() ? "gui.bubbleshield.deactivate" : "gui.bubbleshield.activate");
 	}
 
-	/** Sends the toggled shape, keeping the current (server-synced) diameter and effect. */
+	/** Sends the toggled shape, echoing the current (server-synced) diameter/effect/mode/cycle. */
 	private void toggleShape() {
 		int toggled = this.menu.shape() == ShieldShape.SPHERE.ordinal() ? ShieldShape.DOME.ordinal() : ShieldShape.SPHERE.ordinal();
-		ClientPlayNetworking.send(new ShieldPayloads.SetSettingsC2S(this.menu.pos(), this.menu.diameter(), this.menu.effectId(), toggled));
+		ClientPlayNetworking.send(new ShieldPayloads.SetSettingsC2S(
+			this.menu.pos(), this.menu.diameter(), this.menu.effectId(), toggled, this.menu.mode(), this.menu.cycleEffect()));
 	}
 
 	private Component shapeLabel() {
 		boolean dome = ShieldShape.byOrdinal(this.menu.shape()) == ShieldShape.DOME;
 		return Component.translatable(dome ? "gui.bubbleshield.shape.dome" : "gui.bubbleshield.shape.sphere");
+	}
+
+	/** Sends the next mode in the DEFENSE -> PULSE -> ECO cycle, echoing everything else. */
+	private void cycleMode() {
+		int next = (this.menu.mode() + 1) % ShieldMode.values().length;
+		ClientPlayNetworking.send(new ShieldPayloads.SetSettingsC2S(
+			this.menu.pos(), this.menu.diameter(), this.menu.effectId(), this.menu.shape(), next, this.menu.cycleEffect()));
+	}
+
+	private Component modeLabel() {
+		return Component.translatable(switch (ShieldMode.byOrdinal(this.menu.mode())) {
+			case PULSE -> "gui.bubbleshield.mode.pulse";
+			case ECO -> "gui.bubbleshield.mode.eco";
+			default -> "gui.bubbleshield.mode.defense";
+		});
 	}
 
 	@Override
@@ -107,8 +134,9 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 		// ContainerData arrives after init(), so the slider must re-sync once the
 		// real diameter shows up (and whenever the server changes it).
 		this.diameterSlider.syncFromMenu();
-		// Same story for the shape: the label always reflects the synced server state.
+		// Same story for the shape and mode: the labels always reflect the synced server state.
 		this.shapeButton.setMessage(this.shapeLabel());
+		this.modeButton.setMessage(this.modeLabel());
 	}
 
 	@Override
@@ -190,15 +218,16 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 			}
 		}
 
-		/** Sends the pending diameter to the server (keeping the synced effect and shape). */
+		/** Sends the pending diameter to the server (keeping the synced effect/shape/mode/cycle). */
 		private void flush() {
 			if (!this.dirty) {
 				return;
 			}
 
 			this.dirty = false;
-			// The current (server-synced) shape is echoed back so only the diameter changes.
-			ClientPlayNetworking.send(new ShieldPayloads.SetSettingsC2S(this.menu.pos(), this.diameter(), this.menu.effectId(), this.menu.shape()));
+			// The current (server-synced) shape/mode/cycle are echoed back so only the diameter changes.
+			ClientPlayNetworking.send(new ShieldPayloads.SetSettingsC2S(
+				this.menu.pos(), this.diameter(), this.menu.effectId(), this.menu.shape(), this.menu.mode(), this.menu.cycleEffect()));
 		}
 
 		@Override

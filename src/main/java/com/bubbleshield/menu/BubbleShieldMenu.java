@@ -34,7 +34,9 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 	public static final int DATA_COOLDOWN_SECONDS = 5;
 	public static final int DATA_TIER = 6;
 	public static final int DATA_SHAPE = 7;
-	public static final int DATA_COUNT = 8;
+	public static final int DATA_MODE = 8;
+	public static final int DATA_CYCLE = 9;
+	public static final int DATA_COUNT = 10;
 
 	public static final int FUEL_SLOT = 0;
 	public static final int CORE_SLOT = 1;
@@ -135,6 +137,16 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 	/** @return the synced {@link com.bubbleshield.shield.ShieldShape} ordinal. */
 	public int shape() {
 		return this.data.get(DATA_SHAPE);
+	}
+
+	/** @return the synced {@link com.bubbleshield.shield.ShieldMode} ordinal. */
+	public int mode() {
+		return this.data.get(DATA_MODE);
+	}
+
+	/** @return the synced effect-cycle toggle. */
+	public boolean cycleEffect() {
+		return this.data.get(DATA_CYCLE) != 0;
 	}
 
 	@Override

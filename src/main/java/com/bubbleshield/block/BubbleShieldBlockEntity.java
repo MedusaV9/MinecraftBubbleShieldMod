@@ -10,6 +10,7 @@ import com.bubbleshield.registry.ModItems;
 import com.bubbleshield.shield.FuelMap;
 import com.bubbleshield.shield.ShieldGeometry;
 import com.bubbleshield.shield.ShieldLogic;
+import com.bubbleshield.shield.ShieldMode;
 import com.bubbleshield.shield.ShieldShape;
 import com.bubbleshield.shield.ShieldState;
 
@@ -80,6 +81,8 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 				case BubbleShieldMenu.DATA_COOLDOWN_SECONDS -> (int) Math.min(Short.MAX_VALUE, BubbleShieldBlockEntity.this.cooldownTicksLeft() / ShieldLogic.TICKS_PER_FUEL_SECOND);
 				case BubbleShieldMenu.DATA_TIER -> BubbleShieldBlockEntity.this.tier();
 				case BubbleShieldMenu.DATA_SHAPE -> state.shape.ordinal();
+				case BubbleShieldMenu.DATA_MODE -> state.mode.ordinal();
+				case BubbleShieldMenu.DATA_CYCLE -> state.cycleEffect ? 1 : 0;
 				default -> 0;
 			};
 		}
@@ -415,12 +418,14 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 
 	/**
 	 * Applies validated settings from the client: diameter (converted to radius),
-	 * effect id and shield shape (by ordinal).
+	 * effect id, shield shape and mode (by ordinal), and the effect-cycle toggle.
 	 */
-	public void setSettings(int diameter, int effectId, int shapeOrdinal) {
+	public void setSettings(int diameter, int effectId, int shapeOrdinal, int modeOrdinal, boolean cycleEffect) {
 		this.shieldState.targetRadius = diameter / 2.0F;
 		this.shieldState.effectId = effectId;
 		this.shieldState.shape = ShieldShape.byOrdinal(shapeOrdinal);
+		this.shieldState.mode = ShieldMode.byOrdinal(modeOrdinal);
+		this.shieldState.cycleEffect = cycleEffect;
 		this.markUpdated();
 	}
 

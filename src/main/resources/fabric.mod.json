@@ -28,7 +28,8 @@
 			"com.bubbleshield.gametest.TierGameTests",
 			"com.bubbleshield.gametest.ControlShapeGameTests",
 			"com.bubbleshield.gametest.AdvancementGameTests",
-			"com.bubbleshield.gametest.BossBarNameGameTests"
+			"com.bubbleshield.gametest.BossBarNameGameTests",
+			"com.bubbleshield.gametest.ModeGameTests"
 		]
 	},
 	"mixins": [

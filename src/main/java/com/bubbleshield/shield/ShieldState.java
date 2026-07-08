@@ -25,6 +25,9 @@ public class ShieldState {
 	public boolean active;
 	public int effectId;
 	public ShieldShape shape = ShieldShape.SPHERE;
+	public ShieldMode mode = ShieldMode.DEFENSE;
+	/** When true, the active shield re-rolls its effect periodically (see ShieldLogic). */
+	public boolean cycleEffect;
 	public float targetRadius = DEFAULT_TARGET_RADIUS;
 	public float health = DEFAULT_MAX_HEALTH;
 	public float maxHealth = DEFAULT_MAX_HEALTH;
@@ -63,6 +66,8 @@ public class ShieldState {
 		output.putBoolean("active", this.active);
 		output.putInt("effect_id", this.effectId);
 		output.putInt("shape", this.shape.ordinal());
+		output.putInt("mode", this.mode.ordinal());
+		output.putBoolean("cycle_effect", this.cycleEffect);
 		output.putFloat("target_radius", this.targetRadius);
 		output.putFloat("health", this.health);
 		output.putFloat("max_health", this.maxHealth);
@@ -88,6 +93,8 @@ public class ShieldState {
 		this.active = input.getBooleanOr("active", false);
 		this.effectId = input.getIntOr("effect_id", 0);
 		this.shape = ShieldShape.byOrdinal(input.getIntOr("shape", 0));
+		this.mode = ShieldMode.byOrdinal(input.getIntOr("mode", 0));
+		this.cycleEffect = input.getBooleanOr("cycle_effect", false);
 		this.targetRadius = input.getFloatOr("target_radius", DEFAULT_TARGET_RADIUS);
 		this.health = input.getFloatOr("health", DEFAULT_MAX_HEALTH);
 		this.maxHealth = input.getFloatOr("max_health", DEFAULT_MAX_HEALTH);

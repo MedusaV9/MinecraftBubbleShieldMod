@@ -20,6 +20,12 @@ raise a shield around it:
 - **Health**: projectile hits damage the shield, and the shield **shrinks** as its health drops (never below a
   4-block radius). When health is depleted the shield breaks and the projector enters a **30-minute cooldown**
   (halved at tier 2) before it can be activated again.
+- **Mode**: a GUI cycle button switches between **Defense** (the classic behavior), **Pulse** (every 3 seconds,
+  hostile mobs inside the bubble take 2 magic damage and a small outward knockback; each pulse that hits
+  something burns one extra fuel-second) and **Eco** (passive drain halved to 1 fuel-second per 2 seconds, but
+  the radius is capped at 0.75x and tier regeneration is suppressed).
+- **Effect cycle**: an optional toggle (in the effect picker) that re-rolls the active shield's effect to a
+  random different one every 30 seconds.
 
 ### Upgrade cores, tiers and regeneration
 
@@ -105,7 +111,8 @@ Requires Java 25. All commands run from the repository root:
 
 # Run the automated game tests (shield lifecycle, projectile interactions, whitelist,
 # menu, tiers/regen, comparator/redstone, dome geometry, guard/context, advancements,
-# effect catalogue invariants, lang parity, post-effect assets, persistence)
+# shield modes/effect cycle, effect catalogue invariants, lang parity, post-effect
+# assets, persistence)
 ./gradlew runGameTest
 
 # Compile-validate all bubble + screen-fx GLSL shaders with glslangValidator

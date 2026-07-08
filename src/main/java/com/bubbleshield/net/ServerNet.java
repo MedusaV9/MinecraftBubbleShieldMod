@@ -11,6 +11,7 @@ import java.util.UUID;
 import com.bubbleshield.block.BubbleShieldBlockEntity;
 import com.bubbleshield.effect.EffectRegistry;
 import com.bubbleshield.shield.ShieldLogic;
+import com.bubbleshield.shield.ShieldMode;
 import com.bubbleshield.shield.ShieldShape;
 import com.bubbleshield.shield.ShieldState;
 
@@ -65,7 +66,8 @@ public final class ServerNet {
 			int diameter = Mth.clamp(payload.diameter(), MIN_DIAMETER, MAX_DIAMETER);
 			int effectId = Mth.clamp(payload.effectId(), MIN_EFFECT_ID, MAX_EFFECT_ID);
 			int shapeOrdinal = Mth.clamp(payload.shapeOrdinal(), 0, ShieldShape.values().length - 1);
-			shield.setSettings(diameter, effectId, shapeOrdinal);
+			int modeOrdinal = Mth.clamp(payload.modeOrdinal(), 0, ShieldMode.values().length - 1);
+			shield.setSettings(diameter, effectId, shapeOrdinal, modeOrdinal, payload.cycleEnabled());
 		});
 
 		ServerPlayNetworking.registerGlobalReceiver(ShieldPayloads.WhitelistModifyC2S.TYPE, (payload, ctx) -> {

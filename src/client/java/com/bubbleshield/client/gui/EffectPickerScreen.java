@@ -36,15 +36,22 @@ public class EffectPickerScreen extends Screen {
 	private final int currentEffectId;
 	/** Echoed back unchanged in {@code SetSettingsC2S} so picking an effect keeps the shape. */
 	private final int shapeOrdinal;
+	/** Echoed back unchanged in {@code SetSettingsC2S} so picking an effect keeps the mode. */
+	private final int modeOrdinal;
+	/** Tracks the effect-cycle toggle locally; flipped by the nav-row Cycle button. */
+	private boolean cycleEnabled;
 	private int page;
+	private Button cycleButton;
 
-	public EffectPickerScreen(Screen parent, BlockPos pos, int diameter, int currentEffectId, int shapeOrdinal) {
+	public EffectPickerScreen(Screen parent, BlockPos pos, int diameter, int currentEffectId, int shapeOrdinal, int modeOrdinal, boolean cycleEnabled) {
 		super(Component.translatable("gui.bubbleshield.effects"));
 		this.parent = parent;
 		this.pos = pos;
 		this.diameter = diameter;
 		this.currentEffectId = currentEffectId;
 		this.shapeOrdinal = shapeOrdinal;
+		this.modeOrdinal = modeOrdinal;
+		this.cycleEnabled = cycleEnabled;
 	}
 
 	@Override
@@ -79,6 +86,13 @@ public class EffectPickerScreen extends Screen {
 		);
 		next.active = this.page < PAGE_COUNT - 1;
 
+		// Effect-cycle toggle, centered between the page-flip buttons in the nav row.
+		this.cycleButton = this.addRenderableWidget(
+			Button.builder(this.cycleLabel(), b -> this.toggleCycle())
+				.bounds(startX + gridWidth / 2 - 40, navY, 80, 20)
+				.build()
+		);
+
 		this.addRenderableWidget(
 			Button.builder(Component.translatable("gui.bubbleshield.back"), b -> this.onClose())
 				.bounds(this.width / 2 - 75, this.height - 28, 150, 20)
@@ -107,8 +121,21 @@ public class EffectPickerScreen extends Screen {
 	}
 
 	private void pick(int effectId) {
-		ClientPlayNetworking.send(new ShieldPayloads.SetSettingsC2S(this.pos, this.diameter, effectId, this.shapeOrdinal));
+		ClientPlayNetworking.send(new ShieldPayloads.SetSettingsC2S(
+			this.pos, this.diameter, effectId, this.shapeOrdinal, this.modeOrdinal, this.cycleEnabled));
 		this.onClose();
+	}
+
+	/** Flips the effect-cycle toggle and sends it, echoing all other synced settings. */
+	private void toggleCycle() {
+		this.cycleEnabled = !this.cycleEnabled;
+		ClientPlayNetworking.send(new ShieldPayloads.SetSettingsC2S(
+			this.pos, this.diameter, this.currentEffectId, this.shapeOrdinal, this.modeOrdinal, this.cycleEnabled));
+		this.cycleButton.setMessage(this.cycleLabel());
+	}
+
+	private Component cycleLabel() {
+		return Component.translatable(this.cycleEnabled ? "gui.bubbleshield.cycle.on" : "gui.bubbleshield.cycle.off");
 	}
 
 	@Override
