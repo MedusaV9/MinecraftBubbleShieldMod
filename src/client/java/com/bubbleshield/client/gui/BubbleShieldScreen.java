@@ -71,6 +71,13 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 				this.minecraft.gui.setScreen(new WhitelistScreen(this, this.menu.pos()))
 			).bounds(x, this.topPos + 68, width, 13).build()
 		);
+
+		// Left column, between the fuel (y=20) and tier (y=44) labels: a free 13px spot.
+		this.addRenderableWidget(
+			Button.builder(Component.translatable("gui.bubbleshield.name"), button ->
+				this.minecraft.gui.setScreen(new ShieldNameScreen(this, this.menu.pos()))
+			).bounds(this.leftPos + 8, this.topPos + 30, 64, 13).build()
+		);
 	}
 
 	private void toggleActive() {

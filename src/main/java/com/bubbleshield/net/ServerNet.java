@@ -43,6 +43,8 @@ public final class ServerNet {
 	public static final int MAX_EFFECT_ID = EffectRegistry.COUNT - 1;
 	/** Hard cap on whitelist entries to keep payloads and NBT bounded. */
 	public static final int MAX_WHITELIST_SIZE = 64;
+	/** Hard cap on the custom shield name, matching the SetNameC2S/ShieldSyncS2C codecs. */
+	public static final int MAX_SHIELD_NAME_LENGTH = 32;
 
 	/**
 	 * Loaded shield projectors per level, used to sync existing shields to joining players.
@@ -86,6 +88,17 @@ public final class ServerNet {
 			} else {
 				shield.whitelistRemove(ctx.server(), name);
 			}
+		});
+
+		ServerPlayNetworking.registerGlobalReceiver(ShieldPayloads.SetNameC2S.TYPE, (payload, ctx) -> {
+			BubbleShieldBlockEntity shield = validatedShield(ctx.player(), payload.pos());
+			if (shield == null || !isOwner(ctx.player(), shield)) {
+				return;
+			}
+
+			// An empty (sanitized) name clears the custom name; the boss bar and HUD
+			// then fall back to the effect name.
+			shield.setCustomName(sanitizeShieldName(payload.name()));
 		});
 
 		ServerPlayNetworking.registerGlobalReceiver(ShieldPayloads.SetActiveC2S.TYPE, (payload, ctx) -> {
@@ -156,6 +169,21 @@ public final class ServerNet {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Sanitizes a requested custom shield name: control/formatting characters are
+	 * stripped ({@link StringUtil#filterText}), surrounding whitespace is trimmed and
+	 * the result is capped at {@link #MAX_SHIELD_NAME_LENGTH} characters. May return
+	 * an empty string, which means "clear the custom name".
+	 */
+	public static String sanitizeShieldName(String raw) {
+		String name = StringUtil.filterText(raw).trim();
+		if (name.length() > MAX_SHIELD_NAME_LENGTH) {
+			name = name.substring(0, MAX_SHIELD_NAME_LENGTH).trim();
+		}
+
+		return name;
 	}
 
 	private static boolean containsIgnoreCase(Set<String> names, String name) {
@@ -234,7 +262,8 @@ public final class ServerNet {
 			List.copyOf(state.whitelistUuids),
 			List.copyOf(state.whitelistNames),
 			(int) (cooldownTicks / ShieldLogic.TICKS_PER_FUEL_SECOND),
-			Optional.ofNullable(state.ownerUuid)
+			Optional.ofNullable(state.ownerUuid),
+			state.customName
 		);
 	}
 

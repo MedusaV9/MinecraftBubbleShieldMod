@@ -43,7 +43,11 @@ public final class ShieldHudElement implements HudElement {
 		int centerX = graphics.guiWidth() / 2;
 		int y = TOP_MARGIN;
 
-		graphics.centeredText(mc.font, Component.translatable(def.nameKey()), centerX, y, TEXT_COLOR);
+		// The owner-set custom name takes precedence; unset shields show the effect name.
+		Component title = shield.customName().isEmpty()
+				? Component.translatable(def.nameKey())
+				: Component.literal(shield.customName());
+		graphics.centeredText(mc.font, title, centerX, y, TEXT_COLOR);
 		y += mc.font.lineHeight + 2;
 
 		// 100px health bar: dark backdrop (1px frame) + primary-colored fill.

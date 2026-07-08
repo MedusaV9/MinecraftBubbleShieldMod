@@ -61,6 +61,26 @@ public final class ShieldPayloads {
 		}
 	}
 
+	/**
+	 * Client asks to set the custom shield name of the projector at {@code pos}.
+	 * An empty name clears the custom name. Server-side sanitization (trim, control
+	 * character strip, 32-char cap) happens in {@code ServerNet}; the bounded codec
+	 * rejects grossly oversized payloads at decode time.
+	 */
+	public record SetNameC2S(BlockPos pos, String name) implements CustomPacketPayload {
+		public static final CustomPacketPayload.Type<SetNameC2S> TYPE = new CustomPacketPayload.Type<>(BubbleShield.id("set_name"));
+		public static final StreamCodec<RegistryFriendlyByteBuf, SetNameC2S> CODEC = StreamCodec.composite(
+			BlockPos.STREAM_CODEC, SetNameC2S::pos,
+			ByteBufCodecs.stringUtf8(32), SetNameC2S::name,
+			SetNameC2S::new
+		);
+
+		@Override
+		public CustomPacketPayload.Type<SetNameC2S> type() {
+			return TYPE;
+		}
+	}
+
 	/** Client asks to (de)activate the projector at {@code pos}. */
 	public record SetActiveC2S(BlockPos pos, boolean active) implements CustomPacketPayload {
 		public static final CustomPacketPayload.Type<SetActiveC2S> TYPE = new CustomPacketPayload.Type<>(BubbleShield.id("set_active"));
@@ -113,7 +133,8 @@ public final class ShieldPayloads {
 		List<UUID> whitelist,
 		List<String> whitelistNames,
 		int cooldownSeconds,
-		Optional<UUID> ownerUuid
+		Optional<UUID> ownerUuid,
+		String customName
 	) implements CustomPacketPayload {
 		public static final CustomPacketPayload.Type<ShieldSyncS2C> TYPE = new CustomPacketPayload.Type<>(BubbleShield.id("shield_sync"));
 		public static final StreamCodec<RegistryFriendlyByteBuf, ShieldSyncS2C> CODEC = StreamCodec.composite(
@@ -124,6 +145,7 @@ public final class ShieldPayloads {
 			ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()), ShieldSyncS2C::whitelistNames,
 			ByteBufCodecs.VAR_INT, ShieldSyncS2C::cooldownSeconds,
 			ByteBufCodecs.optional(UUIDUtil.STREAM_CODEC), ShieldSyncS2C::ownerUuid,
+			ByteBufCodecs.stringUtf8(32), ShieldSyncS2C::customName,
 			ShieldSyncS2C::new
 		);
 
@@ -151,6 +173,7 @@ public final class ShieldPayloads {
 	public static void registerTypes() {
 		PayloadTypeRegistry.serverboundPlay().register(SetSettingsC2S.TYPE, SetSettingsC2S.CODEC);
 		PayloadTypeRegistry.serverboundPlay().register(WhitelistModifyC2S.TYPE, WhitelistModifyC2S.CODEC);
+		PayloadTypeRegistry.serverboundPlay().register(SetNameC2S.TYPE, SetNameC2S.CODEC);
 		PayloadTypeRegistry.serverboundPlay().register(SetActiveC2S.TYPE, SetActiveC2S.CODEC);
 		PayloadTypeRegistry.clientboundPlay().register(ShieldSyncS2C.TYPE, ShieldSyncS2C.CODEC);
 		PayloadTypeRegistry.clientboundPlay().register(ShieldRemoveS2C.TYPE, ShieldRemoveS2C.CODEC);

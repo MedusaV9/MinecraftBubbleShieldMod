@@ -29,6 +29,8 @@ public class ShieldState {
 	public float health = DEFAULT_MAX_HEALTH;
 	public float maxHealth = DEFAULT_MAX_HEALTH;
 	public @Nullable UUID ownerUuid;
+	/** Owner-set display name for the shield's boss bar; empty means "use the effect name". */
+	public String customName = "";
 	public final Set<String> whitelistNames = new HashSet<>();
 	public final Set<UUID> whitelistUuids = new HashSet<>();
 	/**
@@ -65,6 +67,7 @@ public class ShieldState {
 		output.putFloat("health", this.health);
 		output.putFloat("max_health", this.maxHealth);
 		output.storeNullable("owner_uuid", UUIDUtil.CODEC, this.ownerUuid);
+		output.putString("custom_name", this.customName);
 
 		ValueOutput.TypedOutputList<String> names = output.list("whitelist_names", Codec.STRING);
 		for (String name : this.whitelistNames) {
@@ -89,6 +92,7 @@ public class ShieldState {
 		this.health = input.getFloatOr("health", DEFAULT_MAX_HEALTH);
 		this.maxHealth = input.getFloatOr("max_health", DEFAULT_MAX_HEALTH);
 		this.ownerUuid = input.read("owner_uuid", UUIDUtil.CODEC).orElse(null);
+		this.customName = input.getStringOr("custom_name", "");
 
 		this.whitelistNames.clear();
 		for (String name : input.listOrEmpty("whitelist_names", Codec.STRING)) {

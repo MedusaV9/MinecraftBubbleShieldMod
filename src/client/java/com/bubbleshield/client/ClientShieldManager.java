@@ -41,7 +41,8 @@ public final class ClientShieldManager {
 		List<UUID> whitelist,
 		List<String> whitelistNames,
 		int cooldownSeconds,
-		Optional<UUID> ownerUuid
+		Optional<UUID> ownerUuid,
+		String customName
 	) {
 		// Flat accessors kept for renderer/screen-fx consumers; they delegate into the
 		// nested visual record synced from the server.
@@ -145,7 +146,8 @@ public final class ClientShieldManager {
 				payload.whitelist(),
 				payload.whitelistNames(),
 				payload.cooldownSeconds(),
-				payload.ownerUuid()
+				payload.ownerUuid(),
+				payload.customName()
 			))
 		));
 

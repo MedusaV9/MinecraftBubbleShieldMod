@@ -1,16 +1,19 @@
 package com.bubbleshield.block;
 
 import com.bubbleshield.advancements.ModCriteria;
+import com.bubbleshield.effect.EffectRegistry;
 import com.bubbleshield.menu.BubbleShieldMenu;
 import com.bubbleshield.net.ServerNet;
 import com.bubbleshield.net.ShieldPayloads;
 import com.bubbleshield.registry.ModBlockEntities;
 import com.bubbleshield.registry.ModItems;
 import com.bubbleshield.shield.FuelMap;
+import com.bubbleshield.shield.ShieldGeometry;
 import com.bubbleshield.shield.ShieldLogic;
 import com.bubbleshield.shield.ShieldShape;
 import com.bubbleshield.shield.ShieldState;
 
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -22,10 +25,13 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.Mth;
+import net.minecraft.world.BossEvent;
 import net.minecraft.world.Containers;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.player.Inventory;
@@ -40,6 +46,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
+import net.minecraft.world.phys.Vec3;
 
 import org.jspecify.annotations.Nullable;
 
@@ -90,6 +97,13 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 
 	/** Last replicated snapshot; a new sync payload is only broadcast when this changes. */
 	private @Nullable ReplicatedState lastSentState;
+
+	/**
+	 * Boss bar shown to every player inside the active shield. Transient runtime state
+	 * (like {@link #lastSentState}): never persisted, lazily created on the first
+	 * active server tick and emptied on deactivation/removal.
+	 */
+	private @Nullable ServerBossEvent bossEvent;
 
 	public BubbleShieldBlockEntity(BlockPos worldPosition, BlockState blockState) {
 		super(ModBlockEntities.BUBBLE_SHIELD_PROJECTOR, worldPosition, blockState);
@@ -149,9 +163,123 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 
 		this.consumeFuelSlot();
 		this.refreshTier();
-		if (this.level instanceof ServerLevel serverLevel && ShieldLogic.serverTick(serverLevel, this.worldPosition, this.shieldState, this.tier())) {
-			this.markUpdated();
+		if (this.level instanceof ServerLevel serverLevel) {
+			if (ShieldLogic.serverTick(serverLevel, this.worldPosition, this.shieldState, this.tier())) {
+				this.markUpdated();
+			}
+
+			// Runs even when the shield logic reported no change: deactivations from any
+			// path (fuel-out, break, GUI, redstone) must empty the boss bar next tick.
+			this.updateBossBar(serverLevel);
 		}
+	}
+
+	/**
+	 * Keeps the shield's boss bar in sync while active: progress mirrors the health
+	 * fraction, the name is the owner-set custom name (or the effect name when unset),
+	 * and membership is exactly the players standing inside the bubble
+	 * ({@link ShieldGeometry#isInside}, so a dome's open underside does not count).
+	 * While inactive any previously tracked players are removed.
+	 */
+	private void updateBossBar(ServerLevel level) {
+		if (!this.shieldState.active) {
+			if (this.bossEvent != null) {
+				this.bossEvent.removeAllPlayers();
+			}
+
+			return;
+		}
+
+		ShieldState state = this.shieldState;
+		BossEvent.BossBarColor color = bossBarColor(EffectRegistry.get(state.effectId).argbPrimary());
+		ServerBossEvent event = this.bossEvent;
+		if (event == null) {
+			this.bossEvent = event = new ServerBossEvent(UUID.randomUUID(), this.bossBarName(), color, BossEvent.BossBarOverlay.PROGRESS);
+		}
+
+		// ServerBossEvent's setters only broadcast on an actual change.
+		event.setName(this.bossBarName());
+		event.setColor(color);
+		event.setProgress(state.maxHealth > 0.0F ? Mth.clamp(state.health / state.maxHealth, 0.0F, 1.0F) : 0.0F);
+
+		Vec3 center = Vec3.atCenterOf(this.worldPosition);
+		double radius = this.currentRadius();
+
+		// Membership diff: drop tracked players that left the bubble (or the level),
+		// then add players that entered. addPlayer/removePlayer are no-op-safe, but
+		// diffing avoids re-send packets entirely.
+		for (ServerPlayer tracked : List.copyOf(event.getPlayers())) {
+			if (tracked.isRemoved() || tracked.level() != level
+					|| !ShieldGeometry.isInside(state.shape, center, radius, tracked.position())) {
+				event.removePlayer(tracked);
+			}
+		}
+
+		for (ServerPlayer player : level.players()) {
+			if (ShieldGeometry.isInside(state.shape, center, radius, player.position()) && !event.getPlayers().contains(player)) {
+				event.addPlayer(player);
+			}
+		}
+	}
+
+	/** The boss bar display name: the owner-set custom name, or the effect name when unset. */
+	private Component bossBarName() {
+		String customName = this.shieldState.customName;
+		return customName.isEmpty()
+				? Component.translatable(EffectRegistry.get(this.shieldState.effectId).nameKey())
+				: Component.literal(customName);
+	}
+
+	/**
+	 * Maps an effect's primary ARGB color to the closest vanilla boss bar color by hue;
+	 * near-grey colors (low channel spread) map to WHITE.
+	 */
+	static BossEvent.BossBarColor bossBarColor(int argb) {
+		int r = (argb >> 16) & 0xFF;
+		int g = (argb >> 8) & 0xFF;
+		int b = argb & 0xFF;
+		int max = Math.max(r, Math.max(g, b));
+		int min = Math.min(r, Math.min(g, b));
+		if (max - min < 25) {
+			return BossEvent.BossBarColor.WHITE;
+		}
+
+		float delta = max - min;
+		float hue;
+		if (max == r) {
+			hue = ((g - b) / delta + 6.0F) % 6.0F;
+		} else if (max == g) {
+			hue = (b - r) / delta + 2.0F;
+		} else {
+			hue = (r - g) / delta + 4.0F;
+		}
+
+		hue *= 60.0F; // degrees, 0..360
+		if (hue < 25.0F || hue >= 330.0F) {
+			return BossEvent.BossBarColor.RED;
+		}
+		if (hue < 70.0F) {
+			return BossEvent.BossBarColor.YELLOW;
+		}
+		if (hue < 165.0F) {
+			return BossEvent.BossBarColor.GREEN;
+		}
+		if (hue < 260.0F) {
+			return BossEvent.BossBarColor.BLUE;
+		}
+		if (hue < 300.0F) {
+			return BossEvent.BossBarColor.PURPLE;
+		}
+
+		return BossEvent.BossBarColor.PINK;
+	}
+
+	/**
+	 * The shield's boss bar, or null when no active tick has run yet. Exposed for
+	 * gametests; production code should not mutate it directly.
+	 */
+	public @Nullable ServerBossEvent getBossEvent() {
+		return this.bossEvent;
 	}
 
 	/**
@@ -336,6 +464,23 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 			this.tryActivate();
 		} else if (this.shieldState.active) {
 			this.shieldState.active = false;
+			// Empty the boss bar immediately instead of waiting for the next tick.
+			if (this.bossEvent != null) {
+				this.bossEvent.removeAllPlayers();
+			}
+
+			this.markUpdated();
+		}
+	}
+
+	/**
+	 * Sets the owner-chosen shield display name (already sanitized by
+	 * {@code ServerNet.sanitizeShieldName}); an empty string clears it, falling back
+	 * to the effect name on the boss bar and HUD.
+	 */
+	public void setCustomName(String name) {
+		if (!this.shieldState.customName.equals(name)) {
+			this.shieldState.customName = name;
 			this.markUpdated();
 		}
 	}
@@ -448,7 +593,8 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		Set<UUID> whitelistUuids,
 		Set<String> whitelistNames,
 		int cooldownSeconds,
-		@Nullable UUID ownerUuid
+		@Nullable UUID ownerUuid,
+		String customName
 	) {
 	}
 
@@ -467,7 +613,8 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 			Set.copyOf(state.whitelistUuids),
 			Set.copyOf(state.whitelistNames),
 			(int) (this.cooldownTicksLeft() / ShieldLogic.TICKS_PER_FUEL_SECOND),
-			state.ownerUuid
+			state.ownerUuid,
+			state.customName
 		);
 	}
 
@@ -492,6 +639,10 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		if (this.level instanceof ServerLevel) {
 			ServerNet.untrackShield(this);
 			ServerNet.broadcastRemove(this);
+		}
+
+		if (this.bossEvent != null) {
+			this.bossEvent.removeAllPlayers();
 		}
 
 		super.setRemoved();
