@@ -18,13 +18,32 @@ public final class ContextModifier {
 	 *                          (effective throttle = base / divisor, floored at 1); never 0
 	 * @param useSecondaryColor when true, dust-colored behaviors use the effect's secondary color
 	 * @param extraSparks       when true, a small electric spark sprinkle is added to the tick
+	 * @param overridePrimary   owner-picked primary dust color (opaque ARGB), or -1 when unset;
+	 *                          when set, {@link #pickColor} ignores the authored palette
+	 * @param overrideSecondary darkened companion of {@code overridePrimary} (RGB scaled x0.55),
+	 *                          or -1 when unset
 	 */
-	public record ContextState(float countMult, int periodDivisor, boolean useSecondaryColor, boolean extraSparks) {
+	public record ContextState(float countMult, int periodDivisor, boolean useSecondaryColor, boolean extraSparks,
+			int overridePrimary, int overrideSecondary) {
 		/** No modulation: behaviors run with their original v0-era semantics. */
 		public static final ContextState NEUTRAL = new ContextState(1.0F, 1, false, false);
 
 		public ContextState {
 			periodDivisor = Math.max(1, periodDivisor);
+		}
+
+		/** Source-compatible constructor without a color override (both override fields unset). */
+		public ContextState(float countMult, int periodDivisor, boolean useSecondaryColor, boolean extraSparks) {
+			this(countMult, periodDivisor, useSecondaryColor, extraSparks, -1, -1);
+		}
+
+		/**
+		 * A copy of this state carrying the owner-picked color override: the primary is
+		 * {@code argb} verbatim, the secondary is its RGB scaled x0.55 (alpha kept).
+		 */
+		public ContextState withColorOverride(int argb) {
+			return new ContextState(this.countMult, this.periodDivisor, this.useSecondaryColor, this.extraSparks,
+					argb, deriveOverrideSecondary(argb));
 		}
 
 		/** The behavior's effective gameTime throttle: {@code max(1, base / periodDivisor)}. */
@@ -37,10 +56,30 @@ public final class ContextModifier {
 			return Math.clamp(Math.round(count * this.countMult), 0, max);
 		}
 
-		/** Picks the dust color: the secondary color when {@link #useSecondaryColor}, else the primary. */
+		/**
+		 * Picks the dust color: the secondary color when {@link #useSecondaryColor}, else the
+		 * primary. When the owner-picked override pair is set ({@code overridePrimary != -1}),
+		 * it replaces the authored palette entirely.
+		 */
 		public int pickColor(int argbPrimary, int argbSecondary) {
+			if (this.overridePrimary != -1) {
+				return this.useSecondaryColor ? this.overrideSecondary : this.overridePrimary;
+			}
+
 			return this.useSecondaryColor ? argbSecondary : argbPrimary;
 		}
+	}
+
+	/**
+	 * Derives the secondary color of an override pair: the RGB channels scaled x0.55
+	 * (alpha preserved), so recolored gradients keep the primary-to-darker look of the
+	 * authored palettes. Shared by the server-side behaviors and the client renderer/HUD.
+	 */
+	public static int deriveOverrideSecondary(int argb) {
+		int r = (int) (((argb >> 16) & 0xFF) * 0.55F);
+		int g = (int) (((argb >> 8) & 0xFF) * 0.55F);
+		int b = (int) ((argb & 0xFF) * 0.55F);
+		return (argb & 0xFF000000) | (r << 16) | (g << 8) | b;
 	}
 
 	private ContextModifier() {

@@ -21,6 +21,8 @@ import org.jspecify.annotations.Nullable;
 public class ShieldState {
 	public static final float DEFAULT_TARGET_RADIUS = 16.0F;
 	public static final float DEFAULT_MAX_HEALTH = 100.0F;
+	/** Sentinel for {@link #colorOverride}: no recolor, use the effect's authored palette. */
+	public static final int NO_COLOR_OVERRIDE = -1;
 
 	public boolean active;
 	public int effectId;
@@ -34,6 +36,15 @@ public class ShieldState {
 	public @Nullable UUID ownerUuid;
 	/** Owner-set display name for the shield's boss bar; empty means "use the effect name". */
 	public String customName = "";
+	/**
+	 * Owner-picked dye recolor for the shield's visuals (bubble surface, HUD bar,
+	 * particle colors, boss bar bucket). {@link #NO_COLOR_OVERRIDE} (-1) means "use the
+	 * effect's authored palette"; any other value is an OPAQUE ARGB color (alpha 0xFF,
+	 * so real overrides are negative ints — always compare against the -1 sentinel,
+	 * never with {@code >= 0}). The in-bubble screen post-effect deliberately keeps the
+	 * authored palette (its colors are baked into the static post_effect JSON uniforms).
+	 */
+	public int colorOverride = NO_COLOR_OVERRIDE;
 	public final Set<String> whitelistNames = new HashSet<>();
 	public final Set<UUID> whitelistUuids = new HashSet<>();
 	/**
@@ -73,6 +84,7 @@ public class ShieldState {
 		output.putFloat("max_health", this.maxHealth);
 		output.storeNullable("owner_uuid", UUIDUtil.CODEC, this.ownerUuid);
 		output.putString("custom_name", this.customName);
+		output.putInt("color_override", this.colorOverride);
 
 		ValueOutput.TypedOutputList<String> names = output.list("whitelist_names", Codec.STRING);
 		for (String name : this.whitelistNames) {
@@ -100,6 +112,7 @@ public class ShieldState {
 		this.maxHealth = input.getFloatOr("max_health", DEFAULT_MAX_HEALTH);
 		this.ownerUuid = input.read("owner_uuid", UUIDUtil.CODEC).orElse(null);
 		this.customName = input.getStringOr("custom_name", "");
+		this.colorOverride = input.getIntOr("color_override", NO_COLOR_OVERRIDE);
 
 		this.whitelistNames.clear();
 		for (String name : input.listOrEmpty("whitelist_names", Codec.STRING)) {

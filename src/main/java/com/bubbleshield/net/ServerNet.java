@@ -103,6 +103,19 @@ public final class ServerNet {
 			shield.setCustomName(sanitizeShieldName(payload.name()));
 		});
 
+		ServerPlayNetworking.registerGlobalReceiver(ShieldPayloads.SetColorC2S.TYPE, (payload, ctx) -> {
+			BubbleShieldBlockEntity shield = validatedShield(ctx.player(), payload.pos());
+			if (shield == null || !isOwner(ctx.player(), shield)) {
+				return;
+			}
+
+			if (!isValidColorOverride(payload.argb())) {
+				return;
+			}
+
+			shield.setColorOverride(payload.argb());
+		});
+
 		ServerPlayNetworking.registerGlobalReceiver(ShieldPayloads.SetActiveC2S.TYPE, (payload, ctx) -> {
 			BubbleShieldBlockEntity shield = validatedShield(ctx.player(), payload.pos());
 			if (shield == null || !isOwner(ctx.player(), shield)) {
@@ -188,6 +201,16 @@ public final class ServerNet {
 		return name;
 	}
 
+	/**
+	 * Pure validation for a requested shield color override: -1 means "reset to the
+	 * effect's authored palette", every other accepted value must be a fully opaque
+	 * ARGB color (alpha byte 0xFF). Translucent or alpha-less colors are rejected so
+	 * a hostile client can never make the bubble surface/HUD invisible.
+	 */
+	public static boolean isValidColorOverride(int argb) {
+		return argb == ShieldState.NO_COLOR_OVERRIDE || (argb & 0xFF000000) == 0xFF000000;
+	}
+
 	private static boolean containsIgnoreCase(Set<String> names, String name) {
 		for (String existing : names) {
 			if (existing.equalsIgnoreCase(name)) {
@@ -259,7 +282,8 @@ public final class ServerNet {
 				ShieldLogic.currentRadius(state),
 				healthFrac,
 				shield.tier(),
-				state.shape.ordinal()
+				state.shape.ordinal(),
+				state.colorOverride
 			),
 			List.copyOf(state.whitelistUuids),
 			List.copyOf(state.whitelistNames),

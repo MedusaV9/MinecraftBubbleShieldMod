@@ -83,6 +83,27 @@ public final class ShieldPayloads {
 		}
 	}
 
+	/**
+	 * Client asks to recolor the shield of the projector at {@code pos}: {@code argb}
+	 * is an opaque (0xFFrrggbb) ARGB color, or -1 to reset to the effect's authored
+	 * palette. VAR_INT is fine here: -1 and opaque colors cost 5 bytes, which is
+	 * irrelevant for a rare owner-initiated request. Validated server-side by
+	 * {@code ServerNet.isValidColorOverride}.
+	 */
+	public record SetColorC2S(BlockPos pos, int argb) implements CustomPacketPayload {
+		public static final CustomPacketPayload.Type<SetColorC2S> TYPE = new CustomPacketPayload.Type<>(BubbleShield.id("set_color"));
+		public static final StreamCodec<RegistryFriendlyByteBuf, SetColorC2S> CODEC = StreamCodec.composite(
+			BlockPos.STREAM_CODEC, SetColorC2S::pos,
+			ByteBufCodecs.VAR_INT, SetColorC2S::argb,
+			SetColorC2S::new
+		);
+
+		@Override
+		public CustomPacketPayload.Type<SetColorC2S> type() {
+			return TYPE;
+		}
+	}
+
 	/** Client asks to (de)activate the projector at {@code pos}. */
 	public record SetActiveC2S(BlockPos pos, boolean active) implements CustomPacketPayload {
 		public static final CustomPacketPayload.Type<SetActiveC2S> TYPE = new CustomPacketPayload.Type<>(BubbleShield.id("set_active"));
@@ -102,6 +123,10 @@ public final class ShieldPayloads {
 	 * The renderable core of a shield snapshot, nested inside {@link ShieldSyncS2C} with
 	 * its own codec so the outer {@link StreamCodec#composite} (capped at 12 fields in
 	 * this Minecraft version) keeps free slots for future fields (e.g. tier/shape).
+	 * This nested composite itself sits at 8 of those 12 fields.
+	 *
+	 * <p>{@code colorOverride} is the owner-picked recolor: -1 = authored palette,
+	 * otherwise an opaque ARGB (negative as a signed int; compare against -1, not 0).
 	 */
 	public record ShieldVisual(
 		boolean active,
@@ -110,7 +135,8 @@ public final class ShieldPayloads {
 		float currentRadius,
 		float healthFrac,
 		int tier,
-		int shape
+		int shape,
+		int colorOverride
 	) {
 		public static final StreamCodec<ByteBuf, ShieldVisual> STREAM_CODEC = StreamCodec.composite(
 			ByteBufCodecs.BOOL, ShieldVisual::active,
@@ -120,6 +146,7 @@ public final class ShieldPayloads {
 			ByteBufCodecs.FLOAT, ShieldVisual::healthFrac,
 			ByteBufCodecs.VAR_INT, ShieldVisual::tier,
 			ByteBufCodecs.VAR_INT, ShieldVisual::shape,
+			ByteBufCodecs.VAR_INT, ShieldVisual::colorOverride,
 			ShieldVisual::new
 		);
 	}
@@ -176,6 +203,7 @@ public final class ShieldPayloads {
 		PayloadTypeRegistry.serverboundPlay().register(SetSettingsC2S.TYPE, SetSettingsC2S.CODEC);
 		PayloadTypeRegistry.serverboundPlay().register(WhitelistModifyC2S.TYPE, WhitelistModifyC2S.CODEC);
 		PayloadTypeRegistry.serverboundPlay().register(SetNameC2S.TYPE, SetNameC2S.CODEC);
+		PayloadTypeRegistry.serverboundPlay().register(SetColorC2S.TYPE, SetColorC2S.CODEC);
 		PayloadTypeRegistry.serverboundPlay().register(SetActiveC2S.TYPE, SetActiveC2S.CODEC);
 		PayloadTypeRegistry.clientboundPlay().register(ShieldSyncS2C.TYPE, ShieldSyncS2C.CODEC);
 		PayloadTypeRegistry.clientboundPlay().register(ShieldRemoveS2C.TYPE, ShieldRemoveS2C.CODEC);

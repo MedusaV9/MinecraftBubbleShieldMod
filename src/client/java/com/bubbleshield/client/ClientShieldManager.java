@@ -74,6 +74,14 @@ public final class ClientShieldManager {
 		public int shape() {
 			return this.visual.shape();
 		}
+
+		/**
+		 * The synced owner-picked recolor: -1 = authored palette, otherwise an opaque
+		 * ARGB (negative as a signed int — compare against -1, never with {@code >= 0}).
+		 */
+		public int colorOverride() {
+			return this.visual.colorOverride();
+		}
 	}
 
 	private static final Map<GlobalPos, ClientShield> SHIELDS = new HashMap<>();

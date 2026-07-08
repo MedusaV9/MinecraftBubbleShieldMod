@@ -194,7 +194,11 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		}
 
 		ShieldState state = this.shieldState;
-		BossEvent.BossBarColor color = bossBarColor(EffectRegistry.get(state.effectId).argbPrimary());
+		// The owner's recolor also drives the boss bar bucket; -1 keeps the authored primary.
+		int barArgb = state.colorOverride != ShieldState.NO_COLOR_OVERRIDE
+				? state.colorOverride
+				: EffectRegistry.get(state.effectId).argbPrimary();
+		BossEvent.BossBarColor color = bossBarColor(barArgb);
 		ServerBossEvent event = this.bossEvent;
 		if (event == null) {
 			this.bossEvent = event = new ServerBossEvent(UUID.randomUUID(), this.bossBarName(), color, BossEvent.BossBarOverlay.PROGRESS);
@@ -491,6 +495,18 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	}
 
 	/**
+	 * Sets the owner-picked color override (already validated by
+	 * {@code ServerNet.isValidColorOverride}): an opaque ARGB recolor, or
+	 * {@link ShieldState#NO_COLOR_OVERRIDE} to reset to the effect's authored palette.
+	 */
+	public void setColorOverride(int argb) {
+		if (this.shieldState.colorOverride != argb) {
+			this.shieldState.colorOverride = argb;
+			this.markUpdated();
+		}
+	}
+
+	/**
 	 * Adds a player name to the whitelist (case-insensitively deduplicated), also
 	 * recording the UUID if the player is online.
 	 */
@@ -613,7 +629,8 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 				ShieldLogic.currentRadius(state),
 				state.maxHealth > 0.0F ? state.health / state.maxHealth : 0.0F,
 				this.tier(),
-				state.shape.ordinal()
+				state.shape.ordinal(),
+				state.colorOverride
 			),
 			Set.copyOf(state.whitelistUuids),
 			Set.copyOf(state.whitelistNames),

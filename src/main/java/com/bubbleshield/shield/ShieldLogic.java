@@ -320,8 +320,10 @@ public final class ShieldLogic {
 		if (def.context() == ContextProfile.HEALTH_HUE && ctx.useSecondaryColor() && gameTime % 20L == 0L) {
 			// HEALTH_HUE below half health: a small secondary-color dust accent at the core,
 			// so the hue shift is observable no matter which behavior the effect uses.
+			// The owner's color override (routed through pickColor, which honours
+			// useSecondaryColor) recolors the accent like every other dust behavior.
 			// overrideLimiter=true lifts the 32-block send limit for large bubbles.
-			DustParticleOptions accent = new DustParticleOptions(def.argbSecondary() & 0xFFFFFF, 1.2F);
+			DustParticleOptions accent = new DustParticleOptions(ctx.pickColor(def.argbPrimary(), def.argbSecondary()) & 0xFFFFFF, 1.2F);
 			level.sendParticles(accent, true, false,
 					center.x, center.y + 1.0, center.z, 6, radius * 0.15, radius * 0.15, radius * 0.15, 0.0);
 		}
@@ -332,7 +334,9 @@ public final class ShieldLogic {
 	/**
 	 * Gathers the context inputs for {@link ContextModifier#compute}: day/night and rain
 	 * from the level, the shield health fraction from the state, and (only when the
-	 * profile needs it) a count of players currently inside the shield.
+	 * profile needs it) a count of players currently inside the shield. When the owner
+	 * set a color override, the computed state is wrapped with it so every behavior's
+	 * {@code pickColor} call resolves to the override pair.
 	 */
 	private static ContextState computeContext(ServerLevel level, Vec3 center, float radius, ShieldState state, EffectDefinition def) {
 		float healthFrac = state.maxHealth > 0.0F ? state.health / state.maxHealth : 0.0F;
@@ -346,7 +350,9 @@ public final class ShieldLogic {
 			}
 		}
 
-		return ContextModifier.compute(def.context(), level.isDarkOutside(), level.isRaining(), playersInside, healthFrac);
+		ContextState ctx = ContextModifier.compute(def.context(), level.isDarkOutside(), level.isRaining(), playersInside, healthFrac);
+		// Opaque ARGB overrides are negative ints; only the -1 sentinel means "unset".
+		return state.colorOverride != ShieldState.NO_COLOR_OVERRIDE ? ctx.withColorOverride(state.colorOverride) : ctx;
 	}
 
 	/**

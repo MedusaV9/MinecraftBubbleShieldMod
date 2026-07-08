@@ -4,9 +4,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.bubbleshield.client.ClientShieldManager;
+import com.bubbleshield.effect.ContextModifier;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.EffectRegistry;
 import com.bubbleshield.shield.ShieldShape;
+import com.bubbleshield.shield.ShieldState;
 import com.mojang.blaze3d.vertex.PoseStack;
 
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelExtractionEvents;
@@ -73,6 +75,13 @@ public final class ShieldRenderer {
 			Vec3 center = Vec3.atCenterOf(shield.pos());
 			List<Vec3> dissolveCenters = collectDissolveCenters(level, shield, center, radius);
 
+			// Owner recolor: the override (opaque ARGB, so negative; -1 = unset) replaces the
+			// authored palette, with the secondary derived as the same darkened (x0.55) shade.
+			int colorOverride = shield.colorOverride();
+			boolean recolored = colorOverride != ShieldState.NO_COLOR_OVERRIDE;
+			int argbPrimary = recolored ? colorOverride : def.argbPrimary();
+			int argbSecondary = recolored ? ContextModifier.deriveOverrideSecondary(colorOverride) : def.argbSecondary();
+
 			// Weaker shields render fainter.
 			float alphaBase = 0.25F + 0.5F * shield.healthFrac();
 
@@ -85,9 +94,9 @@ public final class ShieldRenderer {
 			// dissolve distances (per-vertex alpha) are computed in world units.
 			collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
 				if (dome) {
-					SPHERE.emitHemisphere(pose, buffer, radius, def.argbPrimary(), def.argbSecondary(), alphaBase, dissolveCenters);
+					SPHERE.emitHemisphere(pose, buffer, radius, argbPrimary, argbSecondary, alphaBase, dissolveCenters);
 				} else {
-					SPHERE.emit(pose, buffer, radius, def.argbPrimary(), def.argbSecondary(), alphaBase, dissolveCenters);
+					SPHERE.emit(pose, buffer, radius, argbPrimary, argbSecondary, alphaBase, dissolveCenters);
 				}
 			});
 			poseStack.popPose();

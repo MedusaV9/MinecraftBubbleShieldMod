@@ -86,10 +86,20 @@ public class EffectPickerScreen extends Screen {
 		);
 		next.active = this.page < PAGE_COUNT - 1;
 
-		// Effect-cycle toggle, centered between the page-flip buttons in the nav row.
+		// Effect-cycle toggle and the recolor picker share the nav row between the
+		// page-flip buttons. The color note tooltip documents that the in-bubble
+		// screen post-effect keeps the effect's authored palette.
 		this.cycleButton = this.addRenderableWidget(
 			Button.builder(this.cycleLabel(), b -> this.toggleCycle())
-				.bounds(startX + gridWidth / 2 - 40, navY, 80, 20)
+				.bounds(startX + gridWidth / 2 - 78, navY, 76, 20)
+				.build()
+		);
+
+		this.addRenderableWidget(
+			Button.builder(Component.translatable("gui.bubbleshield.color"), b ->
+				this.minecraft.gui.setScreen(new ColorPickerScreen(this, this.pos)))
+				.bounds(startX + gridWidth / 2 + 2, navY, 76, 20)
+				.tooltip(Tooltip.create(Component.translatable("gui.bubbleshield.color.note")))
 				.build()
 		);
 
