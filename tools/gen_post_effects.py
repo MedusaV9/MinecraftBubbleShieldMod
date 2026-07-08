@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Dev tool: generates the 75 shield screen post-effect JSONs.
+"""Dev tool: generates the 105 shield screen post-effect JSONs.
 
 Emits src/main/resources/assets/bubbleshield/post_effect/effect_00.json ...
-effect_74.json. The assets live in the main (not client) source set so the
+effect_104.json. The assets live in the main (not client) source set so the
 postEffectAssetsExist game test can find them on the dedicated-server classpath;
 the client resource manager loads them from the merged mod jar all the same.
 Not wired into the build; rerun manually after changing the mapping below and
@@ -11,7 +11,7 @@ commit the regenerated files:
     python3 tools/gen_post_effects.py
 
 The EFFECTS table mirrors com.bubbleshield.effect.EffectRegistry row for row:
-(argbPrimary, argbSecondary, screenTemplate name). All 12 screen-fx templates
+(argbPrimary, argbSecondary, screenTemplate name). All 16 screen-fx templates
 ship a shader, so every JSON references its effect's final template directly
 (the screenTemplateMatchesJson gametest cross-checks every generated JSON
 against EffectDefinition.screenTemplate).
@@ -27,7 +27,13 @@ from pathlib import Path
 
 OUT_DIR = Path(__file__).resolve().parent.parent / "src/main/resources/assets/bubbleshield/post_effect"
 
-EFFECT_COUNT = 75
+EFFECT_COUNT = 105
+
+# Modulus/denominator of the per-id param_b derivation below. FROZEN at the V1
+# catalogue size (75): retuning it to EFFECT_COUNT would silently change the
+# generated uniforms of ids 0..74, which must stay byte-identical across
+# catalogue expansions. Mirrors EffectRegistry.PARAM_CYCLE -- keep in lockstep.
+PARAM_CYCLE = 75
 
 # Mirrors EffectRegistry.buildAll(): (argbPrimary, argbSecondary, screenTemplate).
 EFFECTS = [
@@ -121,6 +127,42 @@ EFFECTS = [
     (0xFF00E5FF, 0xFFBF360C, "frostlens"),  # 72 Soulfire Rain
     (0xFF76FF03, 0xFF8D1007, "pixelate"),   # 73 Wailing Souls
     (0xFFCFD8DC, 0xFF4E342E, "ripple"),     # 74 Basalt Blizzard
+    # F15 "Copper Patina" (teal x copper)
+    (0xFF2FBFA3, 0xFFB35A2D, "posterize"),  # 75 Verdigris Leap
+    (0xFF53D9C0, 0xFF8C4A21, "duotone"),    # 76 Patina Tide
+    (0xFF1FA08A, 0xFFD97C4A, "heathaze"),   # 77 Smelter's Guard
+    (0xFF7FE0CF, 0xFF6B3517, "tint"),       # 78 Burnished Charm
+    (0xFF0F8C77, 0xFFE09A66, "edgeglow"),   # 79 Oxide Echo
+    # F16 "Amber Twilight" (amber x violet)
+    (0xFFFFB733, 0xFF6A2C91, "duotone"),    # 80 Duskray Prism
+    (0xFFE6960F, 0xFF8F5BC2, "glitch"),     # 81 Gloaming Tendrils
+    (0xFFFFCC66, 0xFF4A1A70, "vignette"),   # 82 Amber Nectar
+    (0xFFCC8419, 0xFFB08AE0, "bloomglow"),  # 83 Candlewax Dusk
+    (0xFFF2A63B, 0xFF33104D, "scanlines"),  # 84 Twilight Cage
+    # F17 "Toxic Bloom" (acid-green x charcoal)
+    (0xFFA6E22E, 0xFF2B2B2B, "glitch"),     # 85 Acid Hop
+    (0xFFC3F73A, 0xFF1A1F16, "posterize"),  # 86 Sludge Surge
+    (0xFF86B300, 0xFF3D3D3D, "chroma"),     # 87 Caustic Guard
+    (0xFFD6FF66, 0xFF22261C, "desat"),      # 88 Blight Charm
+    (0xFF9ACD32, 0xFF101410, "edgeglow"),   # 89 Spore Echo
+    # F18 "Royal Abyss" (navy x gold)
+    (0xFF16296B, 0xFFF0C24A, "bloomglow"),  # 90 Crown Prism
+    (0xFF0A1A4D, 0xFFD4AF37, "duotone"),    # 91 Abyssal Court
+    (0xFF24408F, 0xFFFFDD80, "radialblur"), # 92 Gilded Nectar
+    (0xFF33509E, 0xFFB8912F, "vignette"),   # 93 Sovereign Seal
+    (0xFF0D2140, 0xFFE6C35C, "posterize"),  # 94 Regal Tempest
+    # F19 "Coral Reef" (coral x turquoise)
+    (0xFFFF6F61, 0xFF20B2AA, "radialblur"), # 95 Reef Leap
+    (0xFFFF8A75, 0xFF0E8074, "ripple"),     # 96 Lagoon Swell
+    (0xFFE85A4F, 0xFF30D5C8, "duotone"),    # 97 Anemone Guard
+    (0xFFFFA599, 0xFF117A6F, "tint"),       # 98 Pearl Charm
+    (0xFFD94F41, 0xFF66E5DB, "glitch"),     # 99 Tidepool Echo
+    # F20 "Spectral Circus" (high-contrast complements)
+    (0xFFFF2E9A, 0xFF2EFF93, "glitch"),     # 100 Neon Big Top
+    (0xFF7A00E6, 0xFFE6C800, "posterize"),  # 101 Jester's Void
+    (0xFFFF6600, 0xFF0066FF, "pixelate"),   # 102 Carnival Clash
+    (0xFF00E5B0, 0xFFE5003F, "radialblur"), # 103 Ringmaster's Glow
+    (0xFFFFE600, 0xFF3D0099, "duotone"),    # 104 Spectral Finale
 ]
 
 
@@ -210,15 +252,39 @@ def template_uniforms(template: str, primary: list[float], secondary: list[float
             uniform("Intensity", "float", round(0.9 * param_b, 4)),
             uniform("Speed", "float", round(param_a, 4)),
         ]}
+    if template == "posterize":
+        return {"PosterizeConfig": [
+            uniform("Primary", "vec4", primary),
+            uniform("Levels", "float", round(5.0 + 3.0 * param_b, 4)),
+            uniform("PulseSpeed", "float", round(param_a, 4)),
+        ]}
+    if template == "radialblur":
+        return {"RadialBlurConfig": [
+            uniform("Primary", "vec4", primary),
+            uniform("Intensity", "float", round(0.85 * param_b, 4)),
+        ]}
+    if template == "glitch":
+        return {"GlitchConfig": [
+            uniform("Primary", "vec4", primary),
+            uniform("Intensity", "float", round(0.8 * param_b, 4)),
+            uniform("Speed", "float", round(param_a, 4)),
+        ]}
+    if template == "duotone":
+        return {"DuotoneConfig": [
+            uniform("Primary", "vec4", primary),
+            uniform("Secondary", "vec4", secondary),
+            uniform("Intensity", "float", round(0.65 * param_b, 4)),
+        ]}
     raise ValueError(f"unknown template {template}")
 
 
 def build_effect(effect_id: int) -> dict:
     argb_primary, argb_secondary, template = EFFECTS[effect_id]
     # Same per-id derivation as EffectRegistry.row(): paramA = pattern scale,
-    # paramB = scroll speed / intensity driver; both vary for every id.
+    # paramB = scroll speed / intensity driver. The modulus is PARAM_CYCLE (not
+    # EFFECT_COUNT) so ids 0..74 keep their V1 params across expansions.
     param_a = 0.3 + 0.012 * effect_id
-    param_b = 0.4 + ((effect_id * 37) % EFFECT_COUNT) / EFFECT_COUNT
+    param_b = 0.4 + ((effect_id * 37) % PARAM_CYCLE) / PARAM_CYCLE
 
     return {
         "targets": {

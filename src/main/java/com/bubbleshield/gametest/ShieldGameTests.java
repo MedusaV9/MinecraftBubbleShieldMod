@@ -257,11 +257,12 @@ public class ShieldGameTests {
 	/** The full screen-fx template catalogue; every template ships a shader file. */
 	private static final java.util.Set<String> SCREENFX_TEMPLATES = java.util.Set.of(
 			"tint", "wobble", "vignette", "chroma", "pixelate", "desat",
-			"bloomglow", "ripple", "scanlines", "edgeglow", "frostlens", "heathaze");
+			"bloomglow", "ripple", "scanlines", "edgeglow", "frostlens", "heathaze",
+			"posterize", "radialblur", "glitch", "duotone");
 
 	@GameTest
 	public void postEffectAssetsExist(GameTestHelper helper) {
-		// All 12 template shader files must exist, whether or not a JSON references them.
+		// All 16 template shader files must exist, whether or not a JSON references them.
 		for (String template : SCREENFX_TEMPLATES) {
 			String shaderPath = "/assets/bubbleshield/shaders/screenfx/" + template + ".fsh";
 			try (InputStream shader = ShieldGameTests.class.getResourceAsStream(shaderPath)) {
@@ -296,7 +297,7 @@ public class ShieldGameTests {
 						jsonPath + " should only reference screenfx shaders, got " + fragmentShader);
 				helper.assertTrue(
 						SCREENFX_TEMPLATES.contains(fragmentShader.substring("bubbleshield:screenfx/".length())),
-						jsonPath + " references a shader outside the 12-template whitelist: " + fragmentShader);
+						jsonPath + " references a shader outside the 16-template whitelist: " + fragmentShader);
 				try (InputStream shader = ShieldGameTests.class.getResourceAsStream(shaderPath)) {
 					helper.assertTrue(shader != null, jsonPath + " references missing shader: " + shaderPath);
 				} catch (Exception e) {

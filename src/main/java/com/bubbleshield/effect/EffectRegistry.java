@@ -12,20 +12,30 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 
 /**
- * The fixed catalogue of the 75 selectable shield effects (ids 0..74), organized as
- * 15 color families x 5 effects, but individually authored: every id is a unique row
+ * The fixed catalogue of the 105 selectable shield effects (ids 0..104), organized as
+ * 21 color families x 5 effects, but individually authored: every id is a unique row
  * in the flat table below (palette pair, surface, behavior@variant, guard style,
  * context profile, ambient sound and screen-fx template all vary per id).
  *
  * <p>Uniqueness is machine-enforced by {@link #validate()} and the gametests.
  */
 public final class EffectRegistry {
-	public static final int COUNT = 75;
+	public static final int COUNT = 105;
+
+	/**
+	 * Modulus/denominator of the per-id paramB/behaviorStrength derivations in
+	 * {@link #row}. FROZEN at the V1 catalogue size (75): retuning it to {@link #COUNT}
+	 * would silently change the derived params (and the generated post-effect JSONs) of
+	 * ids 0..74, which must stay stable across catalogue expansions. Mirrored by
+	 * PARAM_CYCLE in tools/gen_post_effects.py -- keep both in lockstep.
+	 */
+	public static final int PARAM_CYCLE = 75;
 
 	/** The full screen-fx template catalogue; every row's screenTemplate must be one of these. */
 	public static final Set<String> SCREEN_TEMPLATES = Set.of(
 			"tint", "wobble", "vignette", "chroma", "pixelate", "desat",
-			"bloomglow", "ripple", "scanlines", "edgeglow", "frostlens", "heathaze");
+			"bloomglow", "ripple", "scanlines", "edgeglow", "frostlens", "heathaze",
+			"posterize", "radialblur", "glitch", "duotone");
 
 	public static final List<EffectDefinition> ALL = buildAll();
 
@@ -124,6 +134,42 @@ public final class EffectRegistry {
 		all.add(row(72, 0x00E5FF, 0xBF360C, "aurora", "ember_rain", 2, GuardStyle.NONE, ContextProfile.NIGHT_BLOOM, "particle.soul_escape", 0.9F, 130, "frostlens"));
 		all.add(row(73, 0x76FF03, 0x8D1007, "vortex", "rising_souls", 2, GuardStyle.DARK, ContextProfile.LOW_HEALTH_FRENZY, "ambient.cave", 0.6F, 220, "pixelate"));
 		all.add(row(74, 0xCFD8DC, 0x4E342E, "rings", "snowfall", 2, GuardStyle.GUST, ContextProfile.STORM_CHARGED, "entity.breeze.idle_ground", 0.8F, 170, "ripple"));
+		// F15 "Copper Patina" (teal x copper)
+		all.add(row(75, 0x2FBFA3, 0xB35A2D, "kaleido", "leap_aura", 0, GuardStyle.NONE, ContextProfile.NONE, "block.copper_bulb.turn_on", 1.0F, 150, "posterize"));
+		all.add(row(76, 0x53D9C0, 0x8C4A21, "circuit", "tide_aura", 0, GuardStyle.GUST, ContextProfile.STORM_CHARGED, "block.bubble_column.upwards_ambient", 1.1F, 140, "duotone"));
+		all.add(row(77, 0x1FA08A, 0xD97C4A, "voronoi", "ember_guard", 0, GuardStyle.STING, ContextProfile.NONE, "block.respawn_anchor.ambient", 1.3F, 170, "heathaze"));
+		all.add(row(78, 0x7FE0CF, 0x6B3517, "scales", "lucky_charm", 0, GuardStyle.NONE, ContextProfile.CROWD_SCALE, "block.amethyst_block.resonate", 1.0F, 130, "tint"));
+		all.add(row(79, 0x0F8C77, 0xE09A66, "rings", "echo_pulse", 0, GuardStyle.GLOW, ContextProfile.NIGHT_BLOOM, "block.sculk_sensor.clicking", 0.9F, 160, "edgeglow"));
+		// F16 "Amber Twilight" (amber x violet)
+		all.add(row(80, 0xFFB733, 0x6A2C91, "petals", "prismatic_rays", 0, GuardStyle.NONE, ContextProfile.NIGHT_BLOOM, "block.amethyst_block.chime", 0.9F, 145, "duotone"));
+		all.add(row(81, 0xE6960F, 0x8F5BC2, "kaleido", "void_tendrils", 0, GuardStyle.DARK, ContextProfile.NONE, "ambient.cave", 1.0F, 200, "glitch"));
+		all.add(row(82, 0xFFCC66, 0x4A1A70, "aurora", "honey_drip", 0, GuardStyle.NONE, ContextProfile.HEALTH_HUE, "block.honey_block.slide", 0.8F, 150, "vignette"));
+		all.add(row(83, 0xCC8419, 0xB08AE0, "starfield", "wax_glow", 0, GuardStyle.SLOW, ContextProfile.NONE, "block.copper_bulb.turn_on", 0.7F, 190, "bloomglow"));
+		all.add(row(84, 0xF2A63B, 0x33104D, "lightning", "storm_cage", 0, GuardStyle.NONE, ContextProfile.STORM_CHARGED, "entity.breeze.idle_ground", 0.9F, 100, "scanlines"));
+		// F17 "Toxic Bloom" (acid-green x charcoal)
+		all.add(row(85, 0xA6E22E, 0x2B2B2B, "circuit", "leap_aura", 1, GuardStyle.SLOW, ContextProfile.CROWD_SCALE, "entity.slime.squish", 0.8F, 120, "glitch"));
+		all.add(row(86, 0xC3F73A, 0x1A1F16, "voronoi", "tide_aura", 1, GuardStyle.NONE, ContextProfile.NONE, "block.sponge.absorb", 0.7F, 180, "posterize"));
+		all.add(row(87, 0x86B300, 0x3D3D3D, "lightning", "ember_guard", 1, GuardStyle.STING, ContextProfile.LOW_HEALTH_FRENZY, "block.respawn_anchor.ambient", 1.4F, 110, "chroma"));
+		all.add(row(88, 0xD6FF66, 0x22261C, "hex", "lucky_charm", 1, GuardStyle.BLIND, ContextProfile.NONE, "block.vault.ambient", 1.3F, 155, "desat"));
+		all.add(row(89, 0x9ACD32, 0x101410, "petals", "echo_pulse", 1, GuardStyle.NONE, ContextProfile.NIGHT_BLOOM, "block.sculk_catalyst.bloom", 0.9F, 175, "edgeglow"));
+		// F18 "Royal Abyss" (navy x gold)
+		all.add(row(90, 0x16296B, 0xF0C24A, "kaleido", "prismatic_rays", 1, GuardStyle.GLOW, ContextProfile.NONE, "block.beacon.power_select", 0.8F, 165, "bloomglow"));
+		all.add(row(91, 0x0A1A4D, 0xD4AF37, "lightning", "void_tendrils", 1, GuardStyle.DARK, ContextProfile.NIGHT_BLOOM, "block.portal.ambient", 0.6F, 210, "duotone"));
+		all.add(row(92, 0x24408F, 0xFFDD80, "waves", "honey_drip", 1, GuardStyle.NONE, ContextProfile.CROWD_SCALE, "block.honey_block.slide", 1.1F, 135, "radialblur"));
+		all.add(row(93, 0x33509E, 0xB8912F, "sparkle", "wax_glow", 1, GuardStyle.NONE, ContextProfile.NONE, "block.copper_bulb.turn_on", 1.2F, 145, "vignette"));
+		all.add(row(94, 0x0D2140, 0xE6C35C, "arcs", "storm_cage", 1, GuardStyle.GUST, ContextProfile.STORM_CHARGED, "entity.breeze.idle_ground", 1.3F, 105, "posterize"));
+		// F19 "Coral Reef" (coral x turquoise)
+		all.add(row(95, 0xFF6F61, 0x20B2AA, "petals", "leap_aura", 2, GuardStyle.NONE, ContextProfile.HEALTH_HUE, "entity.axolotl.swim", 1.0F, 125, "radialblur"));
+		all.add(row(96, 0xFF8A75, 0x0E8074, "waves", "tide_aura", 2, GuardStyle.NONE, ContextProfile.NONE, "block.bubble_column.upwards_ambient", 0.8F, 160, "ripple"));
+		all.add(row(97, 0xE85A4F, 0x30D5C8, "scales", "ember_guard", 2, GuardStyle.STING, ContextProfile.NONE, "entity.puffer_fish.blow_up", 0.9F, 185, "duotone"));
+		all.add(row(98, 0xFFA599, 0x117A6F, "circuit", "lucky_charm", 2, GuardStyle.GLOW, ContextProfile.CROWD_SCALE, "entity.allay.ambient_with_item", 1.1F, 150, "tint"));
+		all.add(row(99, 0xD94F41, 0x66E5DB, "kaleido", "echo_pulse", 2, GuardStyle.GUST, ContextProfile.NONE, "ambient.underwater.loop", 0.9F, 195, "glitch"));
+		// F20 "Spectral Circus" (high-contrast complements)
+		all.add(row(100, 0xFF2E9A, 0x2EFF93, "lightning", "prismatic_rays", 2, GuardStyle.NONE, ContextProfile.NONE, "block.amethyst_block.resonate", 1.4F, 115, "glitch"));
+		all.add(row(101, 0x7A00E6, 0xE6C800, "vortex", "void_tendrils", 2, GuardStyle.BLIND, ContextProfile.NIGHT_BLOOM, "entity.evoker.cast_spell", 0.7F, 220, "posterize"));
+		all.add(row(102, 0xFF6600, 0x0066FF, "petals", "honey_drip", 2, GuardStyle.NONE, ContextProfile.LOW_HEALTH_FRENZY, "block.honey_block.slide", 1.4F, 170, "pixelate"));
+		all.add(row(103, 0x00E5B0, 0xE5003F, "circuit", "wax_glow", 2, GuardStyle.DARK, ContextProfile.HEALTH_HUE, "block.chorus_flower.grow", 0.8F, 140, "radialblur"));
+		all.add(row(104, 0xFFE600, 0x3D0099, "interference", "storm_cage", 2, GuardStyle.GUST, ContextProfile.STORM_CHARGED, "block.bell.resonate", 1.2F, 125, "duotone"));
 
 		return List.copyOf(all);
 	}
@@ -133,13 +179,14 @@ public final class EffectRegistry {
 	 * matrix) and packed to opaque ARGB. paramA (surface pattern scale, ~0.3-1.2),
 	 * paramB (surface scroll speed, ~0.4-1.4) and behaviorStrength (~0.8-1.5) are
 	 * derived per id so every effect animates distinctly; the same derivation is
-	 * mirrored by tools/gen_post_effects.py.
+	 * mirrored by tools/gen_post_effects.py. The modulus is {@link #PARAM_CYCLE}
+	 * (not {@link #COUNT}) so ids 0..74 keep their V1 params across expansions.
 	 */
 	private static EffectDefinition row(int id, int rgbPrimary, int rgbSecondary, String surfaceName, String behaviorId, int behaviorVariant,
 			GuardStyle guard, ContextProfile context, String ambientSoundId, float ambientPitch, int ambientPeriodTicks, String screenTemplate) {
 		float paramA = 0.3F + 0.012F * id;
-		float paramB = 0.4F + ((id * 37) % COUNT) / (float) COUNT;
-		float behaviorStrength = 0.8F + 0.7F * ((id * 23) % COUNT) / (float) COUNT;
+		float paramB = 0.4F + ((id * 37) % PARAM_CYCLE) / (float) PARAM_CYCLE;
+		float behaviorStrength = 0.8F + 0.7F * ((id * 23) % PARAM_CYCLE) / (float) PARAM_CYCLE;
 		return EffectDefinition.of(id, 0xFF000000 | rgbPrimary, 0xFF000000 | rgbSecondary, SurfaceTemplate.valueOf(surfaceName.toUpperCase(Locale.ROOT)), paramA, paramB,
 				behaviorId, behaviorVariant, behaviorStrength, guard, context, ambientSoundId, ambientPitch, ambientPeriodTicks, screenTemplate);
 	}
@@ -156,9 +203,12 @@ public final class EffectRegistry {
 	 * used EXACTLY 3 times covering variants {0, 1, 2}; ambientPeriodTicks positive;
 	 * every (ambientSoundId, ambientPitch, ambientPeriodTicks) triple distinct;
 	 * every behavior id registered in {@link InsideEffectBehavior#REGISTRY};
-	 * every screenTemplate one of the 12 {@link #SCREEN_TEMPLATES}; every
-	 * ambientSoundId resolvable in the vanilla sound registry; and no surface or
-	 * screenTemplate repeated within a 5-effect color family (id / 5).
+	 * every screenTemplate one of the 16 {@link #SCREEN_TEMPLATES}; every
+	 * ambientSoundId resolvable in the vanilla sound registry; no surface,
+	 * screenTemplate or behavior id repeated within a 5-effect color family
+	 * (id / 5); no (surface, screenTemplate) pair used more than 3 times across
+	 * the whole catalogue; and every {@link #SCREEN_TEMPLATES} entry used by at
+	 * least one effect.
 	 */
 	public static void validate() {
 		if (ALL.size() != COUNT) {
@@ -170,6 +220,9 @@ public final class EffectRegistry {
 		Set<String> soundTriples = new HashSet<>();
 		Map<Integer, Set<SurfaceTemplate>> surfacesPerFamily = new HashMap<>();
 		Map<Integer, Set<String>> screenFxPerFamily = new HashMap<>();
+		Map<Integer, Set<String>> behaviorsPerFamily = new HashMap<>();
+		Map<String, Integer> surfaceScreenPairCounts = new HashMap<>();
+		Set<String> screenTemplatesUsed = new HashSet<>();
 		for (int i = 0; i < ALL.size(); i++) {
 			EffectDefinition def = ALL.get(i);
 			if (def.id() != i) {
@@ -214,12 +267,31 @@ public final class EffectRegistry {
 			if (!screenFxPerFamily.computeIfAbsent(family, f -> new HashSet<>()).add(def.screenTemplate())) {
 				throw new IllegalStateException("Family " + family + " repeats screen template " + def.screenTemplate() + " (effect " + def.id() + ")");
 			}
+
+			if (!behaviorsPerFamily.computeIfAbsent(family, f -> new HashSet<>()).add(def.insideBehaviorId())) {
+				throw new IllegalStateException("Family " + family + " repeats behavior " + def.insideBehaviorId() + " (effect " + def.id() + ")");
+			}
+
+			String surfaceScreenPair = def.surface() + "+" + def.screenTemplate();
+			int pairCount = surfaceScreenPairCounts.merge(surfaceScreenPair, 1, Integer::sum);
+			if (pairCount > 3) {
+				throw new IllegalStateException("(surface, screenTemplate) pair " + surfaceScreenPair + " used more than 3 times (effect " + def.id() + ")");
+			}
+
+			screenTemplatesUsed.add(def.screenTemplate());
 		}
 
 		// Every behavior id must appear exactly 3 times, once per variant {0, 1, 2}.
 		for (Map.Entry<String, Set<Integer>> entry : behaviorVariants.entrySet()) {
 			if (!entry.getValue().equals(Set.of(0, 1, 2))) {
 				throw new IllegalStateException("Behavior " + entry.getKey() + " must be used exactly 3 times with variants {0,1,2}, found variants " + entry.getValue());
+			}
+		}
+
+		// Every screen-fx template in the catalogue must be exercised by at least one effect.
+		for (String template : SCREEN_TEMPLATES) {
+			if (!screenTemplatesUsed.contains(template)) {
+				throw new IllegalStateException("Screen template " + template + " is not used by any effect");
 			}
 		}
 	}

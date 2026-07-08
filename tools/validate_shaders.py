@@ -3,8 +3,8 @@
 
 The VM is headless (no GPU), so shaders can never be run; this is the closest
 practical check. For each of the mod's shader files -- the bubble surface
-shaders in src/client/resources (12 .fsh + surface.vsh) and the screen-fx
-shaders in src/main/resources (12 .fsh) -- the script:
+shaders in src/client/resources (16 .fsh + surface.vsh) and the screen-fx
+shaders in src/main/resources (16 .fsh) -- the script:
 
 1. extracts the vanilla include files (fog/globals/dynamictransforms/projection
    .glsl) from the Minecraft 26.2 client jar in the loom cache,

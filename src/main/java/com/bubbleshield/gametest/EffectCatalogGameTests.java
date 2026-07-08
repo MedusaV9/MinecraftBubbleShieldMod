@@ -3,8 +3,10 @@ package com.bubbleshield.gametest;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 import com.bubbleshield.block.BubbleShieldBlockEntity;
@@ -30,14 +32,14 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Machine-enforcement of the 75-effect catalogue invariants: registry validity,
+ * Machine-enforcement of the 105-effect catalogue invariants: registry validity,
  * the uniqueness matrix, EN/DE lang parity and the screen-fx JSON cross-check.
  */
 public class EffectCatalogGameTests {
 	@GameTest
 	public void allEffectsValid(GameTestHelper helper) {
 		EffectRegistry.validate();
-		helper.assertTrue(EffectRegistry.COUNT == 75, "catalogue should contain exactly 75 effects");
+		helper.assertTrue(EffectRegistry.COUNT == 105, "catalogue should contain exactly 105 effects");
 		helper.assertTrue(EffectRegistry.ALL.size() == EffectRegistry.COUNT, "registry should expose exactly " + EffectRegistry.COUNT + " effect definitions");
 		helper.assertTrue(InsideEffectBehavior.REGISTRY.size() == 35, "exactly 35 inside behaviors should be registered");
 		helper.succeed();
@@ -74,14 +76,14 @@ public class EffectCatalogGameTests {
 	}
 
 	/**
-	 * The surface-template axis is complete: 12 templates exist and every one of them is
+	 * The surface-template axis is complete: 16 templates exist and every one of them is
 	 * used by the catalogue. The bubble shader files themselves live in the CLIENT source
 	 * set (not on this dedicated-server classpath), so their GLSL is verified out-of-band
 	 * by {@code tools/validate_shaders.py} (glslangValidator) plus the build.
 	 */
 	@GameTest
 	public void surfaceTemplateCatalogComplete(GameTestHelper helper) {
-		helper.assertTrue(SurfaceTemplate.values().length == 12, "exactly 12 surface templates should exist, found " + SurfaceTemplate.values().length);
+		helper.assertTrue(SurfaceTemplate.values().length == 16, "exactly 16 surface templates should exist, found " + SurfaceTemplate.values().length);
 
 		Set<SurfaceTemplate> used = new HashSet<>();
 		for (EffectDefinition def : EffectRegistry.ALL) {
@@ -95,14 +97,38 @@ public class EffectCatalogGameTests {
 	}
 
 	/**
+	 * The screen-template axis is complete: 16 templates exist and every one of them is
+	 * used by the catalogue. The shader files behind them are checked by
+	 * {@code ShieldGameTests.postEffectAssetsExist} and {@code tools/validate_shaders.py}.
+	 */
+	@GameTest
+	public void screenTemplateCatalogComplete(GameTestHelper helper) {
+		helper.assertTrue(EffectRegistry.SCREEN_TEMPLATES.size() == 16, "exactly 16 screen templates should exist, found " + EffectRegistry.SCREEN_TEMPLATES.size());
+
+		Set<String> used = new HashSet<>();
+		for (EffectDefinition def : EffectRegistry.ALL) {
+			used.add(def.screenTemplate());
+		}
+		for (String template : EffectRegistry.SCREEN_TEMPLATES) {
+			helper.assertTrue(used.contains(template), "screen template " + template + " is not used by any effect");
+		}
+
+		helper.succeed();
+	}
+
+	/**
 	 * The per-family (id/5) "no repeated surface/screenTemplate" invariant lives in
 	 * {@link EffectRegistry#validate()} (checked by {@link #allEffectsValid}) so it
-	 * also runs at mod init; this test keeps the remaining pairwise-uniqueness axes.
+	 * also runs at mod init; this test keeps the remaining pairwise-uniqueness axes,
+	 * plus the global "(surface, screenTemplate) pair used at most 3 times" cap and
+	 * the per-family "no repeated behavior id" rule.
 	 */
 	@GameTest
 	public void uniquenessMatrixHolds(GameTestHelper helper) {
 		Set<Long> palettes = new HashSet<>();
 		Set<String> behaviorVariants = new HashSet<>();
+		Map<String, Integer> surfaceScreenPairCounts = new HashMap<>();
+		Map<Integer, Set<String>> behaviorsPerFamily = new HashMap<>();
 
 		for (EffectDefinition def : EffectRegistry.ALL) {
 			long palette = ((long) def.argbPrimary() << 32) | (def.argbSecondary() & 0xFFFFFFFFL);
@@ -110,6 +136,15 @@ public class EffectCatalogGameTests {
 
 			String behaviorVariant = def.insideBehaviorId() + "@" + def.behaviorVariant();
 			helper.assertTrue(behaviorVariants.add(behaviorVariant), "effect " + def.id() + " reuses behavior/variant pair " + behaviorVariant);
+
+			String surfaceScreenPair = def.surface() + "+" + def.screenTemplate();
+			int pairCount = surfaceScreenPairCounts.merge(surfaceScreenPair, 1, Integer::sum);
+			helper.assertTrue(pairCount <= 3, "(surface, screenTemplate) pair " + surfaceScreenPair + " used more than 3 times (effect " + def.id() + ")");
+
+			int family = def.id() / 5;
+			helper.assertTrue(
+					behaviorsPerFamily.computeIfAbsent(family, f -> new HashSet<>()).add(def.insideBehaviorId()),
+					"family " + family + " repeats behavior " + def.insideBehaviorId() + " (effect " + def.id() + ")");
 		}
 
 		helper.succeed();
@@ -118,7 +153,7 @@ public class EffectCatalogGameTests {
 	/**
 	 * EN/DE parity over the ENTIRE key set (not just effect names): the key sets must be
 	 * identical, so every gui/advancement/axis key added in one language must exist in
-	 * the other. Effect names 00..74 must additionally be present in both.
+	 * the other. Effect names 00..104 must additionally be present in both.
 	 */
 	@GameTest
 	public void langKeysComplete(GameTestHelper helper) {
@@ -140,7 +175,7 @@ public class EffectCatalogGameTests {
 
 	/**
 	 * Every axis label used by the effect-picker tooltips resolves to a lang key:
-	 * 12 surface templates, 35 inside behaviors, 7 guard styles and 6 context profiles.
+	 * 16 surface templates, 35 inside behaviors, 7 guard styles and 6 context profiles.
 	 * Keys are derived from the live enums/registry so the tooltip composition in
 	 * {@code EffectPickerScreen} and the lang files cannot drift apart.
 	 */
