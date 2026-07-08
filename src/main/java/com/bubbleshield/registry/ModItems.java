@@ -16,6 +16,7 @@ public final class ModItems {
 	public static final ResourceKey<Item> BUBBLE_SHIELD_PROJECTOR_KEY = ResourceKey.create(Registries.ITEM, BubbleShield.id("bubble_shield_projector"));
 	public static final ResourceKey<Item> RESONANT_CORE_KEY = ResourceKey.create(Registries.ITEM, BubbleShield.id("resonant_core"));
 	public static final ResourceKey<Item> PRISMATIC_CORE_KEY = ResourceKey.create(Registries.ITEM, BubbleShield.id("prismatic_core"));
+	public static final ResourceKey<Item> FLUX_CAPACITOR_KEY = ResourceKey.create(Registries.ITEM, BubbleShield.id("flux_capacitor"));
 
 	public static final Item BUBBLE_SHIELD_PROJECTOR = Registry.register(
 		BuiltInRegistries.ITEM,
@@ -50,6 +51,20 @@ public final class ModItems {
 		)
 	);
 
+	/**
+	 * Slot-2 upgrade: while installed, the active shield's passive drain halves and
+	 * tier regeneration pulses no longer burn the extra fuel-second.
+	 */
+	public static final Item FLUX_CAPACITOR = Registry.register(
+		BuiltInRegistries.ITEM,
+		FLUX_CAPACITOR_KEY,
+		new Item(
+			new Item.Properties()
+				.stacksTo(1)
+				.setId(FLUX_CAPACITOR_KEY)
+		)
+	);
+
 	private ModItems() {
 	}
 
@@ -59,6 +74,7 @@ public final class ModItems {
 				output.accept(BUBBLE_SHIELD_PROJECTOR);
 				output.accept(RESONANT_CORE);
 				output.accept(PRISMATIC_CORE);
+				output.accept(FLUX_CAPACITOR);
 			});
 	}
 }

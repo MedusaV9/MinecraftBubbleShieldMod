@@ -31,7 +31,8 @@
 			"com.bubbleshield.gametest.BossBarNameGameTests",
 			"com.bubbleshield.gametest.ModeGameTests",
 			"com.bubbleshield.gametest.ColorGameTests",
-			"com.bubbleshield.gametest.LinkingGameTests"
+			"com.bubbleshield.gametest.LinkingGameTests",
+			"com.bubbleshield.gametest.CapacitorGameTests"
 		]
 	},
 	"mixins": [

@@ -64,6 +64,8 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	private final SimpleContainer fuelContainer = new SimpleContainer(1);
 	/** One-slot upgrade-core inventory; its content derives the shield tier (see {@link #tier()}). */
 	private final SimpleContainer coreContainer = new SimpleContainer(1);
+	/** One-slot flux-capacitor inventory; its content drives {@link #hasCapacitor()}. */
+	private final SimpleContainer capacitorContainer = new SimpleContainer(1);
 	/** Tier applied by the last {@link #refreshTier()} pass; -1 forces a refresh on the first tick. */
 	private int lastTier = -1;
 	/** Last observed redstone level; persisted so chunk reloads do not fake an edge. */
@@ -90,6 +92,7 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 				case BubbleShieldMenu.DATA_SHAPE -> state.shape.ordinal();
 				case BubbleShieldMenu.DATA_MODE -> state.mode.ordinal();
 				case BubbleShieldMenu.DATA_CYCLE -> state.cycleEffect ? 1 : 0;
+				case BubbleShieldMenu.DATA_CAPACITOR -> BubbleShieldBlockEntity.this.hasCapacitor() ? 1 : 0;
 				default -> 0;
 			};
 		}
@@ -129,6 +132,19 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 
 	public SimpleContainer getCoreContainer() {
 		return this.coreContainer;
+	}
+
+	public SimpleContainer getCapacitorContainer() {
+		return this.capacitorContainer;
+	}
+
+	/**
+	 * @return true while a flux capacitor sits in the capacitor slot: the active shield's
+	 * passive drain halves and regeneration pulses no longer burn the extra fuel-second
+	 * (see {@link ShieldLogic#serverTick}).
+	 */
+	public boolean hasCapacitor() {
+		return this.capacitorContainer.getItem(0).is(ModItems.FLUX_CAPACITOR);
 	}
 
 	/**
@@ -174,7 +190,7 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		this.consumeFuelSlot();
 		this.refreshTier();
 		if (this.level instanceof ServerLevel serverLevel) {
-			if (ShieldLogic.serverTick(serverLevel, this.worldPosition, this.shieldState, this.tier(), this)) {
+			if (ShieldLogic.serverTick(serverLevel, this.worldPosition, this.shieldState, this.tier(), this.hasCapacitor(), this)) {
 				this.markUpdated();
 			}
 
@@ -722,6 +738,7 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		if (this.level != null) {
 			Containers.dropContents(this.level, pos, this.fuelContainer);
 			Containers.dropContents(this.level, pos, this.coreContainer);
+			Containers.dropContents(this.level, pos, this.capacitorContainer);
 		}
 	}
 
@@ -749,6 +766,7 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		output.putBoolean("powered", this.powered);
 		this.fuelContainer.storeAsItemList(output.list("fuel_items", ItemStack.CODEC));
 		this.coreContainer.storeAsItemList(output.list("core_items", ItemStack.CODEC));
+		this.capacitorContainer.storeAsItemList(output.list("capacitor_items", ItemStack.CODEC));
 	}
 
 	@Override
@@ -760,6 +778,7 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		this.poweredInitialized = true;
 		this.fuelContainer.fromItemList(input.listOrEmpty("fuel_items", ItemStack.CODEC));
 		this.coreContainer.fromItemList(input.listOrEmpty("core_items", ItemStack.CODEC));
+		this.capacitorContainer.fromItemList(input.listOrEmpty("capacitor_items", ItemStack.CODEC));
 		// Re-derive tier-dependent fields on the next tick (covers cores edited while unloaded).
 		this.lastTier = -1;
 	}

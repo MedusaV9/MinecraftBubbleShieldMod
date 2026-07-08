@@ -151,6 +151,12 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 		graphics.fill(sx, sy, sx + 18, sy + 18, 0xFF373737);
 		graphics.fill(sx + 1, sy + 1, sx + 18, sy + 18, 0xFFFFFFFF);
 		graphics.fill(sx + 1, sy + 1, sx + 17, sy + 17, 0xFF8B8B8B);
+		// Same technique for the flux-capacitor slot at (56, 17), above the fuel slot.
+		int cx = this.leftPos + 55;
+		int cy = this.topPos + 16;
+		graphics.fill(cx, cy, cx + 18, cy + 18, 0xFF373737);
+		graphics.fill(cx + 1, cy + 1, cx + 18, cy + 18, 0xFFFFFFFF);
+		graphics.fill(cx + 1, cy + 1, cx + 17, cy + 17, 0xFF8B8B8B);
 	}
 
 	@Override

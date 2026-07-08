@@ -36,17 +36,20 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 	public static final int DATA_SHAPE = 7;
 	public static final int DATA_MODE = 8;
 	public static final int DATA_CYCLE = 9;
-	public static final int DATA_COUNT = 10;
+	public static final int DATA_CAPACITOR = 10;
+	public static final int DATA_COUNT = 11;
 
 	public static final int FUEL_SLOT = 0;
 	public static final int CORE_SLOT = 1;
-	private static final int INV_SLOT_START = 2;
-	private static final int INV_SLOT_END = 29;
-	private static final int HOTBAR_SLOT_START = 29;
-	private static final int HOTBAR_SLOT_END = 38;
+	public static final int CAPACITOR_SLOT = 2;
+	private static final int INV_SLOT_START = 3;
+	private static final int INV_SLOT_END = 30;
+	private static final int HOTBAR_SLOT_START = 30;
+	private static final int HOTBAR_SLOT_END = 39;
 
 	private final Container fuelContainer;
 	private final Container coreContainer;
+	private final Container capacitorContainer;
 	private final ContainerData data;
 	private final BlockPos pos;
 	/** The projector this menu is attached to; null on the client. */
@@ -54,12 +57,12 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 
 	/** Client-side constructor, invoked by the ExtendedMenuType with the synced BlockPos. */
 	public BubbleShieldMenu(int containerId, Inventory inventory, BlockPos pos) {
-		this(containerId, inventory, pos, new SimpleContainer(1), new SimpleContainer(1), new SimpleContainerData(DATA_COUNT), null);
+		this(containerId, inventory, pos, new SimpleContainer(1), new SimpleContainer(1), new SimpleContainer(1), new SimpleContainerData(DATA_COUNT), null);
 	}
 
 	/** Server-side constructor. */
 	public BubbleShieldMenu(int containerId, Inventory inventory, BubbleShieldBlockEntity blockEntity) {
-		this(containerId, inventory, blockEntity.getBlockPos(), blockEntity.getFuelContainer(), blockEntity.getCoreContainer(), blockEntity.getMenuData(), blockEntity);
+		this(containerId, inventory, blockEntity.getBlockPos(), blockEntity.getFuelContainer(), blockEntity.getCoreContainer(), blockEntity.getCapacitorContainer(), blockEntity.getMenuData(), blockEntity);
 	}
 
 	private BubbleShieldMenu(
@@ -68,15 +71,18 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 		BlockPos pos,
 		Container fuelContainer,
 		Container coreContainer,
+		Container capacitorContainer,
 		ContainerData data,
 		@Nullable BubbleShieldBlockEntity blockEntity
 	) {
 		super(ModMenus.BUBBLE_SHIELD, containerId);
 		checkContainerSize(fuelContainer, 1);
 		checkContainerSize(coreContainer, 1);
+		checkContainerSize(capacitorContainer, 1);
 		checkContainerDataCount(data, DATA_COUNT);
 		this.fuelContainer = fuelContainer;
 		this.coreContainer = coreContainer;
+		this.capacitorContainer = capacitorContainer;
 		this.data = data;
 		this.pos = pos;
 		this.blockEntity = blockEntity;
@@ -91,6 +97,12 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 			@Override
 			public boolean mayPlace(ItemStack stack) {
 				return isCore(stack);
+			}
+		});
+		this.addSlot(new Slot(capacitorContainer, 0, 56, 17) {
+			@Override
+			public boolean mayPlace(ItemStack stack) {
+				return stack.is(ModItems.FLUX_CAPACITOR);
 			}
 		});
 		this.addStandardInventorySlots(inventory, 8, 84);
@@ -149,6 +161,11 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 		return this.data.get(DATA_CYCLE) != 0;
 	}
 
+	/** @return the synced flux-capacitor flag (a capacitor sits in the capacitor slot). */
+	public boolean hasCapacitor() {
+		return this.data.get(DATA_CAPACITOR) != 0;
+	}
+
 	@Override
 	public ItemStack quickMoveStack(Player player, int slotIndex) {
 		ItemStack clicked = ItemStack.EMPTY;
@@ -156,7 +173,7 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 		if (slot != null && slot.hasItem()) {
 			ItemStack stack = slot.getItem();
 			clicked = stack.copy();
-			if (slotIndex == FUEL_SLOT || slotIndex == CORE_SLOT) {
+			if (slotIndex == FUEL_SLOT || slotIndex == CORE_SLOT || slotIndex == CAPACITOR_SLOT) {
 				if (!this.moveItemStackTo(stack, INV_SLOT_START, HOTBAR_SLOT_END, true)) {
 					return ItemStack.EMPTY;
 				}
@@ -166,6 +183,10 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 				}
 			} else if (isCore(stack)) {
 				if (!this.moveItemStackTo(stack, CORE_SLOT, CORE_SLOT + 1, false)) {
+					return ItemStack.EMPTY;
+				}
+			} else if (stack.is(ModItems.FLUX_CAPACITOR)) {
+				if (!this.moveItemStackTo(stack, CAPACITOR_SLOT, CAPACITOR_SLOT + 1, false)) {
 					return ItemStack.EMPTY;
 				}
 			} else if (slotIndex >= INV_SLOT_START && slotIndex < INV_SLOT_END) {

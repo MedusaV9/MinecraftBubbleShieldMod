@@ -56,6 +56,8 @@ public final class ShieldLogic {
 	/** 30 minutes. */
 	public static final long BREAK_COOLDOWN_TICKS = 36000L;
 	public static final int TICKS_PER_FUEL_SECOND = 20;
+	/** Upper bound on the combined (ECO x capacitor) passive-drain interval; see {@link #drainIntervalTicks}. */
+	public static final int MAX_DRAIN_INTERVAL_TICKS = 80;
 	public static final double PUSHBACK_MARGIN = 0.75;
 	/** A tier-1+ shield regenerates once every 2 seconds while active and fueled. */
 	public static final int REGEN_PERIOD_TICKS = 40;
@@ -155,14 +157,27 @@ public final class ShieldLogic {
 	}
 
 	/**
+	 * Combined passive-drain rule (V4 ECO + V7 flux capacitor): the effective drain
+	 * interval in ticks is {@code TICKS_PER_FUEL_SECOND * (eco ? 2 : 1) * (capacitor ? 2 : 1)},
+	 * capped at {@link #MAX_DRAIN_INTERVAL_TICKS} (80). So: 20 plain, 40 with either
+	 * ECO or a capacitor, and 80 (the cap) with both. Pure; the drain in
+	 * {@link #serverTick} fires whenever {@code gameTime} is a multiple of this interval.
+	 */
+	public static int drainIntervalTicks(boolean eco, boolean capacitor) {
+		return Math.min(MAX_DRAIN_INTERVAL_TICKS, TICKS_PER_FUEL_SECOND * (eco ? 2 : 1) * (capacitor ? 2 : 1));
+	}
+
+	/**
 	 * Runs one server tick of shield logic for the projector at {@code pos}.
 	 *
 	 * @param tier the projector's upgrade-core tier (0..2); drives regeneration and break cooldown.
+	 * @param capacitor whether a flux capacitor is installed: halves the passive drain
+	 * (see {@link #drainIntervalTicks}) and skips the regen pulses' extra fuel-second.
 	 * @param self the ticking projector's block entity ({@code state} is its shield state);
 	 * used to resolve resonance-linked partners for the projectile damage split.
 	 * @return true if the shield state changed and should be saved/synced.
 	 */
-	public static boolean serverTick(ServerLevel level, BlockPos pos, ShieldState state, int tier, BubbleShieldBlockEntity self) {
+	public static boolean serverTick(ServerLevel level, BlockPos pos, ShieldState state, int tier, boolean capacitor, BubbleShieldBlockEntity self) {
 		if (!state.active) {
 			return false;
 		}
@@ -170,31 +185,33 @@ public final class ShieldLogic {
 		boolean changed = false;
 		long gameTime = level.getGameTime();
 
-		// Active shield consumes 1 fuel-second per 20 ticks. In ECO mode every other
-		// drain boundary is skipped, so the passive drain becomes 1 per 40 ticks.
-		if (gameTime % TICKS_PER_FUEL_SECOND == 0) {
-			boolean ecoSkip = state.mode == ShieldMode.ECO && (gameTime / TICKS_PER_FUEL_SECOND) % 2L != 0L;
-			if (!ecoSkip) {
-				state.fuelSeconds--;
-				changed = true;
-				if (state.fuelSeconds <= 0) {
-					state.fuelSeconds = 0;
-					state.active = false;
-					return true;
-				}
+		// Combined passive-drain rule: the active shield burns 1 fuel-second whenever
+		// gameTime is a multiple of the effective drain interval, which is
+		// TICKS_PER_FUEL_SECOND * (eco ? 2 : 1) * (capacitor ? 2 : 1) ticks, capped at
+		// MAX_DRAIN_INTERVAL_TICKS (80). Plain: 20; ECO or capacitor: 40; both: 80 (cap).
+		if (gameTime % drainIntervalTicks(state.mode == ShieldMode.ECO, capacitor) == 0) {
+			state.fuelSeconds--;
+			changed = true;
+			if (state.fuelSeconds <= 0) {
+				state.fuelSeconds = 0;
+				state.active = false;
+				return true;
 			}
 		}
 
 		// Fueled regeneration: tier-1+ shields heal every 2 seconds, each pulse
-		// burning one extra fuel-second on top of the runtime drain. ECO mode
+		// burning one extra fuel-second on top of the runtime drain -- unless a flux
+		// capacitor is installed, which makes regen pulses fuel-free. ECO mode
 		// suppresses regeneration entirely as part of its efficiency trade-off.
 		if (tier >= 1 && state.mode != ShieldMode.ECO && state.health < state.maxHealth && state.fuelSeconds > 0 && gameTime % REGEN_PERIOD_TICKS == 0) {
 			state.health = Math.min(state.maxHealth, state.health + (tier == 1 ? TIER_1_REGEN_PER_PULSE : TIER_2_REGEN_PER_PULSE));
-			state.fuelSeconds = Math.max(0, state.fuelSeconds - 1);
 			changed = true;
-			if (state.fuelSeconds <= 0) {
-				state.active = false;
-				return true;
+			if (!capacitor) {
+				state.fuelSeconds = Math.max(0, state.fuelSeconds - 1);
+				if (state.fuelSeconds <= 0) {
+					state.active = false;
+					return true;
+				}
 			}
 		}
 

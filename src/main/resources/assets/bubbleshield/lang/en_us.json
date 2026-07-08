@@ -2,6 +2,7 @@
   "block.bubbleshield.bubble_shield_projector": "Bubble Shield Projector",
   "item.bubbleshield.resonant_core": "Resonant Core",
   "item.bubbleshield.prismatic_core": "Prismatic Core",
+  "item.bubbleshield.flux_capacitor": "Flux Capacitor",
   "gui.bubbleshield.title": "Bubble Shield Projector",
   "gui.bubbleshield.tier": "Tier: %s",
   "gui.bubbleshield.activate": "Activate",
