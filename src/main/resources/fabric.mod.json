@@ -32,7 +32,8 @@
 			"com.bubbleshield.gametest.ModeGameTests",
 			"com.bubbleshield.gametest.ColorGameTests",
 			"com.bubbleshield.gametest.LinkingGameTests",
-			"com.bubbleshield.gametest.CapacitorGameTests"
+			"com.bubbleshield.gametest.CapacitorGameTests",
+			"com.bubbleshield.gametest.WorldIntegrationGameTests"
 		]
 	},
 	"mixins": [

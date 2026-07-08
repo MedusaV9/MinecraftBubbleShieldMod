@@ -327,9 +327,10 @@ public final class ServerNet {
 	/**
 	 * Mutating requests are owner-only. A shield without a recorded owner (e.g. placed
 	 * before this rule existed) is claimed by the first interacting player; afterwards
-	 * only an exact UUID match is accepted.
+	 * only an exact UUID match is accepted. Public so every server-side mutation path
+	 * (C2S payloads here, the /bubbleshield command) shares the exact same rule.
 	 */
-	private static boolean isOwner(ServerPlayer player, BubbleShieldBlockEntity shield) {
+	public static boolean isOwner(ServerPlayer player, BubbleShieldBlockEntity shield) {
 		UUID owner = shield.getShieldState().ownerUuid;
 		if (owner == null) {
 			shield.setOwner(player);

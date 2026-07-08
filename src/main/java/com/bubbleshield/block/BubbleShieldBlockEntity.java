@@ -47,6 +47,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.gameevent.GameEvent;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
 import net.minecraft.world.phys.Vec3;
@@ -434,6 +435,9 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		if (!this.shieldState.active) {
 			this.shieldState.active = true;
 			this.markUpdated();
+			// Only a REAL inactive->active transition is a sculk-audible activation;
+			// re-activating an already-active shield never reaches this branch.
+			this.level.gameEvent(GameEvent.BLOCK_ACTIVATE, this.worldPosition, GameEvent.Context.of(this.getBlockState()));
 			// Expel non-whitelisted players already standing inside the freshly raised barrier.
 			if (this.level instanceof ServerLevel serverLevel) {
 				ShieldLogic.expelBlockedPlayers(serverLevel, this.worldPosition, this.shieldState);
@@ -529,6 +533,11 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 			this.tryActivate();
 		} else if (this.shieldState.active) {
 			this.shieldState.active = false;
+			// Only a real active->inactive transition is a sculk-audible deactivation.
+			if (this.level != null) {
+				this.level.gameEvent(GameEvent.BLOCK_DEACTIVATE, this.worldPosition, GameEvent.Context.of(this.getBlockState()));
+			}
+
 			// Empty the boss bar immediately instead of waiting for the next tick.
 			if (this.bossEvent != null) {
 				this.bossEvent.removeAllPlayers();

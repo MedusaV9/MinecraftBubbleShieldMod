@@ -1,9 +1,11 @@
 package com.bubbleshield;
 
 import com.bubbleshield.advancements.ModCriteria;
+import com.bubbleshield.command.BubbleShieldCommand;
 import com.bubbleshield.effect.EffectRegistry;
 import com.bubbleshield.effect.InsideEffectBehavior;
 import com.bubbleshield.effect.behaviors.EffectBehaviors;
+import com.bubbleshield.loot.CoreLootInjector;
 import com.bubbleshield.net.ServerNet;
 import com.bubbleshield.net.ShieldPayloads;
 import com.bubbleshield.registry.ModBlockEntities;
@@ -35,6 +37,8 @@ public class BubbleShield implements ModInitializer {
 
 		ShieldPayloads.registerTypes();
 		ServerNet.register();
+		BubbleShieldCommand.register();
+		CoreLootInjector.register();
 
 		EffectBehaviors.registerAll();
 		EffectRegistry.validate();
