@@ -5,7 +5,7 @@
     "passes": [
         {
             "vertex_shader": "minecraft:core/screenquad",
-            "fragment_shader": "bubbleshield:screenfx/radialblur",
+            "fragment_shader": "bubbleshield:screenfx/sfx_103",
             "inputs": [
                 {
                     "sampler_name": "In",
@@ -14,7 +14,7 @@
             ],
             "output": "swap",
             "uniforms": {
-                "RadialBlurConfig": [
+                "FxConfig": [
                     {
                         "name": "Primary",
                         "type": "vec4",
@@ -26,9 +26,34 @@
                         ]
                     },
                     {
-                        "name": "Intensity",
-                        "type": "float",
-                        "value": 1.0313
+                        "name": "Secondary",
+                        "type": "vec4",
+                        "value": [
+                            0.898,
+                            0.0,
+                            0.2471,
+                            1.0
+                        ]
+                    },
+                    {
+                        "name": "ParamsA",
+                        "type": "vec4",
+                        "value": [
+                            1.536,
+                            1.03133,
+                            0.0,
+                            0.0
+                        ]
+                    },
+                    {
+                        "name": "ParamsB",
+                        "type": "vec4",
+                        "value": [
+                            0.6575,
+                            0.874,
+                            0.2,
+                            0.35
+                        ]
                     }
                 ]
             }

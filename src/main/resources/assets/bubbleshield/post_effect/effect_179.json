@@ -5,7 +5,7 @@
     "passes": [
         {
             "vertex_shader": "minecraft:core/screenquad",
-            "fragment_shader": "bubbleshield:screenfx/duotone",
+            "fragment_shader": "bubbleshield:screenfx/sfx_179",
             "inputs": [
                 {
                     "sampler_name": "In",
@@ -14,7 +14,7 @@
             ],
             "output": "swap",
             "uniforms": {
-                "DuotoneConfig": [
+                "FxConfig": [
                     {
                         "name": "Primary",
                         "type": "vec4",
@@ -36,9 +36,24 @@
                         ]
                     },
                     {
-                        "name": "Intensity",
-                        "type": "float",
-                        "value": 0.4593
+                        "name": "ParamsA",
+                        "type": "vec4",
+                        "value": [
+                            2.448,
+                            0.45933,
+                            0.0,
+                            0.0
+                        ]
+                    },
+                    {
+                        "name": "ParamsB",
+                        "type": "vec4",
+                        "value": [
+                            0.6281,
+                            0.8975,
+                            0.5,
+                            0.35
+                        ]
                     }
                 ]
             }

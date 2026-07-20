@@ -5,7 +5,7 @@
     "passes": [
         {
             "vertex_shader": "minecraft:core/screenquad",
-            "fragment_shader": "bubbleshield:screenfx/posterize",
+            "fragment_shader": "bubbleshield:screenfx/sfx_299",
             "inputs": [
                 {
                     "sampler_name": "In",
@@ -14,7 +14,7 @@
             ],
             "output": "swap",
             "uniforms": {
-                "PosterizeConfig": [
+                "FxConfig": [
                     {
                         "name": "Primary",
                         "type": "vec4",
@@ -26,14 +26,34 @@
                         ]
                     },
                     {
-                        "name": "Levels",
-                        "type": "float",
-                        "value": 7.72
+                        "name": "Secondary",
+                        "type": "vec4",
+                        "value": [
+                            0.9216,
+                            0.6863,
+                            0.6549,
+                            1.0
+                        ]
                     },
                     {
-                        "name": "PulseSpeed",
-                        "type": "float",
-                        "value": 3.888
+                        "name": "ParamsA",
+                        "type": "vec4",
+                        "value": [
+                            3.888,
+                            7.72,
+                            0.0,
+                            0.0
+                        ]
+                    },
+                    {
+                        "name": "ParamsB",
+                        "type": "vec4",
+                        "value": [
+                            0.7922,
+                            0.7663,
+                            0.2,
+                            0.35
+                        ]
                     }
                 ]
             }

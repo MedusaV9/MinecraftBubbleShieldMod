@@ -5,7 +5,7 @@
     "passes": [
         {
             "vertex_shader": "minecraft:core/screenquad",
-            "fragment_shader": "bubbleshield:screenfx/vignette",
+            "fragment_shader": "bubbleshield:screenfx/sfx_093",
             "inputs": [
                 {
                     "sampler_name": "In",
@@ -14,7 +14,7 @@
             ],
             "output": "swap",
             "uniforms": {
-                "VignetteConfig": [
+                "FxConfig": [
                     {
                         "name": "Primary",
                         "type": "vec4",
@@ -26,14 +26,34 @@
                         ]
                     },
                     {
-                        "name": "Intensity",
-                        "type": "float",
-                        "value": 0.768
+                        "name": "Secondary",
+                        "type": "vec4",
+                        "value": [
+                            0.7216,
+                            0.5686,
+                            0.1843,
+                            1.0
+                        ]
                     },
                     {
-                        "name": "PulseSpeed",
-                        "type": "float",
-                        "value": 1.416
+                        "name": "ParamsA",
+                        "type": "vec4",
+                        "value": [
+                            1.416,
+                            0.768,
+                            0.0,
+                            0.0
+                        ]
+                    },
+                    {
+                        "name": "ParamsB",
+                        "type": "vec4",
+                        "value": [
+                            0.4772,
+                            1.0183,
+                            0.35,
+                            0.35
+                        ]
                     }
                 ]
             }

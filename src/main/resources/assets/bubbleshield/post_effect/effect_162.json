@@ -5,7 +5,7 @@
     "passes": [
         {
             "vertex_shader": "minecraft:core/screenquad",
-            "fragment_shader": "bubbleshield:screenfx/desat",
+            "fragment_shader": "bubbleshield:screenfx/sfx_162",
             "inputs": [
                 {
                     "sampler_name": "In",
@@ -14,7 +14,7 @@
             ],
             "output": "swap",
             "uniforms": {
-                "DesatConfig": [
+                "FxConfig": [
                     {
                         "name": "Primary",
                         "type": "vec4",
@@ -26,9 +26,34 @@
                         ]
                     },
                     {
-                        "name": "Desaturation",
-                        "type": "float",
-                        "value": 0.924
+                        "name": "Secondary",
+                        "type": "vec4",
+                        "value": [
+                            1.0,
+                            0.9843,
+                            0.7804,
+                            1.0
+                        ]
+                    },
+                    {
+                        "name": "ParamsA",
+                        "type": "vec4",
+                        "value": [
+                            2.244,
+                            0.924,
+                            0.0,
+                            0.0
+                        ]
+                    },
+                    {
+                        "name": "ParamsB",
+                        "type": "vec4",
+                        "value": [
+                            0.1215,
+                            1.3028,
+                            0.2,
+                            0.35
+                        ]
                     }
                 ]
             }

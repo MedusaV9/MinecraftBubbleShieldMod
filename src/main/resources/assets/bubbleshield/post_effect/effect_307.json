@@ -5,7 +5,7 @@
     "passes": [
         {
             "vertex_shader": "minecraft:core/screenquad",
-            "fragment_shader": "bubbleshield:screenfx/pixelate",
+            "fragment_shader": "bubbleshield:screenfx/sfx_307",
             "inputs": [
                 {
                     "sampler_name": "In",
@@ -14,7 +14,7 @@
             ],
             "output": "swap",
             "uniforms": {
-                "PixelateConfig": [
+                "FxConfig": [
                     {
                         "name": "Primary",
                         "type": "vec4",
@@ -26,14 +26,34 @@
                         ]
                     },
                     {
-                        "name": "Resolution",
-                        "type": "float",
-                        "value": 24.0
+                        "name": "Secondary",
+                        "type": "vec4",
+                        "value": [
+                            0.9412,
+                            0.6863,
+                            0.2157,
+                            1.0
+                        ]
                     },
                     {
-                        "name": "MosaicSize",
-                        "type": "float",
-                        "value": 3.7067
+                        "name": "ParamsA",
+                        "type": "vec4",
+                        "value": [
+                            3.984,
+                            3.70667,
+                            24.0,
+                            0.0
+                        ]
+                    },
+                    {
+                        "name": "ParamsB",
+                        "type": "vec4",
+                        "value": [
+                            0.7364,
+                            0.8109,
+                            0.15,
+                            0.35
+                        ]
                     }
                 ]
             }

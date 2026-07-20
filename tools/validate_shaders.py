@@ -22,11 +22,28 @@ On top of per-file compilation it enforces the generated-shader invariants:
   ([layer:deep:...], [layer:mid:...], [layer:rim:...]);
 * tools/surface_manifest.json exists, its entries match the fx_* files on
   disk 1:1, and its (family, warp, deep, rim, anim) stack tuples are pairwise
-  distinct (the structural-variety guarantee).
+  distinct (the structural-variety guarantee);
+* every generated screen sfx_*.fsh (tools/gen_screen_shaders.py) carries its
+  structural stack marker ([screen:family:variant:motion:overlay]) and declares
+  the standardized `layout(std140) uniform FxConfig { vec4 Primary; vec4
+  Secondary; vec4 ParamsA; vec4 ParamsB; };` block in exactly that member order;
+* tools/screen_manifest.json exists, matches the sfx_* files on disk 1:1, its
+  (family, variant, motion, overlay) stacks are pairwise distinct, and the
+  classpath copy at src/main/resources/assets/bubbleshield/screen_manifest.json
+  is byte-identical;
+* every post_effect/effect_NN.json's pass 1 references that effect's own
+  bubbleshield:screenfx/sfx_NNN and lists its FxConfig uniforms in the SAME
+  order as the (regex-parsed) FxConfig block declaration of that sfx file --
+  std140 wiring is positional, so a JSON/GLSL order mismatch would silently
+  scramble the uniforms at runtime.
 
 The fx_*/manifest checks are skipped (with a notice) only while NEITHER any
 fx_*.fsh NOR the manifest exists yet, i.e. before the generator has ever run;
-any half-generated state is a hard failure.
+the sfx_*/screen-manifest/FxConfig checks are skipped the same way while
+NEITHER any sfx_*.fsh NOR tools/screen_manifest.json exists. Any
+half-generated state is a hard failure. The 16 legacy hand-written screenfx
+templates keep compiling alongside the sfx_* files until milestone F removes
+them.
 
 Exits nonzero when any shader fails to compile or any invariant is violated.
 Usage:
@@ -57,11 +74,22 @@ SHADER_DIRS = [
     REPO_ROOT / "src/main/resources/assets/bubbleshield/shaders/screenfx",
 ]
 MANIFEST_PATH = REPO_ROOT / "tools/surface_manifest.json"
+SCREEN_MANIFEST_PATH = REPO_ROOT / "tools/screen_manifest.json"
+CLASSPATH_SCREEN_MANIFEST = REPO_ROOT / "src/main/resources/assets/bubbleshield/screen_manifest.json"
+POST_EFFECT_DIR = REPO_ROOT / "src/main/resources/assets/bubbleshield/post_effect"
 OUT_DIR = Path("/tmp/bubbleshield_shader_validation")
 MOJ_IMPORT = re.compile(r"^#moj_import <minecraft:([a-z_]+)\.glsl>\s*$")
 FX_NAME = re.compile(r"^fx_(\d{3})\.fsh$")
+SFX_NAME = re.compile(r"^sfx_(\d{3})\.fsh$")
 LAYER_MARKERS = ("// [layer:deep:", "// [layer:mid:", "// [layer:rim:")
 STACK_KEYS = ("family", "warp", "deep", "rim", "anim")
+SCREEN_MARKER = re.compile(r"^// \[screen:([a-z0-9]+):([a-z0-9]+):([a-z0-9]+):([a-z0-9]+)\]$", re.MULTILINE)
+SCREEN_STACK_KEYS = ("family", "variant", "motion", "overlay")
+# The one std140 config block every generated sfx shader must declare, with this
+# exact member order (the post_effect JSON uniform order is checked against it).
+FXCONFIG_BLOCK = re.compile(r"layout\(std140\) uniform FxConfig \{([^}]*)\};")
+FXCONFIG_MEMBER = re.compile(r"vec4\s+(\w+)\s*;")
+FXCONFIG_EXPECTED = ("Primary", "Secondary", "ParamsA", "ParamsB")
 
 
 def extract_includes() -> dict[str, str]:
@@ -178,6 +206,128 @@ def check_generated_invariants(shaders: list[Path]) -> list[str]:
     return errors
 
 
+def fxconfig_members(text: str) -> list[str] | None:
+    """Returns the FxConfig block's member names in declaration order, or None."""
+    match = FXCONFIG_BLOCK.search(text)
+    if not match:
+        return None
+    return FXCONFIG_MEMBER.findall(match.group(1))
+
+
+def check_screen_invariants(shaders: list[Path]) -> list[str]:
+    """sfx marker/FxConfig checks + screen manifest agreement + JSON uniform order.
+
+    Mirrors check_generated_invariants for the screen side: every generated
+    sfx_*.fsh must carry its structural stack marker and the standardized
+    FxConfig block (exact member order); tools/screen_manifest.json must match
+    the sfx_* file set 1:1 with pairwise-distinct stacks and a byte-identical
+    classpath copy; and every post_effect/effect_NN.json must reference its own
+    sfx shader in pass 1 with FxConfig uniforms in the same order as the GLSL
+    block (std140 wiring is positional). Returns errors.
+    """
+    errors: list[str] = []
+    sfx_files = sorted(p for p in shaders if SFX_NAME.match(p.name))
+
+    if not sfx_files and not SCREEN_MANIFEST_PATH.is_file():
+        print("NOTE  no generated sfx_*.fsh and no screen_manifest.json yet -- "
+              "skipping screen-shader checks (run tools/gen_screen_shaders.py)")
+        return errors
+
+    # 1. Every generated sfx_*.fsh: structural marker + standardized FxConfig
+    # block in the exact expected member order.
+    glsl_orders: dict[str, list[str]] = {}
+    for shader in sfx_files:
+        text = shader.read_text()
+        if not SCREEN_MARKER.search(text):
+            errors.append(f"{shader.name}: missing structural marker '// [screen:...]'")
+        members = fxconfig_members(text)
+        if members is None:
+            errors.append(f"{shader.name}: missing 'layout(std140) uniform FxConfig' block")
+            continue
+        if tuple(members) != FXCONFIG_EXPECTED:
+            errors.append(f"{shader.name}: FxConfig members {members} != expected {list(FXCONFIG_EXPECTED)}")
+        glsl_orders[shader.name] = members
+
+    # 2. Screen manifest exists, matches the sfx_* file set, stacks pairwise
+    # distinct, classpath copy byte-identical.
+    if not SCREEN_MANIFEST_PATH.is_file():
+        errors.append(f"sfx_* shaders exist but manifest is missing: {SCREEN_MANIFEST_PATH}")
+        return errors
+    try:
+        manifest = json.loads(SCREEN_MANIFEST_PATH.read_text())
+    except json.JSONDecodeError as e:
+        errors.append(f"{SCREEN_MANIFEST_PATH.name}: invalid JSON ({e})")
+        return errors
+
+    manifest_files = {entry.get("file") for entry in manifest.values()}
+    disk_files = {p.name for p in sfx_files}
+    for missing in sorted(manifest_files - disk_files):
+        errors.append(f"screen manifest lists {missing} but the file does not exist")
+    for extra in sorted(disk_files - manifest_files):
+        errors.append(f"{extra} exists on disk but is not in the screen manifest")
+    for effect_id, entry in sorted(manifest.items()):
+        expected = f"sfx_{int(effect_id):03d}.fsh"
+        if entry.get("file") != expected:
+            errors.append(f"screen manifest id {effect_id} points at {entry.get('file')}, expected {expected}")
+
+    stacks: dict[tuple, str] = {}
+    for effect_id, entry in sorted(manifest.items()):
+        stack = tuple(entry.get(key) for key in SCREEN_STACK_KEYS)
+        if stack in stacks:
+            errors.append(f"screen manifest ids {stacks[stack]} and {effect_id} share the same "
+                          f"stack tuple {dict(zip(SCREEN_STACK_KEYS, stack))}")
+        else:
+            stacks[stack] = effect_id
+
+    if not CLASSPATH_SCREEN_MANIFEST.is_file():
+        errors.append(f"classpath screen manifest copy missing: {CLASSPATH_SCREEN_MANIFEST}")
+    elif CLASSPATH_SCREEN_MANIFEST.read_bytes() != SCREEN_MANIFEST_PATH.read_bytes():
+        errors.append(f"{CLASSPATH_SCREEN_MANIFEST} is not byte-identical to {SCREEN_MANIFEST_PATH} "
+                      "(rerun tools/gen_screen_shaders.py)")
+
+    # 3. Each post_effect JSON: pass 1 references the id's own sfx shader and
+    # lists the FxConfig uniforms in the same order as the GLSL declaration.
+    checked_jsons = 0
+    for effect_id in sorted(manifest, key=int):
+        json_path = POST_EFFECT_DIR / f"effect_{int(effect_id):02d}.json"
+        if not json_path.is_file():
+            errors.append(f"screen manifest has id {effect_id} but {json_path.name} does not exist")
+            continue
+        try:
+            config = json.loads(json_path.read_text())
+        except json.JSONDecodeError as e:
+            errors.append(f"{json_path.name}: invalid JSON ({e})")
+            continue
+
+        passes = config.get("passes") or []
+        if not passes:
+            errors.append(f"{json_path.name}: no passes")
+            continue
+        expected_shader = f"bubbleshield:screenfx/sfx_{int(effect_id):03d}"
+        actual_shader = passes[0].get("fragment_shader")
+        if actual_shader != expected_shader:
+            errors.append(f"{json_path.name}: pass 1 references {actual_shader}, expected {expected_shader}")
+
+        fx_uniforms = (passes[0].get("uniforms") or {}).get("FxConfig")
+        if not fx_uniforms:
+            errors.append(f"{json_path.name}: pass 1 has no FxConfig uniforms")
+            continue
+        json_order = [u.get("name") for u in fx_uniforms]
+        sfx_name = f"sfx_{int(effect_id):03d}.fsh"
+        glsl_order = glsl_orders.get(sfx_name)
+        if glsl_order is None:
+            continue  # missing sfx file already reported via the manifest diff
+        if json_order != glsl_order:
+            errors.append(f"{json_path.name}: FxConfig uniform order {json_order} != "
+                          f"{sfx_name} block order {glsl_order}")
+        checked_jsons += 1
+
+    print(f"OK    screen-shader invariants ({len(sfx_files)} sfx files, "
+          f"{len(manifest)} manifest entries, {len(stacks)} distinct stacks, "
+          f"{checked_jsons} JSON FxConfig orders checked)")
+    return errors
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="compile-validate the mod's GLSL shaders")
     parser.add_argument("--serial", action="store_true",
@@ -217,6 +367,7 @@ def main() -> None:
                 print("      " + "\n      ".join(output.splitlines()))
 
     invariant_errors = check_generated_invariants(shaders)
+    invariant_errors += check_screen_invariants(shaders)
     for error in invariant_errors:
         print(f"FAIL  {error}")
 

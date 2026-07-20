@@ -5,7 +5,7 @@
     "passes": [
         {
             "vertex_shader": "minecraft:core/screenquad",
-            "fragment_shader": "bubbleshield:screenfx/scanlines",
+            "fragment_shader": "bubbleshield:screenfx/sfx_264",
             "inputs": [
                 {
                     "sampler_name": "In",
@@ -14,7 +14,7 @@
             ],
             "output": "swap",
             "uniforms": {
-                "ScanlinesConfig": [
+                "FxConfig": [
                     {
                         "name": "Primary",
                         "type": "vec4",
@@ -26,14 +26,34 @@
                         ]
                     },
                     {
-                        "name": "Intensity",
-                        "type": "float",
-                        "value": 0.448
+                        "name": "Secondary",
+                        "type": "vec4",
+                        "value": [
+                            0.4235,
+                            0.4235,
+                            0.4706,
+                            1.0
+                        ]
                     },
                     {
-                        "name": "LineDensity",
-                        "type": "float",
-                        "value": 784.24
+                        "name": "ParamsA",
+                        "type": "vec4",
+                        "value": [
+                            3.468,
+                            0.448,
+                            784.24,
+                            0.0
+                        ]
+                    },
+                    {
+                        "name": "ParamsB",
+                        "type": "vec4",
+                        "value": [
+                            0.161,
+                            1.2712,
+                            0.15,
+                            0.35
+                        ]
                     }
                 ]
             }

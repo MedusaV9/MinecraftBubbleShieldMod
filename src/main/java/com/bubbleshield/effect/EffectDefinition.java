@@ -13,8 +13,9 @@ import java.util.Locale;
  * tune the server-side {@link InsideEffectBehavior}, {@code guard} and {@code context}
  * pick the boundary-retaliation style and reactivity profile, the {@code ambient*}
  * fields describe the looping ambient sound (vanilla sound id without namespace, e.g.
- * {@code "block.beacon.ambient"}), and {@code screenTemplate} names the screen-fx GLSL
- * template referenced by the effect's {@code post_effect/effect_NN.json}.
+ * {@code "block.beacon.ambient"}), and {@code screenTemplate} names the screen-fx
+ * technique family (tooltips/invariants; the actual per-effect screen shader referenced
+ * by {@code post_effect/effect_NN.json} is {@link #screenShaderId()}).
  */
 public record EffectDefinition(
 		int id,
@@ -43,6 +44,17 @@ public record EffectDefinition(
 	 */
 	public String surfaceShaderId() {
 		return String.format(Locale.ROOT, "bubble/fx_%03d", id);
+	}
+
+	/**
+	 * Id-derived path of this effect's dedicated screen post-effect fragment shader
+	 * ({@code assets/bubbleshield/shaders/screenfx/sfx_NNN.fsh}, main source set so the
+	 * gametests can see it). Every effect has its own screen shader; {@link #screenTemplate}
+	 * remains technique-family metadata (invariants, generator seeding), not a shader
+	 * selector.
+	 */
+	public String screenShaderId() {
+		return String.format(Locale.ROOT, "screenfx/sfx_%03d", id);
 	}
 
 	/**

@@ -5,7 +5,7 @@
     "passes": [
         {
             "vertex_shader": "minecraft:core/screenquad",
-            "fragment_shader": "bubbleshield:screenfx/heathaze",
+            "fragment_shader": "bubbleshield:screenfx/sfx_015",
             "inputs": [
                 {
                     "sampler_name": "In",
@@ -14,7 +14,7 @@
             ],
             "output": "swap",
             "uniforms": {
-                "HeatHazeConfig": [
+                "FxConfig": [
                     {
                         "name": "Primary",
                         "type": "vec4",
@@ -26,14 +26,34 @@
                         ]
                     },
                     {
-                        "name": "Intensity",
-                        "type": "float",
-                        "value": 0.72
+                        "name": "Secondary",
+                        "type": "vec4",
+                        "value": [
+                            1.0,
+                            0.7608,
+                            0.2392,
+                            1.0
+                        ]
                     },
                     {
-                        "name": "Speed",
-                        "type": "float",
-                        "value": 0.48
+                        "name": "ParamsA",
+                        "type": "vec4",
+                        "value": [
+                            0.48,
+                            0.72,
+                            0.0,
+                            0.0
+                        ]
+                    },
+                    {
+                        "name": "ParamsB",
+                        "type": "vec4",
+                        "value": [
+                            0.2705,
+                            1.1836,
+                            0.12,
+                            0.35
+                        ]
                     }
                 ]
             }

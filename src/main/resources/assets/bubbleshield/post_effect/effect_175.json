@@ -5,7 +5,7 @@
     "passes": [
         {
             "vertex_shader": "minecraft:core/screenquad",
-            "fragment_shader": "bubbleshield:screenfx/bloomglow",
+            "fragment_shader": "bubbleshield:screenfx/sfx_175",
             "inputs": [
                 {
                     "sampler_name": "In",
@@ -14,7 +14,7 @@
             ],
             "output": "swap",
             "uniforms": {
-                "BloomGlowConfig": [
+                "FxConfig": [
                     {
                         "name": "Primary",
                         "type": "vec4",
@@ -26,14 +26,34 @@
                         ]
                     },
                     {
-                        "name": "Intensity",
-                        "type": "float",
-                        "value": 0.66
+                        "name": "Secondary",
+                        "type": "vec4",
+                        "value": [
+                            0.4,
+                            0.2235,
+                            0.102,
+                            1.0
+                        ]
                     },
                     {
-                        "name": "Threshold",
-                        "type": "float",
-                        "value": 0.95
+                        "name": "ParamsA",
+                        "type": "vec4",
+                        "value": [
+                            2.4,
+                            0.66,
+                            0.0,
+                            0.95
+                        ]
+                    },
+                    {
+                        "name": "ParamsB",
+                        "type": "vec4",
+                        "value": [
+                            0.1559,
+                            1.2752,
+                            0.6,
+                            0.35
+                        ]
                     }
                 ]
             }

@@ -5,7 +5,7 @@
     "passes": [
         {
             "vertex_shader": "minecraft:core/screenquad",
-            "fragment_shader": "bubbleshield:screenfx/glitch",
+            "fragment_shader": "bubbleshield:screenfx/sfx_112",
             "inputs": [
                 {
                     "sampler_name": "In",
@@ -14,7 +14,7 @@
             ],
             "output": "swap",
             "uniforms": {
-                "GlitchConfig": [
+                "FxConfig": [
                     {
                         "name": "Primary",
                         "type": "vec4",
@@ -26,14 +26,34 @@
                         ]
                     },
                     {
-                        "name": "Intensity",
-                        "type": "float",
-                        "value": 0.5227
+                        "name": "Secondary",
+                        "type": "vec4",
+                        "value": [
+                            0.6902,
+                            0.5529,
+                            0.298,
+                            1.0
+                        ]
                     },
                     {
-                        "name": "Speed",
-                        "type": "float",
-                        "value": 1.644
+                        "name": "ParamsA",
+                        "type": "vec4",
+                        "value": [
+                            1.644,
+                            0.52267,
+                            0.0,
+                            0.0
+                        ]
+                    },
+                    {
+                        "name": "ParamsB",
+                        "type": "vec4",
+                        "value": [
+                            0.2198,
+                            1.2242,
+                            0.25,
+                            0.35
+                        ]
                     }
                 ]
             }

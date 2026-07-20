@@ -5,7 +5,7 @@
     "passes": [
         {
             "vertex_shader": "minecraft:core/screenquad",
-            "fragment_shader": "bubbleshield:screenfx/ripple",
+            "fragment_shader": "bubbleshield:screenfx/sfx_332",
             "inputs": [
                 {
                     "sampler_name": "In",
@@ -14,7 +14,7 @@
             ],
             "output": "swap",
             "uniforms": {
-                "RippleConfig": [
+                "FxConfig": [
                     {
                         "name": "Primary",
                         "type": "vec4",
@@ -26,14 +26,34 @@
                         ]
                     },
                     {
-                        "name": "Intensity",
-                        "type": "float",
-                        "value": 0.9493
+                        "name": "Secondary",
+                        "type": "vec4",
+                        "value": [
+                            0.6275,
+                            0.2627,
+                            0.6902,
+                            1.0
+                        ]
                     },
                     {
-                        "name": "Speed",
-                        "type": "float",
-                        "value": 4.284
+                        "name": "ParamsA",
+                        "type": "vec4",
+                        "value": [
+                            4.284,
+                            0.86533,
+                            0.0,
+                            0.0
+                        ]
+                    },
+                    {
+                        "name": "ParamsB",
+                        "type": "vec4",
+                        "value": [
+                            0.1873,
+                            1.2502,
+                            0.25,
+                            0.35
+                        ]
                     }
                 ]
             }

@@ -142,20 +142,22 @@ public class EffectCatalogGameTests {
 	}
 
 	/**
-	 * The screen-template axis is complete: 16 templates exist and every one of them is
-	 * used by the catalogue. The shader files behind them are checked by
-	 * {@code ShieldGameTests.postEffectAssetsExist} and {@code tools/validate_shaders.py}.
+	 * The screen-family axis is complete: 20 technique families exist and every one of
+	 * them is used by the catalogue. The families are metadata (like the surface
+	 * families) -- the actual per-effect sfx shaders behind them are checked by
+	 * {@code ShieldGameTests.postEffectAssetsExist}, {@link #screenTemplateMatchesJson}
+	 * and {@code tools/validate_shaders.py}.
 	 */
 	@GameTest
 	public void screenTemplateCatalogComplete(GameTestHelper helper) {
-		helper.assertTrue(EffectRegistry.SCREEN_TEMPLATES.size() == 16, "exactly 16 screen templates should exist, found " + EffectRegistry.SCREEN_TEMPLATES.size());
+		helper.assertTrue(EffectRegistry.SCREEN_TEMPLATES.size() == 20, "exactly 20 screen families should exist, found " + EffectRegistry.SCREEN_TEMPLATES.size());
 
 		Set<String> used = new HashSet<>();
 		for (EffectDefinition def : EffectRegistry.ALL) {
 			used.add(def.screenTemplate());
 		}
 		for (String template : EffectRegistry.SCREEN_TEMPLATES) {
-			helper.assertTrue(used.contains(template), "screen template " + template + " is not used by any effect");
+			helper.assertTrue(used.contains(template), "screen family " + template + " is not used by any effect");
 		}
 
 		helper.succeed();
@@ -255,8 +257,18 @@ public class EffectCatalogGameTests {
 		helper.succeed();
 	}
 
+	/**
+	 * Cross-checks the three screen-fx artifacts per effect: the generated
+	 * post_effect JSON's first pass must reference the effect's OWN
+	 * {@code screenfx/sfx_NNN} shader, and the row's screen family must match what
+	 * tools/gen_screen_shaders.py actually baked into that shader, via the generated
+	 * screen manifest (a classpath copy is emitted next to the assets at
+	 * generation time).
+	 */
 	@GameTest
 	public void screenTemplateMatchesJson(GameTestHelper helper) {
+		JsonObject manifest = readJson(helper, "/assets/bubbleshield/screen_manifest.json");
+
 		for (EffectDefinition def : EffectRegistry.ALL) {
 			String jsonPath = String.format(Locale.ROOT, "/assets/bubbleshield/post_effect/%s.json", def.screenEffectName());
 			JsonObject config = readJson(helper, jsonPath);
@@ -264,10 +276,18 @@ public class EffectCatalogGameTests {
 			helper.assertTrue(passes != null && !passes.isEmpty(), jsonPath + " should declare at least one pass");
 
 			String fragmentShader = passes.get(0).getAsJsonObject().get("fragment_shader").getAsString();
-			String expected = "bubbleshield:screenfx/" + def.screenTemplate();
+			String expected = "bubbleshield:" + def.screenShaderId();
 			helper.assertTrue(
 					expected.equals(fragmentShader),
 					jsonPath + " first pass should use " + expected + " but uses " + fragmentShader);
+
+			JsonObject entry = manifest.getAsJsonObject(Integer.toString(def.id()));
+			helper.assertTrue(entry != null, "screen_manifest.json is missing an entry for effect " + def.id());
+			String manifestFamily = entry.get("family").getAsString();
+			helper.assertTrue(
+					def.screenTemplate().equals(manifestFamily),
+					"effect " + def.id() + " row family " + def.screenTemplate()
+							+ " does not match screen_manifest.json family " + manifestFamily);
 		}
 
 		helper.succeed();
