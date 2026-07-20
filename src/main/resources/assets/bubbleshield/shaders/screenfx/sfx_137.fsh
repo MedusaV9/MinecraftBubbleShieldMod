@@ -33,9 +33,16 @@ float luma(vec3 c) {
 }
 
 float hash21(vec2 p) {
-    p = fract(p * vec2(123.34, 456.21));
-    p += dot(p, p + 45.32);
-    return fract(p.x * p.y);
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+// Gameplay-safety: any scene-sample displacement is bounded per axis.
+// Call sites pass the TOTAL displacement (all offsets summed) so the bound
+// cannot be defeated by stacking two half-size offsets.
+vec2 safeOffset(vec2 off) {
+    return clamp(off, vec2(-0.0200), vec2(0.0200));
 }
 
 vec3 sampleAt(vec2 uv) {
@@ -46,8 +53,10 @@ void main() {
     // Undisplaced scene sample: the gameplay-safety floor references this.
     vec3 base = texture(InSampler, texCoord).rgb;
     float baseLuma = luma(base);
+    // InSize is driver-fed; guard it so no divide below can hit zero.
+    vec2 safeInSize = max(InSize, vec2(1.0));
     vec2 centered = texCoord - vec2(0.5);
-    vec2 aspectCentered = centered * vec2(InSize.x / max(InSize.y, 1.0), 1.0);
+    vec2 aspectCentered = centered * vec2(safeInSize.x / safeInSize.y, 1.0);
     float centerDist = length(aspectCentered);
     // GameTime wraps once per day cycle (24000 ticks); scale to roughly seconds.
     float anim = GameTime * 1200.0 * ParamsA.x + ParamsB.x * 61.8;
@@ -55,20 +64,20 @@ void main() {
     float strength = ParamsA.y * animAmp;
 
     // 5-tap cross blur haze with drifting sparkle dust.
-    vec2 texel = 4.4241 / InSize;
+    vec2 texel = 4.4241 / safeInSize;
     vec3 blurred = sampleAt(texCoord) * 0.32
-        + sampleAt(texCoord + vec2(texel.x, 0.0)) * 0.17
-        + sampleAt(texCoord - vec2(texel.x, 0.0)) * 0.17
-        + sampleAt(texCoord + vec2(0.0, texel.y)) * 0.17
-        + sampleAt(texCoord - vec2(0.0, texel.y)) * 0.17;
+        + sampleAt(texCoord + safeOffset(vec2(texel.x, 0.0))) * 0.17
+        + sampleAt(texCoord + safeOffset(vec2(-texel.x, 0.0))) * 0.17
+        + sampleAt(texCoord + safeOffset(vec2(0.0, texel.y))) * 0.17
+        + sampleAt(texCoord + safeOffset(vec2(0.0, -texel.y))) * 0.17;
     vec3 dream = mix(base, blurred * 1.0493, clamp(strength, 0.0, 0.85));
-    vec2 cellUv = floor(texCoord * InSize / 15.0225);
+    vec2 cellUv = floor(texCoord * safeInSize / 15.0225);
     float tw = hash21(cellUv);
     float twinkle = smoothstep(0.8429, 1.0, sin(anim * 2.4925 + tw * 6.2831) * 0.5 + 0.5) * step(0.9739, tw);
     vec3 outColor = dream + Primary.rgb * twinkle * 0.3535 * animAmp;
 
     // Overlay: sparse twinkling motes.
-    vec2 oCell = floor(texCoord * InSize / 16.4006);
+    vec2 oCell = floor(texCoord * safeInSize / 16.4006);
     float oTw = hash21(oCell + vec2(37.0, 91.0));
     float oTwinkle = smoothstep(0.8530, 1.0, sin(anim * 2.1480 + oTw * 6.2831) * 0.5 + 0.5) * step(0.9881, oTw);
     outColor += Secondary.rgb * oTwinkle * 0.2876;

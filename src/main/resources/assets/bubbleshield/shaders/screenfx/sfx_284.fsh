@@ -32,7 +32,21 @@ float luma(vec3 c) {
     return dot(c, vec3(0.3, 0.59, 0.11));
 }
 
+// 1 - smoothstep with ASCENDING edges. Replaces every reversed-edge
+// smoothstep(hi, lo, x) call: edge0 >= edge1 is undefined by the GLSL
+// spec; this form is numerically identical on conforming drivers.
+float invsmooth(float lo, float hi, float x) {
+    return 1.0 - smoothstep(lo, hi, x);
+}
+
+// two-argument atan is undefined at the exact origin; guard it
+float safeAtan(float y, float x) {
+    return (abs(x) < 1e-6 && abs(y) < 1e-6) ? 0.0 : atan(y, x);
+}
+
 // Gameplay-safety: any scene-sample displacement is bounded per axis.
+// Call sites pass the TOTAL displacement (all offsets summed) so the bound
+// cannot be defeated by stacking two half-size offsets.
 vec2 safeOffset(vec2 off) {
     return clamp(off, vec2(-0.0200), vec2(0.0200));
 }
@@ -45,8 +59,10 @@ void main() {
     // Undisplaced scene sample: the gameplay-safety floor references this.
     vec3 base = texture(InSampler, texCoord).rgb;
     float baseLuma = luma(base);
+    // InSize is driver-fed; guard it so no divide below can hit zero.
+    vec2 safeInSize = max(InSize, vec2(1.0));
     vec2 centered = texCoord - vec2(0.5);
-    vec2 aspectCentered = centered * vec2(InSize.x / max(InSize.y, 1.0), 1.0);
+    vec2 aspectCentered = centered * vec2(safeInSize.x / safeInSize.y, 1.0);
     float centerDist = length(aspectCentered);
     // GameTime wraps once per day cycle (24000 ticks); scale to roughly seconds.
     float anim = GameTime * 1200.0 * ParamsA.x + ParamsB.x * 61.8;
@@ -55,15 +71,15 @@ void main() {
 
     // Kaleidoscopic refraction: 6 angular wedges; each pixel leans toward
     // its fold position (bounded), and the wedge seams glow.
-    float angle = atan(aspectCentered.y, aspectCentered.x);
+    float angle = safeAtan(aspectCentered.y, aspectCentered.x);
     float wedge = 6.2831853 / 6.0000;
     float local = mod(angle + anim * 0.1992, wedge) - wedge * 0.5;
     float folded = abs(local);
     vec2 dir = vec2(cos(folded + anim * 0.0525), sin(folded + anim * 0.0589));
-    vec2 invAspect = vec2(max(InSize.y, 1.0) / max(InSize.x, 1.0), 1.0);
+    vec2 invAspect = vec2(safeInSize.y / safeInSize.x, 1.0);
     vec2 target = vec2(0.5) + dir * centerDist * invAspect;
     vec3 scene = sampleAt(texCoord + safeOffset((target - texCoord) * strength));
-    float seam = smoothstep(0.0620, 0.0, abs(local)) * smoothstep(0.05, 0.25, centerDist);
+    float seam = invsmooth(0.0, 0.0620, abs(local)) * smoothstep(0.05, 0.25, centerDist);
     vec3 outColor = scene + mix(Primary.rgb, Secondary.rgb, texCoord.y) * seam * 0.3420 * strength;
 
     // Overlay: a faint breathing glow of the effect color at the rim.

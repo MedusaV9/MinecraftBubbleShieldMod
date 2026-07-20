@@ -44,8 +44,10 @@ void main() {
     // Undisplaced scene sample: the gameplay-safety floor references this.
     vec3 base = texture(InSampler, texCoord).rgb;
     float baseLuma = luma(base);
+    // InSize is driver-fed; guard it so no divide below can hit zero.
+    vec2 safeInSize = max(InSize, vec2(1.0));
     vec2 centered = texCoord - vec2(0.5);
-    vec2 aspectCentered = centered * vec2(InSize.x / max(InSize.y, 1.0), 1.0);
+    vec2 aspectCentered = centered * vec2(safeInSize.x / safeInSize.y, 1.0);
     float centerDist = length(aspectCentered);
     // GameTime wraps once per day cycle (24000 ticks); scale to roughly seconds.
     float animRaw = GameTime * 1200.0 * ParamsA.x + ParamsB.x * 61.8;

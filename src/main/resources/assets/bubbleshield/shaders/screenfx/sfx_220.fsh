@@ -33,6 +33,8 @@ float luma(vec3 c) {
 }
 
 // Gameplay-safety: any scene-sample displacement is bounded per axis.
+// Call sites pass the TOTAL displacement (all offsets summed) so the bound
+// cannot be defeated by stacking two half-size offsets.
 vec2 safeOffset(vec2 off) {
     return clamp(off, vec2(-0.0200), vec2(0.0200));
 }
@@ -45,8 +47,10 @@ void main() {
     // Undisplaced scene sample: the gameplay-safety floor references this.
     vec3 base = texture(InSampler, texCoord).rgb;
     float baseLuma = luma(base);
+    // InSize is driver-fed; guard it so no divide below can hit zero.
+    vec2 safeInSize = max(InSize, vec2(1.0));
     vec2 centered = texCoord - vec2(0.5);
-    vec2 aspectCentered = centered * vec2(InSize.x / max(InSize.y, 1.0), 1.0);
+    vec2 aspectCentered = centered * vec2(safeInSize.x / safeInSize.y, 1.0);
     float centerDist = length(aspectCentered);
     // GameTime wraps once per day cycle (24000 ticks); scale to roughly seconds.
     float animRaw = GameTime * 1200.0 * ParamsA.x + ParamsB.x * 61.8;

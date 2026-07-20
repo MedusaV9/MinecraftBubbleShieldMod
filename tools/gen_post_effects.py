@@ -35,11 +35,12 @@ GLSL of every referenced sfx file):
                   0.004*paramB, pixelate mosaic 2+2*paramB, posterize levels
                   5+3*paramB, ... see FAMILY_KNOBS);
       Scale     = the family's frequency/cell knob where one existed
-                  (wobble 24, ripple 48, scanlines 160+180*paramA, frostlens
-                  10+20*paramA, moire 90+120*paramA), else 0;
+                  (wobble 24, ripple 48, scanlines 160+180*min(paramA, 2.0),
+                  frostlens 10+20*paramA, moire 90+120*paramA), else 0;
       Aux       = the family's secondary knob where one existed (bloomglow
-                  threshold 0.35+0.25*paramA, pixelate posterize resolution
-                  24), else 0.
+                  threshold 0.35+0.25*min(paramA, 1.55), pixelate posterize
+                  resolution 24), else 0. The min() clamps only bite above
+                  id 104 (see FAMILY_KNOBS comments).
 * ParamsB = [Phase, Drift, TintMix, LumaFloor]:
       Phase     = fract(id * golden ratio) -- de-syncs same-family bubbles;
       Drift     = 0.6 + 0.8 * fract(id * (2 - golden ratio)) -- secondary
@@ -510,9 +511,14 @@ FAMILY_KNOBS = {
     "chroma":     (lambda a, b: 0.012 * b,      lambda a, b: 0.0,              lambda a, b: 0.0,            0.1),
     "pixelate":   (lambda a, b: 2.0 + 2.0 * b,  lambda a, b: 24.0,             lambda a, b: 0.0,            0.15),
     "desat":      (lambda a, b: 0.7 * b,        lambda a, b: 0.0,              lambda a, b: 0.0,            0.2),
-    "bloomglow":  (lambda a, b: 0.9 * b,        lambda a, b: 0.0,              lambda a, b: 0.35 + 0.25 * a, 0.6),
+    # bloomglow's bright-pass threshold is clamped (min(a, 1.55) -> aux <= 0.7375):
+    # unclamped it crosses 1.0 around id 193, above which max(luma-thr, 0) is
+    # always 0 and the glow silently dies. No-op for ids 0..104 (a <= 1.548).
+    "bloomglow":  (lambda a, b: 0.9 * b,        lambda a, b: 0.0,              lambda a, b: 0.35 + 0.25 * min(a, 1.55), 0.6),
     "ripple":     (lambda a, b: 0.8 * b,        lambda a, b: 48.0,             lambda a, b: 0.0,            0.25),
-    "scanlines":  (lambda a, b: 0.7 * b,        lambda a, b: 160.0 + 180.0 * a, lambda a, b: 0.0,           0.15),
+    # scanlines' line frequency is clamped (min(a, 2.0) -> scale <= 520) so high
+    # ids do not alias into shimmer soup. No-op for ids 0..141.
+    "scanlines":  (lambda a, b: 0.7 * b,        lambda a, b: 160.0 + 180.0 * min(a, 2.0), lambda a, b: 0.0, 0.15),
     "edgeglow":   (lambda a, b: 0.8 * b,        lambda a, b: 0.0,              lambda a, b: 0.0,            0.5),
     "frostlens":  (lambda a, b: 0.75 * b,       lambda a, b: 10.0 + 20.0 * a,  lambda a, b: 0.0,            0.55),
     "heathaze":   (lambda a, b: 0.9 * b,        lambda a, b: 0.0,              lambda a, b: 0.0,            0.12),

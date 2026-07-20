@@ -32,7 +32,14 @@ float luma(vec3 c) {
     return dot(c, vec3(0.3, 0.59, 0.11));
 }
 
+// two-argument atan is undefined at the exact origin; guard it
+float safeAtan(float y, float x) {
+    return (abs(x) < 1e-6 && abs(y) < 1e-6) ? 0.0 : atan(y, x);
+}
+
 // Gameplay-safety: any scene-sample displacement is bounded per axis.
+// Call sites pass the TOTAL displacement (all offsets summed) so the bound
+// cannot be defeated by stacking two half-size offsets.
 vec2 safeOffset(vec2 off) {
     return clamp(off, vec2(-0.0200), vec2(0.0200));
 }
@@ -45,8 +52,10 @@ void main() {
     // Undisplaced scene sample: the gameplay-safety floor references this.
     vec3 base = texture(InSampler, texCoord).rgb;
     float baseLuma = luma(base);
+    // InSize is driver-fed; guard it so no divide below can hit zero.
+    vec2 safeInSize = max(InSize, vec2(1.0));
     vec2 centered = texCoord - vec2(0.5);
-    vec2 aspectCentered = centered * vec2(InSize.x / max(InSize.y, 1.0), 1.0);
+    vec2 aspectCentered = centered * vec2(safeInSize.x / safeInSize.y, 1.0);
     float centerDist = length(aspectCentered);
     // GameTime wraps once per day cycle (24000 ticks); scale to roughly seconds.
     float anim = GameTime * 1200.0 * ParamsA.x + ParamsB.x * 61.8;
@@ -54,7 +63,7 @@ void main() {
     float strength = ParamsA.y * animAmp;
 
     // Tangential swirl around the screen center, calm in the middle.
-    float angle = atan(aspectCentered.y, aspectCentered.x);
+    float angle = safeAtan(aspectCentered.y, aspectCentered.x);
     float swirl = sin(angle * 2.0000 + anim - centerDist * 5.6714);
     vec2 tangent = centerDist > 0.0001 ? vec2(-aspectCentered.y, aspectCentered.x) / centerDist : vec2(0.0);
     vec2 off = tangent * swirl * ParamsA.y * animAmp * smoothstep(0.05, 0.3301, centerDist);

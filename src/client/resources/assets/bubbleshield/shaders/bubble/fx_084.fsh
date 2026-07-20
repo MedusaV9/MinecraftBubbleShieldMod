@@ -16,6 +16,13 @@ in float cylindricalVertexDistance;
 
 out vec4 fragColor;
 
+// 1 - smoothstep with ASCENDING edges. Replaces every reversed-edge
+// smoothstep(hi, lo, x) call: edge0 >= edge1 is undefined by the GLSL
+// spec; this form is numerically identical on conforming drivers.
+float invsmooth(float lo, float hi, float x) {
+    return 1.0 - smoothstep(lo, hi, x);
+}
+
 float hash11(float p) {
     p = fract(p * 0.1031);
     p *= p + 33.33;
@@ -29,25 +36,35 @@ float hash21(vec2 p) {
     return fract((p3.x + p3.y) * p3.z);
 }
 
-float vnoise(vec2 p) {
+// lattice-cell hash that tiles across the longitude seam: the cell's
+// x id wraps every px cells, so u = 0 and u = 1 sample identical cells
+float cellHash(vec2 cellId, float px) {
+    return hash21(vec2(mod(cellId.x, px), cellId.y));
+}
+
+// value noise on a wrapping lattice (quintic fade): 'per' tiles the
+// field so it is seamless across the u = 0/1 longitude wrap
+float vnoise(vec2 p, vec2 per) {
     vec2 i = floor(p);
     vec2 f = fract(p);
     vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
-    float a = hash21(i);
-    float b = hash21(i + vec2(1.0, 0.0));
-    float cc = hash21(i + vec2(0.0, 1.0));
-    float d = hash21(i + vec2(1.0, 1.0));
+    float a = hash21(mod(i, per));
+    float b = hash21(mod(i + vec2(1.0, 0.0), per));
+    float cc = hash21(mod(i + vec2(0.0, 1.0), per));
+    float d = hash21(mod(i + vec2(1.0, 1.0), per));
     return mix(mix(a, b, u.x), mix(cc, d, u.x), u.y);
 }
 
-// fractal noise, ridged mode, 3 octaves, inter-octave rotation
-float fbm2(vec2 p) {
+// fractal noise, ridged mode, 3 octaves. The x lacunarity
+// is exactly 2 and the lattice period doubles with it, so EVERY octave
+// tiles the longitude seam (a rotation here would break the wrap).
+float fbm2(vec2 p, vec2 per) {
     float value = 0.0;
     float amplitude = 0.5;
-    mat2 rot = mat2(0.8, 0.6, -0.6, 0.8);
     for (int i = 0; i < 3; i++) {
-        value += amplitude * (1.0 - abs(2.0 * vnoise(p) - 1.0));
-        p = rot * p * 2.0055 + vec2(17.7, 9.2);
+        value += amplitude * (1.0 - abs(2.0 * vnoise(p, per) - 1.0));
+        p = vec2(p.x * 2.0, p.y * 2.0055) + vec2(17.7, 9.2);
+        per = vec2(per.x * 2.0, per.y * 2.0055);
         amplitude *= 0.5;
     }
     return value;
@@ -60,49 +77,56 @@ vec3 accentPalette(float t) {
 }
 
 // silhouette estimator: the camera-distance varying changes fastest per
-// pixel at grazing angles, so fwidth() peaks at the bubble's rim
+// pixel at grazing angles, so fwidth() peaks at the bubble's rim.
+// Normalizing by the distance itself keeps the rim width roughly
+// view-consistent near and far.
 float rimGraze() {
-    float g = fwidth(sphericalVertexDistance);
-    return smoothstep(0.0595, 0.5271, g);
+    float g = fwidth(sphericalVertexDistance) / max(sphericalVertexDistance, 1.0);
+    return smoothstep(0.0043, 0.0358, g);
 }
 
-// DEEP-layer field (warped-fbm volume), sampled by the parallax stack below
+// DEEP-layer field (warped-fbm volume), sampled by the correlated parallax taps
 float deepField(vec2 p, float t) {
-    return fbm2(p * 1.2870 + vec2(0.0, t * 0.0289));
+    return fbm2(p, vec2(2.0000, 3.0000));
 }
 
 void main() {
     // GameTime spans one day cycle in [0, 1); scale to roughly seconds.
+    // All constant speeds below are day-quantized (integer cycles or
+    // integer lattice periods per day) so the daily wrap does not pop.
     float time = GameTime * 1200.0;
-    // RAW sphere UV in [0,1]: wrap before any periodic sampling.
+    // texCoord0 is the raw sphere UV, already in [0,1]; fract() is only a
+    // defensive wrap. Seam-freedom in u comes from the wrapping-lattice /
+    // periodic-domain sampling below, NOT from this fract().
     vec2 baseUV = fract(texCoord0);
+    vec2 midPer = vec2(6.0000, 8.0000);
 
     // [layer:deep:parallax_fbm_x4]
-    // Interior volume: parallax stack of the deep field, taps sliding against
-    // the surface near the silhouette (rimDir from the camera-distance slope).
+    // Interior volume: correlated parallax taps of ONE deep field. Each
+    // tap shifts along the silhouette slope (rimDir is screen-space, so
+    // it is seam-safe) and drifts a little faster than the tap before it,
+    // with front-to-back weights -- the sub-layers slide over each other
+    // and read as genuine volume behind the membrane.
     vec2 rimDirRaw = vec2(dFdx(sphericalVertexDistance), dFdy(sphericalVertexDistance));
     vec2 rimDir = rimDirRaw / (length(rimDirRaw) + 0.0001);
-    float deep = 0.0;
-    float deepNorm = 0.0;
-    for (int i = 0; i < 4; i++) {
-        float fi = float(i);
-        vec2 duv = baseUV * 1.6101 * (1.0 + fi * 0.4369) + vec2(-0.0469, -0.0034) * time * (1.0 + fi * 0.5)
-            + rimDir * fi * 0.0710 + vec2(fi * 13.7, fi * 7.9);
-        float w = exp(-fi * 0.6140);
-        deep += w * deepField(duv, time);
-        deepNorm += w;
-    }
-    deep = pow(clamp(deep / deepNorm, 0.0, 1.0), 1.5871);
+    vec2 duvBase = vec2(baseUV.x * 2.0000, baseUV.y * 2.0000);
+    float deep = deepField(duvBase + vec2(-0.046667, -0.002500) * time, time);
+    deep += 0.5412 * deepField(duvBase + rimDir * 0.0710 + vec2(-0.073333, -0.005000) * time, time);
+    deep += 0.2929 * deepField(duvBase + rimDir * 0.1421 + vec2(-0.098333, -0.007500) * time, time);
+    deep += 0.1585 * deepField(duvBase + rimDir * 0.2131 + vec2(-0.125000, -0.010000) * time, time);
+    deep = pow(clamp(deep * 0.5019, 0.0, 1.0), 1.5871);
 
     // [layer:mid:lightning_none_pulse]
     // Signature structure of this effect, domain-warped and animated.
-    float breathe = 1.0 + 0.1170 * sin(time * 1.1486);
-    vec2 auv = (baseUV - 0.5) * 5.6498 * breathe + vec2(2.8249, 2.8249) + vec2(0.1549, 0.0009) * time;
+    float breathe = 1.0 + 0.1170 * sin(time * 1.146681);
+    // only the y axis breathes; the x scale stays fixed so the u wrap
+    // stays exact (the y period carries a margin for the stretch)
+    vec2 auv = vec2(baseUV.x * 6.0000 + time * 0.155000, (baseUV.y - 0.5) * 6.0000 * breathe + 3.0000 + time * 0.000000);
     vec2 wuv = auv;
-    float n = fbm2(wuv + vec2(0.0, time * 0.5074));
+    float n = fbm2(wuv + vec2(0.0, time * 0.506667), midPer);
     float bolt = pow(clamp(1.0 - abs(2.0 * n - 1.0) * 1.2479, 0.0, 1.0), 14.2413);
     float gate = step(0.5305, hash11(floor(time * 5.3265)));
-    float strobe = 0.35 + 0.65 * gate * (0.5 + 0.5 * sin(time * 40.0));
+    float strobe = 0.35 + 0.65 * gate * (0.5 + 0.5 * sin(time * 39.997710));
     float mid = bolt * strobe + 0.2637 * bolt;
 
     // [layer:rim:graze]
@@ -110,15 +134,21 @@ void main() {
     float rim = rimGraze() * 0.7290;
 
     // Flourish accent + micro grain keep large areas alive up close.
-    float flourish = 0.1729 * pow(clamp(fbm2(wuv * 0.7807 + vec2(-time * 0.11, time * 0.07)), 0.0, 1.0), 2.0);
-    float grain = 0.0612 * (hash21(floor(wuv * 28.2706) + vec2(floor(time * 6.0), 0.0)) - 0.5);
+    float flourish = 0.1729 * pow(clamp(fbm2(wuv + vec2(-time * 0.100000, time * 0.073333), midPer), 0.0, 1.0), 2.0);
+    float grain = 0.0612 * (cellHash(floor(wuv * 28.0000) + vec2(floor(time * 6.0), 0.0), 168.0000) - 0.5);
 
-    // Recolor-safe composite: vertexColor.rgb stays the dominant chroma and
-    // alpha = vertexColor.a * pattern (dissolve near whitelisted players works).
+    // Recolor-safe composite: vertexColor.rgb stays the dominant chroma,
+    // and the final alpha is vertexColor.a * clamp(a0 + a1 * pattern, 0, 1)
+    // -- the vertexColor.a dissolve near whitelisted players always wins.
     float pattern = clamp(0.4238 * deep + 0.7411 * mid + 0.6235 * rim + flourish + grain, 0.0, 1.5);
     vec3 accent = accentPalette(0.0677 + pattern * 0.4565);
     vec3 rgb = vertexColor.rgb * (0.4993 + 0.5536 * pattern);
     rgb = mix(rgb, rgb * (0.55 + 0.9 * accent), 0.4232);
+    // Thin-film RGB dispersion hugging the rim: bounded, and multiplied
+    // into the palette-driven rgb so the owner recolor override stays
+    // authoritative on every rim style.
+    vec3 rimDisp = 0.5 + 0.5 * cos(vec3(1.0, 0.8065, 0.6452) * (rim * 1.0195 + baseUV.y * 0.7600 + 0.4102) * 6.2831853);
+    rgb = mix(rgb, rgb * (0.72 + 0.56 * rimDisp), clamp(rim, 0.0, 1.0) * 0.1655);
     float alpha = vertexColor.a * clamp(0.2216 + 0.7172 * pattern, 0.0, 1.0);
     vec4 color = vec4(rgb, alpha);
     if (color.a < 0.01) {

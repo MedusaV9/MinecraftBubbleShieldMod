@@ -33,17 +33,19 @@ float luma(vec3 c) {
 }
 
 float hash21(vec2 p) {
-    p = fract(p * vec2(123.34, 456.21));
-    p += dot(p, p + 45.32);
-    return fract(p.x * p.y);
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
 }
 
 void main() {
     // Undisplaced scene sample: the gameplay-safety floor references this.
     vec3 base = texture(InSampler, texCoord).rgb;
     float baseLuma = luma(base);
+    // InSize is driver-fed; guard it so no divide below can hit zero.
+    vec2 safeInSize = max(InSize, vec2(1.0));
     vec2 centered = texCoord - vec2(0.5);
-    vec2 aspectCentered = centered * vec2(InSize.x / max(InSize.y, 1.0), 1.0);
+    vec2 aspectCentered = centered * vec2(safeInSize.x / safeInSize.y, 1.0);
     float centerDist = length(aspectCentered);
     // GameTime wraps once per day cycle (24000 ticks); scale to roughly seconds.
     float animRaw = GameTime * 1200.0 * ParamsA.x + ParamsB.x * 61.8;
@@ -57,7 +59,7 @@ void main() {
     vec3 outColor = mix(base, duotone, clamp(strength, 0.0, 1.0));
 
     // Overlay: sparse twinkling motes.
-    vec2 oCell = floor(texCoord * InSize / 13.5043);
+    vec2 oCell = floor(texCoord * safeInSize / 13.5043);
     float oTw = hash21(oCell + vec2(37.0, 91.0));
     float oTwinkle = smoothstep(0.8768, 1.0, sin(anim * 1.5914 + oTw * 6.2831) * 0.5 + 0.5) * step(0.9830, oTw);
     outColor += Secondary.rgb * oTwinkle * 0.3881;

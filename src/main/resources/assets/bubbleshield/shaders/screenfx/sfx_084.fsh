@@ -32,12 +32,21 @@ float luma(vec3 c) {
     return dot(c, vec3(0.3, 0.59, 0.11));
 }
 
+// 1 - smoothstep with ASCENDING edges. Replaces every reversed-edge
+// smoothstep(hi, lo, x) call: edge0 >= edge1 is undefined by the GLSL
+// spec; this form is numerically identical on conforming drivers.
+float invsmooth(float lo, float hi, float x) {
+    return 1.0 - smoothstep(lo, hi, x);
+}
+
 void main() {
     // Undisplaced scene sample: the gameplay-safety floor references this.
     vec3 base = texture(InSampler, texCoord).rgb;
     float baseLuma = luma(base);
+    // InSize is driver-fed; guard it so no divide below can hit zero.
+    vec2 safeInSize = max(InSize, vec2(1.0));
     vec2 centered = texCoord - vec2(0.5);
-    vec2 aspectCentered = centered * vec2(InSize.x / max(InSize.y, 1.0), 1.0);
+    vec2 aspectCentered = centered * vec2(safeInSize.x / safeInSize.y, 1.0);
     float centerDist = length(aspectCentered);
     // GameTime wraps once per day cycle (24000 ticks); scale to roughly seconds.
     float animRaw = GameTime * 1200.0 * ParamsA.x + ParamsB.x * 61.8;
@@ -48,7 +57,7 @@ void main() {
     // A bright readout band rolls down the raster.
     float scan = 0.5 + 0.5 * sin(texCoord.y * ParamsA.z * 6.2831 - anim * 2.3295);
     float bandPos = fract(anim * 0.0630);
-    float roll = smoothstep(0.1130, 0.0, abs(texCoord.y - bandPos));
+    float roll = invsmooth(0.0, 0.1130, abs(texCoord.y - bandPos));
     float darken = 1.0 - ParamsA.y * 0.3406 * scan * animAmp;
     vec3 lined = base * darken + Primary.rgb * roll * ParamsA.y * 0.25;
     vec3 outColor = mix(lined, lined * Primary.rgb, ParamsB.z);

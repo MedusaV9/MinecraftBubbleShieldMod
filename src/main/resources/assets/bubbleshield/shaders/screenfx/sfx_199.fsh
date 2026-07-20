@@ -33,12 +33,14 @@ float luma(vec3 c) {
 }
 
 float hash21(vec2 p) {
-    p = fract(p * vec2(123.34, 456.21));
-    p += dot(p, p + 45.32);
-    return fract(p.x * p.y);
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
 }
 
 // Gameplay-safety: any scene-sample displacement is bounded per axis.
+// Call sites pass the TOTAL displacement (all offsets summed) so the bound
+// cannot be defeated by stacking two half-size offsets.
 vec2 safeOffset(vec2 off) {
     return clamp(off, vec2(-0.0200), vec2(0.0200));
 }
@@ -51,8 +53,10 @@ void main() {
     // Undisplaced scene sample: the gameplay-safety floor references this.
     vec3 base = texture(InSampler, texCoord).rgb;
     float baseLuma = luma(base);
+    // InSize is driver-fed; guard it so no divide below can hit zero.
+    vec2 safeInSize = max(InSize, vec2(1.0));
     vec2 centered = texCoord - vec2(0.5);
-    vec2 aspectCentered = centered * vec2(InSize.x / max(InSize.y, 1.0), 1.0);
+    vec2 aspectCentered = centered * vec2(safeInSize.x / safeInSize.y, 1.0);
     float centerDist = length(aspectCentered);
     // GameTime wraps once per day cycle (24000 ticks); scale to roughly seconds.
     float anim = GameTime * 1200.0 * ParamsA.x + ParamsB.x * 61.8;
@@ -65,14 +69,22 @@ void main() {
         cos(texCoord.x * 46.1359 + anim * 2.4) * 0.4
     ) * 0.0017 * ParamsA.y * animAmp;
     vec3 scene = sampleAt(texCoord + safeOffset(off));
+    // The ember cell's y id scrolls with time; wrap it at 256 so the hash
+    // input stays small enough for fp32 over the whole GameTime day.
     vec2 emberCell = floor(vec2(texCoord.x * 44.3439, texCoord.y * 30.5256 + anim * 2.7006));
-    float ember = step(0.9870, hash21(emberCell));
+    float ember = step(0.9870, hash21(vec2(emberCell.x, mod(emberCell.y, 256.0))));
     scene += Primary.rgb * ember * 0.35 * animAmp;
-    vec3 warm = scene * vec3(1.0724, 1.0, 0.8924);
+    // Palette-aware haze cast: lean toward the effect's own Primary hue
+    // (normalized to its max channel so brightness holds) instead of a
+    // hard-coded amber -- recolor-safe for non-fire palettes.
+    vec3 hazeTint = mix(vec3(1.0), Primary.rgb / max(max(Primary.r, max(Primary.g, Primary.b)), 0.001), 0.1948);
+    vec3 warm = scene * hazeTint;
     vec3 outColor = mix(scene, warm * mix(vec3(1.0), Primary.rgb, ParamsB.z), 0.5248);
 
-    // Overlay: living film grain.
-    outColor += (hash21(floor(texCoord * InSize) + vec2(floor(anim * 6.4476), 0.0)) - 0.5) * 0.0379;
+    // Overlay: living film grain (frame counter wrapped at 256 so the
+    // hash input stays fp32-friendly across the whole GameTime day).
+    float grainFrame = mod(floor(anim * 6.4476), 256.0);
+    outColor += (hash21(floor(texCoord * safeInSize) + vec2(grainFrame, 0.0)) - 0.5) * 0.0379;
 
     // Gameplay-safety floor: never crush the world below ParamsB.w (~0.35x),
     // and always output an opaque frame.

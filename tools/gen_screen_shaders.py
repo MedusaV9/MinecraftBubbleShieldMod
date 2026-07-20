@@ -213,15 +213,25 @@ HELPERS = {
     "luma": """float luma(vec3 c) {
     return dot(c, vec3(0.3, 0.59, 0.11));
 }""",
-    "hash11": """float hash11(float p) {
-    p = fract(p * 443.8975);
-    p += p * (p + 19.19);
-    return fract(p * p);
+    "invsmooth": """// 1 - smoothstep with ASCENDING edges. Replaces every reversed-edge
+// smoothstep(hi, lo, x) call: edge0 >= edge1 is undefined by the GLSL
+// spec; this form is numerically identical on conforming drivers.
+float invsmooth(float lo, float hi, float x) {
+    return 1.0 - smoothstep(lo, hi, x);
+}""",
+    "hash11": """// small-multiplier hash (Hoskins 0.1031 style): stays alive in fp32 for
+// inputs up to ~1e5, unlike the fract(p * 443.8975) form which collapses
+// to 0 once time-derived inputs grow past a few minutes of GameTime.
+float hash11(float p) {
+    p = fract(p * 0.1031);
+    p *= p + 33.33;
+    p *= p + p;
+    return fract(p);
 }""",
     "hash21": """float hash21(vec2 p) {
-    p = fract(p * vec2(123.34, 456.21));
-    p += dot(p, p + 45.32);
-    return fract(p.x * p.y);
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
 }""",
     "vnoise": """float vnoise(vec2 p) {
     vec2 i = floor(p);
@@ -233,7 +243,17 @@ HELPERS = {
     float d = hash21(i + vec2(1.0, 1.0));
     return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }""",
+    "safeAtan": """// two-argument atan is undefined at the exact origin; guard it
+float safeAtan(float y, float x) {
+    return (abs(x) < 1e-6 && abs(y) < 1e-6) ? 0.0 : atan(y, x);
+}""",
+    "safeNormalize": """// normalize() is undefined for the zero vector; this stays finite
+vec2 safeNormalize(vec2 v) {
+    return v * inversesqrt(max(dot(v, v), 1e-8));
+}""",
     "safeOffset": f"""// Gameplay-safety: any scene-sample displacement is bounded per axis.
+// Call sites pass the TOTAL displacement (all offsets summed) so the bound
+// cannot be defeated by stacking two half-size offsets.
 vec2 safeOffset(vec2 off) {{
     return clamp(off, vec2(-{F(MAX_UV_OFFSET)}), vec2({F(MAX_UV_OFFSET)}));
 }}""",
@@ -257,7 +277,8 @@ vec3 hueRotate(vec3 c, float a) {
 }""",
 }
 
-HELPER_ORDER = ["luma", "hash11", "hash21", "vnoise", "safeOffset", "sampleAt", "brightTap", "lumaAt", "hueRotate"]
+HELPER_ORDER = ["luma", "invsmooth", "safeAtan", "safeNormalize", "hash11", "hash21", "vnoise",
+                "safeOffset", "sampleAt", "brightTap", "lumaAt", "hueRotate"]
 
 VNOISE_DEPS = {"vnoise": ["hash21"]}
 
@@ -342,11 +363,11 @@ def fam_wobble(v, u):
     # swirl
     return [
         "// Tangential swirl around the screen center, calm in the middle.",
-        "float angle = atan(aspectCentered.y, aspectCentered.x);",
+        "float angle = safeAtan(aspectCentered.y, aspectCentered.x);",
         f"float swirl = sin(angle * {F(float(int(u(0, 2.0, 5.99))))} + anim - centerDist * {F(u(1, 4.0, 9.0))});",
         "vec2 tangent = centerDist > 0.0001 ? vec2(-aspectCentered.y, aspectCentered.x) / centerDist : vec2(0.0);",
         f"vec2 off = tangent * swirl * ParamsA.y * animAmp * smoothstep(0.05, {F(u(2, 0.3, 0.5))}, centerDist);",
-    ] + tail, {"safeOffset", "sampleAt"}
+    ] + tail, {"safeAtan", "safeOffset", "sampleAt"}
 
 
 def fam_vignette(v, u):
@@ -419,22 +440,23 @@ def fam_pixelate(v, u):
     ]
     if v == "square":
         return [
-            "// Mosaic + posterize, following vanilla's bits.fsh.",
-            "vec2 mosaicInSize = InSize / max(ParamsA.y, 1.0);",
+            "// Mosaic + posterize, following vanilla's bits.fsh. The mosaic scale is",
+            "// clamped >= 1 before every division so the cell math cannot blow up.",
+            "vec2 mosaicInSize = max(safeInSize / max(ParamsA.y, 1.0), vec2(1.0));",
             "vec2 fractPix = fract(texCoord * mosaicInSize) / mosaicInSize;",
             "vec3 cell = sampleAt(texCoord + safeOffset(-fractPix));",
         ] + tail, {"safeOffset", "sampleAt"}
     if v == "wide":
         return [
             "// Rectangular scan-cells: wider than tall, like a broken broadcast.",
-            f"vec2 mosaicInSize = InSize / max(ParamsA.y * vec2({F(u(0, 1.8, 3.0))}, 1.0), vec2(1.0));",
+            f"vec2 mosaicInSize = max(safeInSize / max(ParamsA.y * vec2({F(u(0, 1.8, 3.0))}, 1.0), vec2(1.0)), vec2(1.0));",
             "vec2 fractPix = fract(texCoord * mosaicInSize) / mosaicInSize;",
             "vec3 cell = sampleAt(texCoord + safeOffset(-fractPix));",
         ] + tail, {"safeOffset", "sampleAt"}
     if v == "diamond":
         return [
             "// 45-degree diamond cells via a skewed grid.",
-            f"vec2 gridN = InSize / max(ParamsA.y * {F(u(0, 1.2, 1.8))}, 1.0);",
+            f"vec2 gridN = max(safeInSize / max(ParamsA.y * {F(u(0, 1.2, 1.8))}, 1.0), vec2(1.0));",
             "vec2 sk = vec2(texCoord.x + texCoord.y, texCoord.x - texCoord.y) * 0.5;",
             "vec2 cellCenter = (floor(sk * gridN) + 0.5) / gridN;",
             "vec2 uvCell = vec2(cellCenter.x + cellCenter.y, cellCenter.x - cellCenter.y);",
@@ -444,7 +466,7 @@ def fam_pixelate(v, u):
     return [
         "// The mosaic cell size breathes on GameTime.",
         f"float mosaic = max(ParamsA.y * (1.0 + {F(u(0, 0.25, 0.45))} * sin(anim * {F(u(1, 0.5, 1.1))})), 1.0);",
-        "vec2 mosaicInSize = InSize / mosaic;",
+        "vec2 mosaicInSize = max(safeInSize / mosaic, vec2(1.0));",
         "vec2 fractPix = fract(texCoord * mosaicInSize) / mosaicInSize;",
         "vec3 cell = sampleAt(texCoord + safeOffset(-fractPix));",
     ] + tail, {"safeOffset", "sampleAt"}
@@ -488,45 +510,45 @@ def fam_bloomglow(v, u):
     if v == "cross":
         return [
             "// 5-tap cross blur of the bright pass, weighted toward the center.",
-            f"vec2 texel = {r} / InSize;",
+            f"vec2 texel = {r} / safeInSize;",
             "vec3 glow = brightTap(texCoord, ParamsA.w) * 0.4",
-            "    + brightTap(texCoord + vec2(texel.x, 0.0), ParamsA.w) * 0.15",
-            "    + brightTap(texCoord - vec2(texel.x, 0.0), ParamsA.w) * 0.15",
-            "    + brightTap(texCoord + vec2(0.0, texel.y), ParamsA.w) * 0.15",
-            "    + brightTap(texCoord - vec2(0.0, texel.y), ParamsA.w) * 0.15;",
-        ] + tail, {"luma", "brightTap"}
+            "    + brightTap(texCoord + safeOffset(vec2(texel.x, 0.0)), ParamsA.w) * 0.15",
+            "    + brightTap(texCoord + safeOffset(vec2(-texel.x, 0.0)), ParamsA.w) * 0.15",
+            "    + brightTap(texCoord + safeOffset(vec2(0.0, texel.y)), ParamsA.w) * 0.15",
+            "    + brightTap(texCoord + safeOffset(vec2(0.0, -texel.y)), ParamsA.w) * 0.15;",
+        ] + tail, {"luma", "brightTap", "safeOffset"}
     if v == "diag":
         return [
             "// X-shaped bright-pass blur: diagonal streaks around hot pixels.",
-            f"vec2 texel = {r} / InSize;",
+            f"vec2 texel = {r} / safeInSize;",
             "vec3 glow = brightTap(texCoord, ParamsA.w) * 0.36",
-            "    + brightTap(texCoord + texel, ParamsA.w) * 0.16",
-            "    + brightTap(texCoord - texel, ParamsA.w) * 0.16",
-            "    + brightTap(texCoord + vec2(texel.x, -texel.y), ParamsA.w) * 0.16",
-            "    + brightTap(texCoord + vec2(-texel.x, texel.y), ParamsA.w) * 0.16;",
-        ] + tail, {"luma", "brightTap"}
+            "    + brightTap(texCoord + safeOffset(texel), ParamsA.w) * 0.16",
+            "    + brightTap(texCoord + safeOffset(-texel), ParamsA.w) * 0.16",
+            "    + brightTap(texCoord + safeOffset(vec2(texel.x, -texel.y)), ParamsA.w) * 0.16",
+            "    + brightTap(texCoord + safeOffset(vec2(-texel.x, texel.y)), ParamsA.w) * 0.16;",
+        ] + tail, {"luma", "brightTap", "safeOffset"}
     if v == "ring":
         return [
             "// 8-tap ring blur: an even halo around anything bright.",
-            f"vec2 texel = {r} / InSize;",
+            f"vec2 texel = {r} / safeInSize;",
             "vec3 glow = brightTap(texCoord, ParamsA.w) * 0.28;",
             "for (int i = 0; i < 8; i++) {",
             "    float a = float(i) * 0.7853982;",
-            "    glow += brightTap(texCoord + vec2(cos(a), sin(a)) * texel, ParamsA.w) * 0.09;",
+            "    glow += brightTap(texCoord + safeOffset(vec2(cos(a), sin(a)) * texel), ParamsA.w) * 0.09;",
             "}",
-        ] + tail, {"luma", "brightTap"}
+        ] + tail, {"luma", "brightTap", "safeOffset"}
     # starburst
     return [
         "// 6-tap three-axis starburst around bright sources.",
-        f"vec2 texel = {r} / InSize;",
+        f"vec2 texel = {r} / safeInSize;",
         "vec3 glow = brightTap(texCoord, ParamsA.w) * 0.34;",
         "for (int i = 0; i < 3; i++) {",
         f"    float a = float(i) * 1.0471976 + {F(u(1, 0.0, 0.6))};",
         "    vec2 arm = vec2(cos(a), sin(a)) * texel;",
-        "    glow += brightTap(texCoord + arm, ParamsA.w) * 0.11;",
-        "    glow += brightTap(texCoord - arm, ParamsA.w) * 0.11;",
+        "    glow += brightTap(texCoord + safeOffset(arm), ParamsA.w) * 0.11;",
+        "    glow += brightTap(texCoord + safeOffset(-arm), ParamsA.w) * 0.11;",
         "}",
-    ] + tail, {"luma", "brightTap"}
+    ] + tail, {"luma", "brightTap", "safeOffset"}
 
 
 def fam_ripple(v, u):
@@ -538,11 +560,11 @@ def fam_ripple(v, u):
         return [
             "// Radial ripples from the screen center displace the sample outward.",
             "float ring = sin(centerDist * ParamsA.z - anim * 3.0);",
-            f"float fade = smoothstep(0.05, 0.25, centerDist) * smoothstep({F(u(0, 0.85, 1.0))}, {F(u(1, 0.45, 0.6))}, centerDist);",
+            f"float fade = smoothstep(0.05, 0.25, centerDist) * invsmooth({F(u(1, 0.45, 0.6))}, {F(u(0, 0.85, 1.0))}, centerDist);",
             "vec2 dir = centerDist > 0.0001 ? aspectCentered / centerDist : vec2(0.0);",
             f"vec2 off = dir * ring * fade * {F(u(2, 0.006, 0.01))} * ParamsA.y * animAmp;",
             "vec3 scene = sampleAt(texCoord + safeOffset(off));",
-        ] + tint, {"safeOffset", "sampleAt"}
+        ] + tint, {"invsmooth", "safeOffset", "sampleAt"}
     if v == "twin":
         c1x, c1y = u(0, 0.2, 0.4), u(1, 0.3, 0.5)
         c2x, c2y = u(2, 0.6, 0.8), u(3, 0.5, 0.7)
@@ -551,38 +573,41 @@ def fam_ripple(v, u):
             f"vec2 d1 = texCoord - vec2({F(c1x)}, {F(c1y)});",
             f"vec2 d2 = texCoord - vec2({F(c2x)}, {F(c2y)});",
             "float ring = 0.5 * sin(length(d1) * ParamsA.z - anim * 2.6) + 0.5 * sin(length(d2) * ParamsA.z - anim * 3.4);",
-            "float fade = smoothstep(0.95, 0.4, centerDist);",
-            f"vec2 off = (normalize(d1 + vec2(0.0001)) + normalize(d2 + vec2(0.0001))) * ring * fade * {F(u(4, 0.004, 0.007))} * ParamsA.y * animAmp;",
+            "float fade = invsmooth(0.4, 0.95, centerDist);",
+            f"vec2 off = (safeNormalize(d1) + safeNormalize(d2)) * ring * fade * {F(u(4, 0.004, 0.007))} * ParamsA.y * animAmp;",
             "vec3 scene = sampleAt(texCoord + safeOffset(off));",
-        ] + tint, {"safeOffset", "sampleAt"}
+        ] + tint, {"invsmooth", "safeNormalize", "safeOffset", "sampleAt"}
     if v == "linear":
         ang = u(0, 0.2, 1.4)
         return [
             "// Planar wavefronts sweep across the screen in one direction.",
             f"vec2 dir = vec2({F(math.cos(ang))}, {F(math.sin(ang))});",
             f"float ring = sin(dot(texCoord, dir) * ParamsA.z - anim * {F(u(1, 2.2, 3.6))});",
-            "float fade = smoothstep(1.0, 0.35, centerDist);",
+            "float fade = invsmooth(0.35, 1.0, centerDist);",
             f"vec2 off = dir * ring * fade * {F(u(2, 0.005, 0.009))} * ParamsA.y * animAmp;",
             "vec3 scene = sampleAt(texCoord + safeOffset(off));",
-        ] + tint, {"safeOffset", "sampleAt"}
+        ] + tint, {"invsmooth", "safeOffset", "sampleAt"}
     # pond
     return [
         "// Noise-phased pond rings: raindrop-like irregular ripples.",
         f"float phase = vnoise(texCoord * {F(u(0, 3.0, 7.0))}) * {F(u(1, 2.0, 4.0))};",
         "float ring = sin(centerDist * ParamsA.z - anim * 3.0 + phase);",
-        "float fade = smoothstep(0.03, 0.2, centerDist) * smoothstep(0.95, 0.5, centerDist);",
+        "float fade = smoothstep(0.03, 0.2, centerDist) * invsmooth(0.5, 0.95, centerDist);",
         "vec2 dir = centerDist > 0.0001 ? aspectCentered / centerDist : vec2(0.0);",
         f"vec2 off = dir * ring * fade * {F(u(2, 0.005, 0.009))} * ParamsA.y * animAmp;",
         "vec3 scene = sampleAt(texCoord + safeOffset(off));",
-    ] + tint, {"safeOffset", "sampleAt", "vnoise"}
+    ] + tint, {"invsmooth", "safeOffset", "sampleAt", "vnoise"}
 
 
 def fam_scanlines(v, u):
     if v == "horizontal":
         return [
             "// CRT rows: per-row sync jitter plus rolling dark scanlines.",
+            "// The frame counter wraps at 1024 so the hash input stays small enough",
+            "// for fp32 (an unbounded counter would freeze the jitter within minutes).",
             "float row = floor(texCoord.y * ParamsA.z);",
-            f"float jitter = (hash11(row + floor(anim * 8.0) * 91.7) - 0.5) * {F(u(0, 0.002, 0.0035))} * ParamsA.y;",
+            "float frame = mod(floor(anim * 8.0), 1024.0);",
+            f"float jitter = (hash11(row + frame * 91.7) - 0.5) * {F(u(0, 0.002, 0.0035))} * ParamsA.y;",
             "vec3 scene = sampleAt(texCoord + safeOffset(vec2(jitter, 0.0)));",
             f"float scan = 0.5 + 0.5 * sin((texCoord.y * ParamsA.z - anim * {F(u(1, 0.4, 0.7))}) * 6.2831);",
             f"float darken = 1.0 - ParamsA.y * {F(u(2, 0.3, 0.4))} * scan * animAmp;",
@@ -591,8 +616,10 @@ def fam_scanlines(v, u):
     if v == "vertical":
         return [
             "// Vertical raster columns with per-column shimmer.",
+            "// Frame counter wrapped at 1024: keeps the hash input fp32-friendly.",
             "float col = floor(texCoord.x * ParamsA.z);",
-            f"float jitter = (hash11(col + floor(anim * 6.0) * 47.3) - 0.5) * {F(u(0, 0.002, 0.0035))} * ParamsA.y;",
+            "float frame = mod(floor(anim * 6.0), 1024.0);",
+            f"float jitter = (hash11(col + frame * 47.3) - 0.5) * {F(u(0, 0.002, 0.0035))} * ParamsA.y;",
             "vec3 scene = sampleAt(texCoord + safeOffset(vec2(0.0, jitter)));",
             f"float scan = 0.5 + 0.5 * sin((texCoord.x * ParamsA.z + anim * {F(u(1, 0.3, 0.6))}) * 6.2831);",
             f"float darken = 1.0 - ParamsA.y * {F(u(2, 0.28, 0.38))} * scan * animAmp;",
@@ -603,11 +630,11 @@ def fam_scanlines(v, u):
             "// A bright readout band rolls down the raster.",
             f"float scan = 0.5 + 0.5 * sin(texCoord.y * ParamsA.z * 6.2831 - anim * {F(u(0, 2.0, 3.5))});",
             f"float bandPos = fract(anim * {F(u(1, 0.05, 0.11))});",
-            f"float roll = smoothstep({F(u(2, 0.06, 0.12))}, 0.0, abs(texCoord.y - bandPos));",
+            f"float roll = invsmooth(0.0, {F(u(2, 0.06, 0.12))}, abs(texCoord.y - bandPos));",
             f"float darken = 1.0 - ParamsA.y * {F(u(3, 0.25, 0.35))} * scan * animAmp;",
             "vec3 lined = base * darken + Primary.rgb * roll * ParamsA.y * 0.25;",
             "vec3 outColor = mix(lined, lined * Primary.rgb, ParamsB.z);",
-        ], set()
+        ], {"invsmooth"}
     # grid
     return [
         "// Faint raster grid: both axes carry drifting line sets.",
@@ -621,15 +648,15 @@ def fam_scanlines(v, u):
 def fam_edgeglow(v, u):
     radius = "2.0" if v == "thick" else "1.0"
     sobel = [
-        f"vec2 texel = {radius} / InSize;",
-        "float tl = lumaAt(texCoord + texel * vec2(-1.0, -1.0));",
-        "float tc = lumaAt(texCoord + texel * vec2(0.0, -1.0));",
-        "float tr = lumaAt(texCoord + texel * vec2(1.0, -1.0));",
-        "float ml = lumaAt(texCoord + texel * vec2(-1.0, 0.0));",
-        "float mr = lumaAt(texCoord + texel * vec2(1.0, 0.0));",
-        "float bl = lumaAt(texCoord + texel * vec2(-1.0, 1.0));",
-        "float bc = lumaAt(texCoord + texel * vec2(0.0, 1.0));",
-        "float br = lumaAt(texCoord + texel * vec2(1.0, 1.0));",
+        f"vec2 texel = {radius} / safeInSize;",
+        "float tl = lumaAt(texCoord + safeOffset(texel * vec2(-1.0, -1.0)));",
+        "float tc = lumaAt(texCoord + safeOffset(texel * vec2(0.0, -1.0)));",
+        "float tr = lumaAt(texCoord + safeOffset(texel * vec2(1.0, -1.0)));",
+        "float ml = lumaAt(texCoord + safeOffset(texel * vec2(-1.0, 0.0)));",
+        "float mr = lumaAt(texCoord + safeOffset(texel * vec2(1.0, 0.0)));",
+        "float bl = lumaAt(texCoord + safeOffset(texel * vec2(-1.0, 1.0)));",
+        "float bc = lumaAt(texCoord + safeOffset(texel * vec2(0.0, 1.0)));",
+        "float br = lumaAt(texCoord + safeOffset(texel * vec2(1.0, 1.0)));",
         "float gx = (tr + 2.0 * mr + br) - (tl + 2.0 * ml + bl);",
         "float gy = (bl + 2.0 * bc + br) - (tl + 2.0 * tc + tr);",
         "float edge = clamp(length(vec2(gx, gy)), 0.0, 1.0);",
@@ -637,21 +664,21 @@ def fam_edgeglow(v, u):
     if v == "sobel":
         return ["// 3x3 Sobel over scene luma; edges glow in the primary color."] + sobel + [
             "vec3 outColor = base + Primary.rgb * edge * strength;",
-        ], {"lumaAt"}
+        ], {"lumaAt", "safeOffset"}
     if v == "pulse":
         return ["// Sobel edges whose glow breathes on GameTime."] + sobel + [
             f"float breath = {F(u(0, 0.55, 0.7))} + {F(u(1, 0.3, 0.45))} * sin(anim * {F(u(2, 1.2, 2.2))} + ParamsB.x * 6.2831);",
             "vec3 outColor = base + Primary.rgb * edge * strength * breath;",
-        ], {"lumaAt"}
+        ], {"lumaAt", "safeOffset"}
     if v == "duo":
         return ["// Direction-split edges: horizontal gradients glow Primary, vertical Secondary."] + sobel + [
             "vec3 glowColor = mix(Secondary.rgb, Primary.rgb, clamp(0.5 + 0.5 * (abs(gx) - abs(gy)) * 2.0, 0.0, 1.0));",
             "vec3 outColor = base + glowColor * edge * strength;",
-        ], {"lumaAt"}
+        ], {"lumaAt", "safeOffset"}
     # thick
     return ["// Wide-radius Sobel: thick painterly outlines."] + sobel + [
         f"vec3 outColor = base + Primary.rgb * pow(edge, {F(u(0, 0.6, 0.8))}) * strength * {F(u(1, 0.75, 0.9))};",
-    ], {"lumaAt"}
+    ], {"lumaAt", "safeOffset"}
 
 
 def fam_frostlens(v, u):
@@ -696,19 +723,23 @@ def fam_frostlens(v, u):
 
 def fam_heathaze(v, u):
     grade = [
-        f"vec3 warm = scene * vec3({F(u(7, 1.05, 1.1))}, 1.0, {F(u(8, 0.88, 0.95))});",
+        "// Palette-aware haze cast: lean toward the effect's own Primary hue",
+        "// (normalized to its max channel so brightness holds) instead of a",
+        "// hard-coded amber -- recolor-safe for non-fire palettes.",
+        f"vec3 hazeTint = mix(vec3(1.0), Primary.rgb / max(max(Primary.r, max(Primary.g, Primary.b)), 0.001), {F(u(7, 0.15, 0.25))});",
+        "vec3 warm = scene * hazeTint;",
         f"vec3 outColor = mix(scene, warm * mix(vec3(1.0), Primary.rgb, ParamsB.z), {F(u(9, 0.5, 0.7))});",
     ]
     if v == "rising":
         return [
             "// Rising shimmer, strongest in the lower half where the hot air is.",
-            "float rising = smoothstep(0.9, 0.2, texCoord.y);",
+            "float rising = invsmooth(0.2, 0.9, texCoord.y);",
             "vec2 off = vec2(",
             f"    sin(texCoord.y * {F(u(0, 70.0, 110.0))} + anim * 4.0) + sin(texCoord.y * {F(u(1, 35.0, 55.0))} - anim * 2.6),",
             f"    cos(texCoord.x * {F(u(2, 50.0, 75.0))} + anim * 3.1) * 0.4",
             f") * {F(u(3, 0.0013, 0.002))} * ParamsA.y * animAmp * (0.4 + 0.6 * rising);",
             "vec3 scene = sampleAt(texCoord + safeOffset(off));",
-        ] + grade, {"safeOffset", "sampleAt"}
+        ] + grade, {"invsmooth", "safeOffset", "sampleAt"}
     if v == "full":
         return [
             "// Whole-frame heat shimmer, as if standing inside a furnace bloom.",
@@ -736,8 +767,10 @@ def fam_heathaze(v, u):
         f"    cos(texCoord.x * {F(u(1, 40.0, 65.0))} + anim * 2.4) * 0.4",
         f") * {F(u(2, 0.001, 0.0018))} * ParamsA.y * animAmp;",
         "vec3 scene = sampleAt(texCoord + safeOffset(off));",
+        "// The ember cell's y id scrolls with time; wrap it at 256 so the hash",
+        "// input stays small enough for fp32 over the whole GameTime day.",
         f"vec2 emberCell = floor(vec2(texCoord.x * {F(u(3, 40.0, 70.0))}, texCoord.y * {F(u(4, 25.0, 45.0))} + anim * {F(u(5, 1.5, 3.0))}));",
-        f"float ember = step({F(u(6, 0.985, 0.995))}, hash21(emberCell));",
+        f"float ember = step({F(u(6, 0.985, 0.995))}, hash21(vec2(emberCell.x, mod(emberCell.y, 256.0))));",
         "scene += Primary.rgb * ember * 0.35 * animAmp;",
     ] + grade, {"hash21", "safeOffset", "sampleAt"}
 
@@ -753,8 +786,10 @@ def fam_posterize(v, u):
     if v == "dither":
         return [
             "// Hash-dithered posterize: banding broken up by per-pixel noise.",
+            "// The dither frame wraps at 256 so the hash input stays fp32-friendly.",
             "float levels = max(2.0, ParamsA.y);",
-            f"float dith = (hash21(floor(texCoord * InSize) + vec2(floor(anim * {F(u(0, 3.0, 6.0))}), 0.0)) - 0.5) / levels;",
+            f"float dframe = mod(floor(anim * {F(u(0, 3.0, 6.0))}), 256.0);",
+            "float dith = (hash21(floor(texCoord * safeInSize) + vec2(dframe, 0.0)) - 0.5) / levels;",
             "vec3 quantized = floor((base + dith) * levels + 0.5) / levels;",
             "vec3 outColor = mix(quantized, quantized * Primary.rgb, ParamsB.z);",
         ], {"hash21"}
@@ -838,20 +873,25 @@ def fam_radialblur(v, u):
 
 
 def fam_glitch(v, u):
+    # The shear and the RGB split are summed FIRST and clamped once, so the
+    # total scene displacement can never exceed the safeOffset bound (the old
+    # baseCoord + second safeOffset stacked two clamps to up to 2x the limit).
     split_tail = [
-        "float red = sampleAt(baseCoord + safeOffset(vec2(split, 0.0))).r;",
-        "float green = sampleAt(baseCoord).g;",
-        "float blue = sampleAt(baseCoord - safeOffset(vec2(split, 0.0))).b;",
+        "float red = sampleAt(texCoord + safeOffset(baseOff + vec2(split, 0.0))).r;",
+        "float green = sampleAt(texCoord + safeOffset(baseOff)).g;",
+        "float blue = sampleAt(texCoord + safeOffset(baseOff - vec2(split, 0.0))).b;",
         "vec3 torn = vec3(red, green, blue);",
     ]
     if v == "tear":
         return [
             "// Scanband tears: a few rows shear sideways each glitch frame.",
-            f"float frame = floor(anim * {F(u(0, 5.0, 8.0))});",
+            "// The frame counter wraps at 1024 so the hash input stays small enough",
+            "// for fp32 (an unbounded counter would freeze the glitch within minutes).",
+            f"float frame = mod(floor(anim * {F(u(0, 5.0, 8.0))}), 1024.0);",
             f"float band = floor(texCoord.y * {F(u(1, 18.0, 30.0))});",
             "float tearRoll = hash11(band * 7.31 + frame * 13.7);",
             f"float tear = (tearRoll > 0.85 ? (tearRoll - 0.85) / 0.15 - 0.5 : 0.0) * {F(u(2, 0.05, 0.08))} * ParamsA.y * animAmp;",
-            "vec2 baseCoord = texCoord + safeOffset(vec2(tear, 0.0));",
+            "vec2 baseOff = vec2(tear, 0.0);",
             "float split = (0.004 + abs(tear) * 0.5) * ParamsA.y;",
         ] + split_tail + [
             "float flash = abs(tear) > 0.0001 ? ParamsB.z : 0.0;",
@@ -860,13 +900,14 @@ def fam_glitch(v, u):
     if v == "blocks":
         return [
             "// Coarse block dropouts: cells occasionally displace as a chunk.",
-            f"float frame = floor(anim * {F(u(0, 4.0, 7.0))});",
+            "// Frame counter wrapped at 1024: keeps the hash input fp32-friendly.",
+            f"float frame = mod(floor(anim * {F(u(0, 4.0, 7.0))}), 1024.0);",
             f"vec2 cell = floor(texCoord * vec2({F(u(1, 6.0, 10.0))}, {F(u(2, 4.0, 8.0))}));",
             "float cellRoll = hash11(cell.x * 3.7 + cell.y * 11.9 + frame * 5.3);",
             f"vec2 jitter = cellRoll > {F(u(3, 0.88, 0.93))}",
             f"    ? (vec2(hash11(cellRoll * 91.7), hash11(cellRoll * 47.3)) - 0.5) * {F(u(4, 0.025, 0.04))} * ParamsA.y",
             "    : vec2(0.0);",
-            "vec2 baseCoord = texCoord + safeOffset(jitter);",
+            "vec2 baseOff = jitter;",
             "float split = 0.003 * ParamsA.y;",
         ] + split_tail + [
             "float flash = length(jitter) > 0.0001 ? ParamsB.z * 1.2 : 0.0;",
@@ -875,10 +916,11 @@ def fam_glitch(v, u):
     if v == "rgbdrift":
         return [
             "// The color channels wander apart and snap back on glitch frames.",
-            f"float frame = floor(anim * {F(u(0, 3.0, 5.0))});",
+            "// Frame counter wrapped at 1024: keeps the hash input fp32-friendly.",
+            f"float frame = mod(floor(anim * {F(u(0, 3.0, 5.0))}), 1024.0);",
             "float wander = hash11(frame * 17.3) - 0.5;",
             f"float split = (0.004 + abs(wander) * {F(u(1, 0.01, 0.018))}) * ParamsA.y * animAmp;",
-            "vec2 baseCoord = texCoord;",
+            "vec2 baseOff = vec2(0.0);",
         ] + split_tail + [
             f"float microTear = step({F(u(2, 0.96, 0.985))}, hash11(floor(texCoord.y * 90.0) + frame)) * ParamsA.y;",
             "vec3 outColor = mix(torn, torn * Primary.rgb, microTear * ParamsB.z * 2.0);",
@@ -886,12 +928,13 @@ def fam_glitch(v, u):
     # rowcol
     return [
         "// Row tears and column jitters interleave on alternating frames.",
-        f"float frame = floor(anim * {F(u(0, 5.0, 8.0))});",
+        "// Frame counter wrapped at 1024: keeps the hash input fp32-friendly.",
+        f"float frame = mod(floor(anim * {F(u(0, 5.0, 8.0))}), 1024.0);",
         f"float rowRoll = hash11(floor(texCoord.y * {F(u(1, 20.0, 32.0))}) * 7.31 + frame * 13.7);",
         f"float colRoll = hash11(floor(texCoord.x * {F(u(2, 14.0, 24.0))}) * 5.13 + frame * 7.9);",
         f"float tearX = (rowRoll > 0.88 ? rowRoll - 0.88 : 0.0) * {F(u(3, 0.3, 0.5))} * ParamsA.y * animAmp;",
         f"float tearY = (colRoll > 0.9 ? colRoll - 0.9 : 0.0) * {F(u(4, 0.2, 0.4))} * ParamsA.y * animAmp;",
-        "vec2 baseCoord = texCoord + safeOffset(vec2(tearX, tearY));",
+        "vec2 baseOff = vec2(tearX, tearY);",
         "float split = (0.003 + (tearX + tearY) * 0.3) * ParamsA.y;",
     ] + split_tail + [
         "float flash = (tearX + tearY) > 0.0001 ? ParamsB.z : 0.0;",
@@ -941,24 +984,24 @@ def fam_kaleido(v, u):
             f"float axisPos = 0.5 + {F(u(0, 0.1, 0.2))} * sin(anim * {F(u(1, 0.2, 0.45))});",
             "vec2 target = vec2(axisPos * 2.0 - texCoord.x, texCoord.y);",
             "vec3 scene = sampleAt(texCoord + safeOffset((target - texCoord) * strength));",
-            f"float seam = smoothstep({F(u(2, 0.03, 0.06))}, 0.0, abs(texCoord.x - axisPos));",
+            f"float seam = invsmooth(0.0, {F(u(2, 0.03, 0.06))}, abs(texCoord.x - axisPos));",
             f"vec3 outColor = scene + Primary.rgb * seam * {F(u(3, 0.2, 0.35))} * strength;",
-        ], {"safeOffset", "sampleAt"}
+        ], {"invsmooth", "safeOffset", "sampleAt"}
     wedges = {"wedge4": 4, "wedge6": 6, "wedge8": 8}[v]
     return [
         f"// Kaleidoscopic refraction: {wedges} angular wedges; each pixel leans toward",
         "// its fold position (bounded), and the wedge seams glow.",
-        "float angle = atan(aspectCentered.y, aspectCentered.x);",
+        "float angle = safeAtan(aspectCentered.y, aspectCentered.x);",
         f"float wedge = 6.2831853 / {F(float(wedges))};",
         f"float local = mod(angle + anim * {F(u(0, 0.08, 0.2))}, wedge) - wedge * 0.5;",
         "float folded = abs(local);",
         f"vec2 dir = vec2(cos(folded + anim * {F(u(1, 0.03, 0.08))}), sin(folded + anim * {F(u(2, 0.03, 0.08))}));",
-        "vec2 invAspect = vec2(max(InSize.y, 1.0) / max(InSize.x, 1.0), 1.0);",
+        "vec2 invAspect = vec2(safeInSize.y / safeInSize.x, 1.0);",
         "vec2 target = vec2(0.5) + dir * centerDist * invAspect;",
         "vec3 scene = sampleAt(texCoord + safeOffset((target - texCoord) * strength));",
-        f"float seam = smoothstep({F(u(3, 0.05, 0.1))}, 0.0, abs(local)) * smoothstep(0.05, 0.25, centerDist);",
+        f"float seam = invsmooth(0.0, {F(u(3, 0.05, 0.1))}, abs(local)) * smoothstep(0.05, 0.25, centerDist);",
         f"vec3 outColor = scene + mix(Primary.rgb, Secondary.rgb, texCoord.y) * seam * {F(u(4, 0.2, 0.35))} * strength;",
-    ], {"safeOffset", "sampleAt"}
+    ], {"invsmooth", "safeAtan", "safeOffset", "sampleAt"}
 
 
 def fam_huedrift(v, u):
@@ -995,7 +1038,7 @@ def fam_huedrift(v, u):
 
 def fam_dreamblur(v, u):
     sparkle = [
-        f"vec2 cellUv = floor(texCoord * InSize / {F(u(10, 8.0, 16.0))});",
+        f"vec2 cellUv = floor(texCoord * safeInSize / {F(u(10, 8.0, 16.0))});",
         "float tw = hash21(cellUv);",
         f"float twinkle = smoothstep({F(u(11, 0.75, 0.85))}, 1.0, sin(anim * {F(u(12, 1.5, 3.0))} + tw * 6.2831) * 0.5 + 0.5) * step({F(u(13, 0.965, 0.985))}, tw);",
         f"vec3 outColor = dream + Primary.rgb * twinkle * {F(u(14, 0.3, 0.5))} * animAmp;",
@@ -1003,52 +1046,52 @@ def fam_dreamblur(v, u):
     if v == "soft9":
         return [
             "// 9-tap soft blur veils the scene; hash-cell sparkles twinkle on top.",
-            f"vec2 texel = {F(u(0, 2.0, 4.0))} / InSize;",
+            f"vec2 texel = {F(u(0, 2.0, 4.0))} / safeInSize;",
             "vec3 blurred = vec3(0.0);",
             "for (int i = 0; i < 3; i++) {",
             "    for (int j = 0; j < 3; j++) {",
-            "        blurred += sampleAt(texCoord + vec2(float(i - 1), float(j - 1)) * texel);",
+            "        blurred += sampleAt(texCoord + safeOffset(vec2(float(i - 1), float(j - 1)) * texel));",
             "    }",
             "}",
             "blurred /= 9.0;",
             f"vec3 dream = mix(base, blurred * {F(u(1, 1.02, 1.1))}, clamp(strength, 0.0, 0.85));",
-        ] + sparkle, {"hash21", "sampleAt"}
+        ] + sparkle, {"hash21", "safeOffset", "sampleAt"}
     if v == "cross5":
         return [
             "// 5-tap cross blur haze with drifting sparkle dust.",
-            f"vec2 texel = {F(u(0, 2.5, 4.5))} / InSize;",
+            f"vec2 texel = {F(u(0, 2.5, 4.5))} / safeInSize;",
             "vec3 blurred = sampleAt(texCoord) * 0.32",
-            "    + sampleAt(texCoord + vec2(texel.x, 0.0)) * 0.17",
-            "    + sampleAt(texCoord - vec2(texel.x, 0.0)) * 0.17",
-            "    + sampleAt(texCoord + vec2(0.0, texel.y)) * 0.17",
-            "    + sampleAt(texCoord - vec2(0.0, texel.y)) * 0.17;",
+            "    + sampleAt(texCoord + safeOffset(vec2(texel.x, 0.0))) * 0.17",
+            "    + sampleAt(texCoord + safeOffset(vec2(-texel.x, 0.0))) * 0.17",
+            "    + sampleAt(texCoord + safeOffset(vec2(0.0, texel.y))) * 0.17",
+            "    + sampleAt(texCoord + safeOffset(vec2(0.0, -texel.y))) * 0.17;",
             f"vec3 dream = mix(base, blurred * {F(u(1, 1.0, 1.08))}, clamp(strength, 0.0, 0.85));",
-        ] + sparkle, {"hash21", "sampleAt"}
+        ] + sparkle, {"hash21", "safeOffset", "sampleAt"}
     if v == "glowdream":
         return [
             "// Bright-lifted dream veil: the blur adds a soft luminous bloom.",
-            f"vec2 texel = {F(u(0, 2.0, 3.5))} / InSize;",
+            f"vec2 texel = {F(u(0, 2.0, 3.5))} / safeInSize;",
             "vec3 blurred = vec3(0.0);",
             "for (int i = 0; i < 3; i++) {",
             "    for (int j = 0; j < 3; j++) {",
-            "        blurred += sampleAt(texCoord + vec2(float(i - 1), float(j - 1)) * texel);",
+            "        blurred += sampleAt(texCoord + safeOffset(vec2(float(i - 1), float(j - 1)) * texel));",
             "    }",
             "}",
             "blurred /= 9.0;",
             f"vec3 dream = base * {F(u(1, 0.55, 0.68))} + blurred * mix(vec3(1.0), Primary.rgb, ParamsB.z) * {F(u(2, 0.5, 0.62))};",
-        ] + sparkle, {"hash21", "sampleAt"}
+        ] + sparkle, {"hash21", "safeOffset", "sampleAt"}
     # edgehalo
     return [
         "// The veil thickens toward the edges: a dreamy porthole.",
-        f"vec2 texel = {F(u(0, 2.5, 4.0))} / InSize;",
+        f"vec2 texel = {F(u(0, 2.5, 4.0))} / safeInSize;",
         "vec3 blurred = sampleAt(texCoord) * 0.32",
-        "    + sampleAt(texCoord + texel) * 0.17",
-        "    + sampleAt(texCoord - texel) * 0.17",
-        "    + sampleAt(texCoord + vec2(texel.x, -texel.y)) * 0.17",
-        "    + sampleAt(texCoord + vec2(-texel.x, texel.y)) * 0.17;",
+        "    + sampleAt(texCoord + safeOffset(texel)) * 0.17",
+        "    + sampleAt(texCoord + safeOffset(-texel)) * 0.17",
+        "    + sampleAt(texCoord + safeOffset(vec2(texel.x, -texel.y))) * 0.17",
+        "    + sampleAt(texCoord + safeOffset(vec2(-texel.x, texel.y))) * 0.17;",
         f"float halo = smoothstep({F(u(1, 0.12, 0.22))}, {F(u(2, 0.6, 0.8))}, centerDist);",
         f"vec3 dream = mix(base, blurred * {F(u(3, 1.0, 1.08))}, clamp(strength * halo, 0.0, 0.9));",
-    ] + sparkle, {"hash21", "sampleAt"}
+    ] + sparkle, {"hash21", "safeOffset", "sampleAt"}
 
 
 def fam_moire(v, u):
@@ -1150,13 +1193,15 @@ def overlay_lines(overlay, u):
         return [], set()
     if overlay == "grain":
         return [
-            "// Overlay: living film grain.",
-            f"outColor += (hash21(floor(texCoord * InSize) + vec2(floor(anim * {F(u(70, 5.0, 9.0))}), 0.0)) - 0.5) * {F(u(71, 0.02, 0.04))};",
+            "// Overlay: living film grain (frame counter wrapped at 256 so the",
+            "// hash input stays fp32-friendly across the whole GameTime day).",
+            f"float grainFrame = mod(floor(anim * {F(u(70, 5.0, 9.0))}), 256.0);",
+            f"outColor += (hash21(floor(texCoord * safeInSize) + vec2(grainFrame, 0.0)) - 0.5) * {F(u(71, 0.02, 0.04))};",
         ], {"hash21"}
     if overlay == "sparkle":
         return [
             "// Overlay: sparse twinkling motes.",
-            f"vec2 oCell = floor(texCoord * InSize / {F(u(70, 10.0, 18.0))});",
+            f"vec2 oCell = floor(texCoord * safeInSize / {F(u(70, 10.0, 18.0))});",
             "float oTw = hash21(oCell + vec2(37.0, 91.0));",
             f"float oTwinkle = smoothstep({F(u(71, 0.8, 0.88))}, 1.0, sin(anim * {F(u(72, 1.2, 2.4))} + oTw * 6.2831) * 0.5 + 0.5) * step({F(u(73, 0.975, 0.99))}, oTw);",
             f"outColor += Secondary.rgb * oTwinkle * {F(u(74, 0.25, 0.4))};",
@@ -1220,8 +1265,10 @@ def emit_shader(asg: dict) -> str:
     lines.append("    // Undisplaced scene sample: the gameplay-safety floor references this.")
     lines.append("    vec3 base = texture(InSampler, texCoord).rgb;")
     lines.append("    float baseLuma = luma(base);")
+    lines.append("    // InSize is driver-fed; guard it so no divide below can hit zero.")
+    lines.append("    vec2 safeInSize = max(InSize, vec2(1.0));")
     lines.append("    vec2 centered = texCoord - vec2(0.5);")
-    lines.append("    vec2 aspectCentered = centered * vec2(InSize.x / max(InSize.y, 1.0), 1.0);")
+    lines.append("    vec2 aspectCentered = centered * vec2(safeInSize.x / safeInSize.y, 1.0);")
     lines.append("    float centerDist = length(aspectCentered);")
     for ln in motion_lines(asg["motion"], u):
         lines.append("    " + ln)
