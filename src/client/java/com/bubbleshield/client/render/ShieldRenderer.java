@@ -71,7 +71,7 @@ public final class ShieldRenderer {
 			}
 
 			EffectDefinition def = EffectRegistry.get(shield.effectId());
-			RenderType renderType = ShieldPipelines.renderType(def.surface());
+			RenderType renderType = ShieldPipelines.renderType(shield.effectId());
 			Vec3 center = Vec3.atCenterOf(shield.pos());
 			List<Vec3> dissolveCenters = collectDissolveCenters(level, shield, center, radius);
 

@@ -5,8 +5,10 @@ import java.util.Locale;
 /**
  * Immutable description of one selectable shield effect.
  *
- * <p>Server-safe pure data: colors are packed ARGB ints, {@code surface} plus
- * {@code paramA}/{@code paramB} parameterize the (client-side) surface renderer,
+ * <p>Server-safe pure data: colors are packed ARGB ints, {@code surface} names the
+ * technique family (tooltips/invariants; the actual per-effect fragment shader is
+ * {@link #surfaceShaderId()}), {@code paramA}/{@code paramB} parameterize the
+ * (client-side) surface renderer,
  * {@code insideBehaviorId}/{@code behaviorVariant}/{@code behaviorStrength} select and
  * tune the server-side {@link InsideEffectBehavior}, {@code guard} and {@code context}
  * pick the boundary-retaliation style and reactivity profile, the {@code ambient*}
@@ -33,6 +35,16 @@ public record EffectDefinition(
 		String screenTemplate,
 		String screenEffectName
 ) {
+	/**
+	 * Id-derived path of this effect's dedicated bubble surface fragment shader
+	 * ({@code assets/bubbleshield/shaders/bubble/fx_NNN.fsh}, client source set). Every
+	 * effect has its own shader; {@link #surface} remains technique-family metadata
+	 * (tooltips, catalogue invariants), not a shader selector.
+	 */
+	public String surfaceShaderId() {
+		return String.format(Locale.ROOT, "bubble/fx_%03d", id);
+	}
+
 	/**
 	 * Creates a definition, deriving {@code nameKey} ("effect.bubbleshield.NN") and
 	 * {@code screenEffectName} ("effect_NN") from the id.
