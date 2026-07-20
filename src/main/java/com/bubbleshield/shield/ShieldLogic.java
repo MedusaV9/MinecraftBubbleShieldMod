@@ -11,6 +11,7 @@ import com.bubbleshield.effect.ContextProfile;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.EffectRegistry;
 import com.bubbleshield.effect.InsideEffectBehavior;
+import com.bubbleshield.effect.behaviors.BehaviorSupport;
 import com.bubbleshield.net.ServerNet;
 
 import net.minecraft.core.BlockPos;
@@ -335,7 +336,11 @@ public final class ShieldLogic {
 
 		if (ctx.extraSparks() && gameTime % 10L == 0L) {
 			// STORM_CHARGED while raining: a small electric sprinkle across the interior.
-			level.sendParticles(ParticleTypes.ELECTRIC_SPARK, true, false,
+			// Routed shape-aware: for SPHERE/DOME the point (+0.4r above center) is
+			// always contained, so containPoint's identity path keeps the legacy
+			// emission byte-identical; for the RING the center column is in the hole
+			// and the emission is pulled onto the tube instead.
+			BehaviorSupport.sendContained(level, ParticleTypes.ELECTRIC_SPARK, state.shape, center, radius,
 					center.x, center.y + radius * 0.4, center.z, 8, radius * 0.45, radius * 0.3, radius * 0.45, 0.02);
 		}
 
@@ -346,7 +351,10 @@ public final class ShieldLogic {
 			// useSecondaryColor) recolors the accent like every other dust behavior.
 			// overrideLimiter=true lifts the 32-block send limit for large bubbles.
 			DustParticleOptions accent = new DustParticleOptions(ctx.pickColor(def.argbPrimary(), def.argbSecondary()) & 0xFFFFFF, 1.2F);
-			level.sendParticles(accent, true, false,
+			// Shape-aware like the sprinkle above: identity for SPHERE/DOME (+1.0
+			// above center is always inside at the >= 3-block active radius),
+			// projected onto the tube for the holey RING.
+			BehaviorSupport.sendContained(level, accent, state.shape, center, radius,
 					center.x, center.y + 1.0, center.z, 6, radius * 0.15, radius * 0.15, radius * 0.15, 0.0);
 		}
 

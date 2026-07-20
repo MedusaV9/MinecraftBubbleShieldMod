@@ -24,8 +24,8 @@ import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Draws every synced shield as a translucent procedural sphere (or dome, per the
- * synced shape) through the 26.2 submit-based level renderer
+ * Draws every synced shield as a translucent procedural membrane (sphere, dome,
+ * cylinder, cube, diamond or ring, per the synced shape) through the 26.2 submit-based level renderer
  * ({@code LevelRenderEvents.COLLECT_SUBMITS} + {@code SubmitNodeCollector.submitCustomGeometry}).
  *
  * <p>The camera position is captured during extraction
@@ -86,18 +86,23 @@ public final class ShieldRenderer {
 			// Weaker shields render fainter.
 			float alphaBase = 0.25F + 0.5F * shield.healthFrac();
 
-			// The synced shape picks the mesh: full sphere or dome (upper hemisphere + disc).
-			boolean dome = ShieldShape.byOrdinal(shield.shape()) == ShieldShape.DOME;
+			// The synced shape picks the mesh; every variant shares the sphere's
+			// vertex conventions (POSITION_TEX_COLOR quads, UV in [0, 1], CPU-side
+			// radius scaling) and the dimensions match ShieldGeometry exactly.
+			ShieldShape shape = ShieldShape.byOrdinal(shield.shape());
 
 			poseStack.pushPose();
 			poseStack.translate(center.x - camera.x, center.y - camera.y, center.z - camera.z);
 			// The pose stays unscaled: SphereMesh scales positions by radius CPU-side so the
 			// dissolve distances (per-vertex alpha) are computed in world units.
 			collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-				if (dome) {
-					SPHERE.emitHemisphere(pose, buffer, radius, argbPrimary, argbSecondary, alphaBase, dissolveCenters);
-				} else {
-					SPHERE.emit(pose, buffer, radius, argbPrimary, argbSecondary, alphaBase, dissolveCenters);
+				switch (shape) {
+					case DOME -> SPHERE.emitHemisphere(pose, buffer, radius, argbPrimary, argbSecondary, alphaBase, dissolveCenters);
+					case CYLINDER -> SPHERE.emitCylinder(pose, buffer, radius, argbPrimary, argbSecondary, alphaBase, dissolveCenters);
+					case CUBE -> SPHERE.emitCube(pose, buffer, radius, argbPrimary, argbSecondary, alphaBase, dissolveCenters);
+					case DIAMOND -> SPHERE.emitDiamond(pose, buffer, radius, argbPrimary, argbSecondary, alphaBase, dissolveCenters);
+					case RING -> SPHERE.emitRing(pose, buffer, radius, argbPrimary, argbSecondary, alphaBase, dissolveCenters);
+					default -> SPHERE.emit(pose, buffer, radius, argbPrimary, argbSecondary, alphaBase, dissolveCenters);
 				}
 			});
 

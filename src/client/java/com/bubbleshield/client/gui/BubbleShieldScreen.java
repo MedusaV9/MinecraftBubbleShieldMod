@@ -60,9 +60,12 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 		this.diameterSlider = this.addRenderableWidget(new DiameterSlider(x, this.topPos + 26, width, 13, this.menu));
 
 		// Shape and mode share the third row: 42px shape + 2px gap + 44px mode = 88px.
+		// The 42px button ellipsizes the longer shape names, so the tooltip carries
+		// the full context ("Shield shape") like the beam button does.
 		this.shapeButton = this.addRenderableWidget(
 			Button.builder(this.shapeLabel(), button -> this.toggleShape())
 				.bounds(x, this.topPos + 40, 42, 13)
+				.tooltip(Tooltip.create(Component.translatable("gui.bubbleshield.shape.tooltip")))
 				.build()
 		);
 
@@ -113,16 +116,25 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 		return Component.translatable(this.menu.isActive() ? "gui.bubbleshield.deactivate" : "gui.bubbleshield.activate");
 	}
 
-	/** Sends the toggled shape, echoing the current (server-synced) diameter/effect/mode/cycle/beam. */
+	/**
+	 * Sends the next shape in the SPHERE -> DOME -> CYLINDER -> CUBE -> DIAMOND ->
+	 * RING cycle, echoing the current (server-synced) diameter/effect/mode/cycle/beam.
+	 */
 	private void toggleShape() {
-		int toggled = this.menu.shape() == ShieldShape.SPHERE.ordinal() ? ShieldShape.DOME.ordinal() : ShieldShape.SPHERE.ordinal();
+		int next = (this.menu.shape() + 1) % ShieldShape.values().length;
 		ClientPlayNetworking.send(new ShieldPayloads.SetSettingsC2S(
-			this.menu.pos(), this.menu.diameter(), this.menu.effectId(), toggled, this.menu.mode(), this.menu.cycleEffect(), this.menu.beamStyle()));
+			this.menu.pos(), this.menu.diameter(), this.menu.effectId(), next, this.menu.mode(), this.menu.cycleEffect(), this.menu.beamStyle()));
 	}
 
 	private Component shapeLabel() {
-		boolean dome = ShieldShape.byOrdinal(this.menu.shape()) == ShieldShape.DOME;
-		return Component.translatable(dome ? "gui.bubbleshield.shape.dome" : "gui.bubbleshield.shape.sphere");
+		return Component.translatable(switch (ShieldShape.byOrdinal(this.menu.shape())) {
+			case DOME -> "gui.bubbleshield.shape.dome";
+			case CYLINDER -> "gui.bubbleshield.shape.cylinder";
+			case CUBE -> "gui.bubbleshield.shape.cube";
+			case DIAMOND -> "gui.bubbleshield.shape.diamond";
+			case RING -> "gui.bubbleshield.shape.ring";
+			default -> "gui.bubbleshield.shape.sphere";
+		});
 	}
 
 	/** Sends the next mode in the DEFENSE -> PULSE -> ECO cycle, echoing everything else. */
