@@ -41,9 +41,10 @@ The fx_*/manifest checks are skipped (with a notice) only while NEITHER any
 fx_*.fsh NOR the manifest exists yet, i.e. before the generator has ever run;
 the sfx_*/screen-manifest/FxConfig checks are skipped the same way while
 NEITHER any sfx_*.fsh NOR tools/screen_manifest.json exists. Any
-half-generated state is a hard failure. The 16 legacy hand-written screenfx
-templates keep compiling alongside the sfx_* files until milestone F removes
-them.
+half-generated state is a hard failure. The 16+16 legacy hand-written
+templates were deleted in the final cleanup milestone, so the full scan is
+351 files under bubble/ (350 fx_*.fsh + surface.vsh) + 350 under screenfx/
+(sfx_*.fsh) = 701.
 
 Exits nonzero when any shader fails to compile or any invariant is violated.
 Usage:

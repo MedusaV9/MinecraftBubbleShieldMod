@@ -255,30 +255,22 @@ public class ShieldGameTests {
 	}
 
 	/**
-	 * The 16 legacy screen-fx templates. Since the per-effect scale-up every JSON
-	 * references its own generated {@code screenfx/sfx_NNN.fsh} instead, but the
-	 * legacy template files stay in place (and shipped) until the final cleanup
-	 * milestone deletes them.
+	 * Every effect id must ship its own generated screen shader
+	 * ({@code screenfx/sfx_NNN.fsh}) plus a post_effect JSON whose first pass
+	 * references exactly that shader. The 16 legacy shared screenfx templates
+	 * were deleted in the final cleanup milestone (git history preserves them).
 	 */
-	private static final java.util.Set<String> SCREENFX_TEMPLATES = java.util.Set.of(
-			"tint", "wobble", "vignette", "chroma", "pixelate", "desat",
-			"bloomglow", "ripple", "scanlines", "edgeglow", "frostlens", "heathaze",
-			"posterize", "radialblur", "glitch", "duotone");
-
 	@GameTest
 	public void postEffectAssetsExist(GameTestHelper helper) {
-		// The 16 legacy template shader files must still exist (deleted only in the
-		// final cleanup milestone).
-		for (String template : SCREENFX_TEMPLATES) {
-			String shaderPath = "/assets/bubbleshield/shaders/screenfx/" + template + ".fsh";
-			try (InputStream shader = ShieldGameTests.class.getResourceAsStream(shaderPath)) {
-				helper.assertTrue(shader != null, "missing screenfx template shader: " + shaderPath);
-			} catch (Exception e) {
-				throw helper.assertionException("failed to read " + shaderPath + ": " + e);
-			}
-		}
-
 		for (int i = 0; i < EffectRegistry.COUNT; i++) {
+			// Per-id existence: the effect's own generated screen shader.
+			String sfxPath = String.format(java.util.Locale.ROOT, "/assets/bubbleshield/shaders/screenfx/sfx_%03d.fsh", i);
+			try (InputStream shader = ShieldGameTests.class.getResourceAsStream(sfxPath)) {
+				helper.assertTrue(shader != null, "missing generated screen shader: " + sfxPath);
+			} catch (Exception e) {
+				throw helper.assertionException("failed to read " + sfxPath + ": " + e);
+			}
+
 			String jsonPath = String.format(java.util.Locale.ROOT, "/assets/bubbleshield/post_effect/effect_%02d.json", i);
 			JsonObject config;
 			try (InputStream in = ShieldGameTests.class.getResourceAsStream(jsonPath)) {

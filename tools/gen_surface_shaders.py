@@ -17,7 +17,8 @@ Design (see /tmp/shader_plan.md sections 1, 2, 4.1 and AGENTS.md):
   sphericalVertexDistance, cylindricalVertexDistance; out fragColor; animation
   ONLY via `float time = GameTime * 1200.0;`; NO custom uniforms, NO textures;
   `discard` when alpha < 0.01; the last statement applies apply_fog exactly
-  like the 16 hand-written seed shaders.
+  like the 16 original hand-written seed shaders did (deleted in the final
+  cleanup milestone; git history preserves them as reference points).
 
 * Helper snippet bank (inlined per file, ONLY the helpers a shader uses):
   hash11/hash21/hash22, vnoise (quintic fade), fbm2 (modes standard/ridged/turb,
@@ -133,15 +134,22 @@ def F(x: float) -> str:
 
 
 def parse_registry() -> dict:
-    """Parses EffectRegistry.java rows: id -> (surfaceName, rgbPrimary, rgbSecondary)."""
+    """Parses EffectRegistry.java rows: id -> (surfaceName, rgbPrimary, rgbSecondary).
+
+    Accepts any dense catalogue of at least the 105 V1 rows: ids 0..104 seed
+    their family/palette from the registry (frozen), while ids >= 105 are
+    computed by build_assignments and only cross-checked against the registry
+    (the milestone-D expansion rows were authored FROM this generator's
+    manifest, so a mismatch means the two have drifted).
+    """
     text = REGISTRY_JAVA.read_text()
     pattern = re.compile(
         r"row\((\d+),\s*0x([0-9A-Fa-f]{6}),\s*0x([0-9A-Fa-f]{6}),\s*\"([a-z]+)\"")
     rows = {}
     for m in pattern.finditer(text):
         rows[int(m.group(1))] = (m.group(4).upper(), int(m.group(2), 16), int(m.group(3), 16))
-    if sorted(rows) != list(range(105)):
-        sys.exit(f"EffectRegistry.java parse failed: found {len(rows)} rows, expected ids 0..104")
+    if len(rows) < 105 or sorted(rows) != list(range(len(rows))):
+        sys.exit(f"EffectRegistry.java parse failed: found {len(rows)} rows, expected dense ids 0..N-1 with N >= 105")
     return rows
 
 
@@ -160,6 +168,12 @@ def build_assignments() -> list:
             slot = effect_id % 5
             family = FAMILIES[(5 * (block + slot)) % len(FAMILIES)]
             prim = None
+            # Drift guard: the milestone-D registry rows were authored from this
+            # generator's manifest, so the registry (when it already has this id)
+            # must agree with the computed family.
+            if effect_id in registry and registry[effect_id][0] != family:
+                sys.exit(f"id {effect_id}: EffectRegistry surface family {registry[effect_id][0]} "
+                         f"!= generator family {family} (registry and generator have drifted)")
         rng = Rng(mix_seed(effect_id, 1))
         w0 = rng.randint(0, 3)
         d0 = rng.randint(0, 3)
