@@ -5,6 +5,7 @@ import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.InsideEffectBehavior;
 import com.bubbleshield.shield.ShieldShape;
 
+import net.minecraft.core.particles.DustColorTransitionOptions;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
@@ -21,6 +22,10 @@ import net.minecraft.world.phys.Vec3;
  * <li>v0: single beat</li>
  * <li>v1: double beat with note particles on each thump</li>
  * <li>v2: deep bass beat (pitch 0.6) with larger rings</li>
+ * <li>v3: triple beat climbing in pitch across the sweep</li>
+ * <li>v4: syncopated off-beat with a color-transition dust ring</li>
+ * <li>v5: single beat bursting hearts from the projector</li>
+ * <li>v6: subterranean beat (pitch 0.5) driving twin nested rings</li>
  * </ul>
  */
 public final class HeartbeatPulse implements InsideEffectBehavior {
@@ -41,18 +46,54 @@ public final class HeartbeatPulse implements InsideEffectBehavior {
 		float volume = Mth.clamp(radius / 12.0F, 0.6F, 8.0F);
 		boolean beat = switch (variant) {
 			case 1 -> phase == 0L || phase == 1L;
+			case 3 -> phase <= 2L;
+			case 4 -> phase == 0L || phase == 2L;
 			default -> phase == 0L;
 		};
 		if (beat) {
 			float pitch = switch (variant) {
 				case 1 -> phase == 0L ? 0.9F : 1.1F;
 				case 2 -> 0.6F;
+				case 3 -> 0.8F + 0.2F * phase;
+				case 4 -> phase == 0L ? 1.0F : 0.7F;
+				case 6 -> 0.5F;
 				default -> 0.9F;
 			};
 			level.playSound(null, center.x, center.y, center.z, SoundEvents.WARDEN_HEARTBEAT, SoundSource.AMBIENT, volume, pitch);
 			if (variant == 1) {
 				level.sendParticles(ParticleTypes.NOTE, true, false, center.x, center.y + 2.0, center.z, 3, 0.5, 0.5, 0.5, 0.0);
+			} else if (variant == 5) {
+				level.sendParticles(ParticleTypes.HEART, true, false, center.x, center.y + 1.5, center.z, ctx.scaleCount(6, 12), 0.8, 0.6, 0.8, 0.0);
 			}
+		}
+
+		if (variant == 4) {
+			// Off-beat sweep drawn in gradient dust instead of the flat two-color scheme.
+			double ringRadius = Math.min(radius * (0.25 + 0.25 * phase), radius * 0.98);
+			DustColorTransitionOptions dust = new DustColorTransitionOptions(
+					ctx.pickColor(def.argbPrimary(), def.argbSecondary()) & 0xFFFFFF, ctx.secondaryColor(def.argbSecondary()) & 0xFFFFFF, 1.4F);
+			int points = ctx.scaleCount(Mth.clamp((int) Math.round(Math.PI * 2.0 * ringRadius / 2.0), MIN_POINTS, MAX_POINTS), MAX_POINTS);
+			for (int i = 0; i < points; i++) {
+				double angle = Math.PI * 2.0 * i / points;
+				level.sendParticles(dust, true, false, center.x + Math.cos(angle) * ringRadius, center.y + 0.2, center.z + Math.sin(angle) * ringRadius, 1, 0.05, 0.05, 0.05, 0.0);
+			}
+			return;
+		}
+
+		if (variant == 6) {
+			// Twin nested rings expanding together, the inner at 60% of the outer radius.
+			double outer = Math.min(radius * (0.3 + 0.28 * phase), radius * 0.98);
+			DustParticleOptions dust = new DustParticleOptions(
+					(phase % 2L == 0L ? ctx.pickColor(def.argbPrimary(), def.argbSecondary()) : ctx.secondaryColor(def.argbSecondary())) & 0xFFFFFF, 2.2F);
+			for (int ring = 0; ring < 2; ring++) {
+				double ringRadius = ring == 0 ? outer : outer * 0.6;
+				int points = ctx.scaleCount(Mth.clamp((int) Math.round(Math.PI * 2.0 * ringRadius / 2.5), MIN_POINTS / 2, MAX_POINTS / 2), MAX_POINTS / 2);
+				for (int i = 0; i < points; i++) {
+					double angle = Math.PI * 2.0 * i / points;
+					level.sendParticles(dust, true, false, center.x + Math.cos(angle) * ringRadius, center.y + 0.2, center.z + Math.sin(angle) * ringRadius, 1, 0.05, 0.05, 0.05, 0.0);
+				}
+			}
+			return;
 		}
 
 		// Cap the expanding ring inside the shell: v2's last phase used to reach 1.2r.

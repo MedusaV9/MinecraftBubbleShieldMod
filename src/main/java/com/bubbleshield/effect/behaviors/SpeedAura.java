@@ -6,6 +6,7 @@ import com.bubbleshield.effect.InsideEffectBehavior;
 import com.bubbleshield.shield.ShieldGeometry;
 import com.bubbleshield.shield.ShieldShape;
 
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
@@ -20,6 +21,10 @@ import net.minecraft.world.phys.Vec3;
  * <li>v0: Speed I</li>
  * <li>v1: Speed II plus Jump Boost I</li>
  * <li>v2: Speed I plus Haste I</li>
+ * <li>v3: Speed II</li>
+ * <li>v4: Speed I plus Dolphin's Grace</li>
+ * <li>v5: Speed I plus cloud puffs trailing at the players' feet</li>
+ * <li>v6: a short burst of Speed III</li>
  * </ul>
  */
 public final class SpeedAura implements InsideEffectBehavior {
@@ -39,11 +44,20 @@ public final class SpeedAura implements InsideEffectBehavior {
 				continue;
 			}
 
-			player.addEffect(new MobEffectInstance(MobEffects.SPEED, DURATION_TICKS, variant == 1 ? 1 : 0));
+			int amplifier = switch (variant) {
+				case 1, 3 -> 1;
+				case 6 -> 2;
+				default -> 0;
+			};
+			player.addEffect(new MobEffectInstance(MobEffects.SPEED, variant == 6 ? 30 : DURATION_TICKS, amplifier));
 			if (variant == 1) {
 				player.addEffect(new MobEffectInstance(MobEffects.JUMP_BOOST, DURATION_TICKS, 0));
 			} else if (variant == 2) {
 				player.addEffect(new MobEffectInstance(MobEffects.HASTE, DURATION_TICKS, 0));
+			} else if (variant == 4) {
+				player.addEffect(new MobEffectInstance(MobEffects.DOLPHINS_GRACE, DURATION_TICKS, 0));
+			} else if (variant == 5) {
+				level.sendParticles(ParticleTypes.CLOUD, true, false, player.getX(), player.getY() + 0.1, player.getZ(), ctx.scaleCount(3, 8), 0.3, 0.05, 0.3, 0.01);
 			}
 		}
 	}

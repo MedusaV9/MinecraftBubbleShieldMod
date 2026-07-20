@@ -21,6 +21,10 @@ import net.minecraft.world.phys.Vec3;
  * <li>v0: Luck</li>
  * <li>v1: Luck plus happy-villager sparkles above each player</li>
  * <li>v2: Luck plus Hero of the Village</li>
+ * <li>v3: Luck II</li>
+ * <li>v4: Luck plus composter glints raining over each player</li>
+ * <li>v5: Luck plus Hero of the Village II</li>
+ * <li>v6: Luck plus a celebration burst of notes every few seconds</li>
  * </ul>
  */
 public final class LuckyCharm implements InsideEffectBehavior {
@@ -40,11 +44,18 @@ public final class LuckyCharm implements InsideEffectBehavior {
 				continue;
 			}
 
-			player.addEffect(new MobEffectInstance(MobEffects.LUCK, DURATION_TICKS, 0));
+			player.addEffect(new MobEffectInstance(MobEffects.LUCK, DURATION_TICKS, variant == 3 ? 1 : 0));
 			if (variant == 1) {
 				level.sendParticles(ParticleTypes.HAPPY_VILLAGER, true, false, player.getX(), player.getY() + 1.8, player.getZ(), ctx.scaleCount(3, 10), 0.3, 0.3, 0.3, 0.0);
 			} else if (variant == 2) {
 				player.addEffect(new MobEffectInstance(MobEffects.HERO_OF_THE_VILLAGE, DURATION_TICKS, 0));
+			} else if (variant == 4) {
+				level.sendParticles(ParticleTypes.COMPOSTER, true, false, player.getX(), player.getY() + 2.0, player.getZ(), ctx.scaleCount(4, 10), 0.4, 0.2, 0.4, 0.0);
+			} else if (variant == 5) {
+				player.addEffect(new MobEffectInstance(MobEffects.HERO_OF_THE_VILLAGE, DURATION_TICKS, 1));
+			} else if (variant == 6 && gameTime % 40L == 0L) {
+				level.sendParticles(ParticleTypes.NOTE, true, false, player.getX(), player.getY() + 2.2, player.getZ(), ctx.scaleCount(6, 12), 0.6, 0.4, 0.6, 0.0);
+				level.sendParticles(ParticleTypes.HAPPY_VILLAGER, true, false, player.getX(), player.getY() + 1.5, player.getZ(), ctx.scaleCount(4, 8), 0.5, 0.5, 0.5, 0.0);
 			}
 		}
 	}

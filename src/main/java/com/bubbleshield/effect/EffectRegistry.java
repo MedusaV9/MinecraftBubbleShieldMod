@@ -31,6 +31,26 @@ public final class EffectRegistry {
 	 */
 	public static final int PARAM_CYCLE = 75;
 
+	/**
+	 * Number of behavior variants exercised by the current catalogue: every behavior
+	 * USED by a row must cover variants {@code 0..CATALOGUE_VARIANTS-1} exactly once
+	 * each. The behavior implementations themselves support variants 0..6; the
+	 * 105-row catalogue only exercises the first three.
+	 */
+	public static final int CATALOGUE_VARIANTS = 3;
+
+	/**
+	 * TEMPORARY (milestone C): behavior ids registered in
+	 * {@link InsideEffectBehavior#REGISTRY} but intentionally NOT yet referenced by
+	 * the 105-row catalogue. They are staged for the 350-effect catalogue; milestone
+	 * D wires them into new rows and REMOVES this allowlist ({@link #validate()}
+	 * then goes back to requiring every registered behavior to be used).
+	 */
+	public static final Set<String> PENDING_BEHAVIORS = Set.of(
+			"gravity_wells", "aurora_ribbons", "sand_devils", "glass_shards", "moth_swarm",
+			"rune_orbit", "drip_stalactite", "geyser_vents", "static_orbs", "shadow_veil",
+			"prism_beams", "pollen_haze", "tide_pools", "ember_spiral", "comet_tails");
+
 	/** The full screen-fx template catalogue; every row's screenTemplate must be one of these. */
 	public static final Set<String> SCREEN_TEMPLATES = Set.of(
 			"tint", "wobble", "vignette", "chroma", "pixelate", "desat",
@@ -199,8 +219,10 @@ public final class EffectRegistry {
 	/**
 	 * Fails fast when the catalogue is malformed. Enforces: exactly {@link #COUNT}
 	 * entries with ids 0..COUNT-1; all palette pairs pairwise distinct; all
-	 * (insideBehaviorId, behaviorVariant) pairs pairwise distinct with every behavior id
-	 * used EXACTLY 3 times covering variants {0, 1, 2}; ambientPeriodTicks positive;
+	 * (insideBehaviorId, behaviorVariant) pairs pairwise distinct with every USED
+	 * behavior id covering variants 0..{@link #CATALOGUE_VARIANTS}-1 exactly once
+	 * each; every registered behavior either used by the catalogue or listed in
+	 * {@link #PENDING_BEHAVIORS} (and pending behaviors never used); ambientPeriodTicks positive;
 	 * every (ambientSoundId, ambientPitch, ambientPeriodTicks) triple distinct;
 	 * every behavior id registered in {@link InsideEffectBehavior#REGISTRY};
 	 * every screenTemplate one of the 16 {@link #SCREEN_TEMPLATES}; every
@@ -281,10 +303,37 @@ public final class EffectRegistry {
 			screenTemplatesUsed.add(def.screenTemplate());
 		}
 
-		// Every behavior id must appear exactly 3 times, once per variant {0, 1, 2}.
+		// Derived invariant: every USED behavior id must cover variants
+		// 0..CATALOGUE_VARIANTS-1 exactly once each (the per-row uniqueness check
+		// above already rules out duplicates within a behavior).
+		Set<Integer> requiredVariants = new HashSet<>();
+		for (int v = 0; v < CATALOGUE_VARIANTS; v++) {
+			requiredVariants.add(v);
+		}
+
 		for (Map.Entry<String, Set<Integer>> entry : behaviorVariants.entrySet()) {
-			if (!entry.getValue().equals(Set.of(0, 1, 2))) {
-				throw new IllegalStateException("Behavior " + entry.getKey() + " must be used exactly 3 times with variants {0,1,2}, found variants " + entry.getValue());
+			if (PENDING_BEHAVIORS.contains(entry.getKey())) {
+				throw new IllegalStateException("Pending behavior " + entry.getKey() + " must not be used by the catalogue yet");
+			}
+
+			if (!entry.getValue().equals(requiredVariants)) {
+				throw new IllegalStateException("Behavior " + entry.getKey() + " must be used exactly " + CATALOGUE_VARIANTS
+						+ " times with variants " + requiredVariants + ", found variants " + entry.getValue());
+			}
+		}
+
+		// TEMPORARY (milestone C, removed with PENDING_BEHAVIORS in milestone D):
+		// registered behaviors must be either used by the catalogue or explicitly
+		// pending, and every pending id must actually be registered.
+		for (String registered : InsideEffectBehavior.REGISTRY.keySet()) {
+			if (!behaviorVariants.containsKey(registered) && !PENDING_BEHAVIORS.contains(registered)) {
+				throw new IllegalStateException("Registered behavior " + registered + " is neither used by the catalogue nor in PENDING_BEHAVIORS");
+			}
+		}
+
+		for (String pending : PENDING_BEHAVIORS) {
+			if (!InsideEffectBehavior.REGISTRY.containsKey(pending)) {
+				throw new IllegalStateException("PENDING_BEHAVIORS entry is not registered: " + pending);
 			}
 		}
 

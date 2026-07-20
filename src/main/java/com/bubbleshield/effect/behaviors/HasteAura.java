@@ -6,6 +6,7 @@ import com.bubbleshield.effect.InsideEffectBehavior;
 import com.bubbleshield.shield.ShieldGeometry;
 import com.bubbleshield.shield.ShieldShape;
 
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
@@ -20,6 +21,10 @@ import net.minecraft.world.phys.Vec3;
  * <li>v0: Haste I</li>
  * <li>v1: Haste II</li>
  * <li>v2: Haste I plus Conduit Power</li>
+ * <li>v3: Haste I plus crit stars at the players' hands</li>
+ * <li>v4: Haste II plus Speed I</li>
+ * <li>v5: Haste I plus copper-scrape glints</li>
+ * <li>v6: a short burst of Haste III</li>
  * </ul>
  */
 public final class HasteAura implements InsideEffectBehavior {
@@ -39,9 +44,20 @@ public final class HasteAura implements InsideEffectBehavior {
 				continue;
 			}
 
-			player.addEffect(new MobEffectInstance(MobEffects.HASTE, DURATION_TICKS, variant == 1 ? 1 : 0));
+			int amplifier = switch (variant) {
+				case 1, 4 -> 1;
+				case 6 -> 2;
+				default -> 0;
+			};
+			player.addEffect(new MobEffectInstance(MobEffects.HASTE, variant == 6 ? 30 : DURATION_TICKS, amplifier));
 			if (variant == 2) {
 				player.addEffect(new MobEffectInstance(MobEffects.CONDUIT_POWER, DURATION_TICKS, 0));
+			} else if (variant == 3) {
+				level.sendParticles(ParticleTypes.CRIT, true, false, player.getX(), player.getY() + 1.0, player.getZ(), ctx.scaleCount(3, 8), 0.4, 0.3, 0.4, 0.05);
+			} else if (variant == 4) {
+				player.addEffect(new MobEffectInstance(MobEffects.SPEED, DURATION_TICKS, 0));
+			} else if (variant == 5) {
+				level.sendParticles(ParticleTypes.SCRAPE, true, false, player.getX(), player.getY() + 1.2, player.getZ(), ctx.scaleCount(2, 6), 0.3, 0.4, 0.3, 0.0);
 			}
 		}
 	}

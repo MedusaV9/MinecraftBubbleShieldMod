@@ -17,6 +17,10 @@ import net.minecraft.world.phys.Vec3;
  * <li>v0: end rod motes</li>
  * <li>v1: the vanilla firefly particle</li>
  * <li>v2: glow motes with wax-on sparks</li>
+ * <li>v3: fireflies mingling with glow motes</li>
+ * <li>v4: a low carpet of end rod motes hugging the floor</li>
+ * <li>v5: a firefly belt orbiting mid-bubble</li>
+ * <li>v6: sparse fireflies with happy-villager glints</li>
  * </ul>
  */
 public final class FireflySwarm implements InsideEffectBehavior {
@@ -51,8 +55,44 @@ public final class FireflySwarm implements InsideEffectBehavior {
 			return;
 		}
 
-		int count = ctx.scaleCount(Mth.clamp((int) (radius * 1.5F * def.behaviorStrength()), 12, 96), 96);
-		level.sendParticles(ParticleTypes.GLOW, true, false, center.x, center.y + radius * 0.35, center.z, count, radius * 0.55, radius * 0.3, radius * 0.55, 0.01);
-		level.sendParticles(ParticleTypes.WAX_ON, true, false, center.x, center.y + radius * 0.35, center.z, Math.min(32, count / 2), radius * 0.5, radius * 0.25, radius * 0.5, 0.0);
+		if (variant == 2) {
+			int count = ctx.scaleCount(Mth.clamp((int) (radius * 1.5F * def.behaviorStrength()), 12, 96), 96);
+			level.sendParticles(ParticleTypes.GLOW, true, false, center.x, center.y + radius * 0.35, center.z, count, radius * 0.55, radius * 0.3, radius * 0.55, 0.01);
+			level.sendParticles(ParticleTypes.WAX_ON, true, false, center.x, center.y + radius * 0.35, center.z, Math.min(32, count / 2), radius * 0.5, radius * 0.25, radius * 0.5, 0.0);
+			return;
+		}
+
+		if (variant == 3) {
+			// Mixed swarm: 64 fireflies + 64 glow motes = 128 particles/pulse max.
+			int count = ctx.scaleCount(Mth.clamp((int) (radius * 1.2F * def.behaviorStrength()), 8, 64), 64);
+			level.sendParticles(ParticleTypes.FIREFLY, true, false, center.x, center.y + radius * 0.4, center.z, count, radius * 0.55, radius * 0.3, radius * 0.55, 0.01);
+			level.sendParticles(ParticleTypes.GLOW, true, false, center.x, center.y + radius * 0.3, center.z, count, radius * 0.5, radius * 0.25, radius * 0.5, 0.005);
+			return;
+		}
+
+		if (variant == 4) {
+			int count = ctx.scaleCount(Mth.clamp((int) (radius * 2.5F * def.behaviorStrength()), 16, 128), 128);
+			level.sendParticles(ParticleTypes.END_ROD, true, false, center.x, center.y + 0.6, center.z, count, radius * 0.6, 0.3, radius * 0.6, 0.003);
+			return;
+		}
+
+		if (variant == 5) {
+			// Belt: fireflies released along a slowly rotating ring at mid height.
+			double ringRadius = radius * 0.55;
+			int points = ctx.scaleCount(Mth.clamp((int) Math.round(Math.PI * 2.0 * ringRadius / 1.5 * def.behaviorStrength()), 10, 96), 96);
+			double phase = gameTime / 10.0 * 0.25;
+			for (int i = 0; i < points; i++) {
+				double angle = phase + Math.PI * 2.0 * i / points;
+				double x = center.x + Math.cos(angle) * ringRadius;
+				double z = center.z + Math.sin(angle) * ringRadius;
+				level.sendParticles(ParticleTypes.FIREFLY, true, false, x, center.y + radius * 0.4, z, 1, 0.15, 0.3, 0.15, 0.005);
+			}
+			return;
+		}
+
+		// v6: sparse fireflies with happy-villager glints; 48 + 16 = 64 particles/pulse max.
+		int count = ctx.scaleCount(Mth.clamp((int) (radius * 1.0F * def.behaviorStrength()), 6, 48), 48);
+		level.sendParticles(ParticleTypes.FIREFLY, true, false, center.x, center.y + radius * 0.35, center.z, count, radius * 0.55, radius * 0.3, radius * 0.55, 0.01);
+		level.sendParticles(ParticleTypes.HAPPY_VILLAGER, true, false, center.x, center.y + radius * 0.35, center.z, Math.min(16, count / 3), radius * 0.5, radius * 0.25, radius * 0.5, 0.0);
 	}
 }

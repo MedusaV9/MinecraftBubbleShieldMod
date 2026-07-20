@@ -41,13 +41,33 @@ public class EffectCatalogGameTests {
 		EffectRegistry.validate();
 		helper.assertTrue(EffectRegistry.COUNT == 105, "catalogue should contain exactly 105 effects");
 		helper.assertTrue(EffectRegistry.ALL.size() == EffectRegistry.COUNT, "registry should expose exactly " + EffectRegistry.COUNT + " effect definitions");
-		helper.assertTrue(InsideEffectBehavior.REGISTRY.size() == 35, "exactly 35 inside behaviors should be registered");
+		helper.assertTrue(InsideEffectBehavior.REGISTRY.size() == 50, "exactly 50 inside behaviors should be registered");
+
+		// Allowlist-aware usage rule: the 105-row catalogue uses every registered
+		// behavior EXCEPT the PENDING_BEHAVIORS staged for the 350-effect milestone,
+		// and never uses a pending behavior.
+		Set<String> used = new HashSet<>();
+		for (EffectDefinition def : EffectRegistry.ALL) {
+			used.add(def.insideBehaviorId());
+		}
+		helper.assertTrue(
+				used.size() == InsideEffectBehavior.REGISTRY.size() - EffectRegistry.PENDING_BEHAVIORS.size(),
+				"used behaviors (" + used.size() + ") plus pending allowlist (" + EffectRegistry.PENDING_BEHAVIORS.size()
+						+ ") should exactly cover the " + InsideEffectBehavior.REGISTRY.size() + " registered behaviors");
+		for (String pending : EffectRegistry.PENDING_BEHAVIORS) {
+			helper.assertTrue(InsideEffectBehavior.REGISTRY.containsKey(pending), "pending behavior is not registered: " + pending);
+			helper.assertTrue(!used.contains(pending), "pending behavior must not be used by the catalogue yet: " + pending);
+		}
+
 		helper.succeed();
 	}
 
 	/**
 	 * Ticks every effect's inside behavior directly for several game times and checks
 	 * that every effect's ambient sound id resolves in the vanilla sound registry.
+	 * Then ticks the FULL behavior matrix — all 50 registered behaviors (including
+	 * the pending ones not yet used by the catalogue) across variants 0..6 — so no
+	 * variant path can throw.
 	 */
 	@GameTest(padding = 16)
 	public void allBehaviorsSmoke(GameTestHelper helper) {
@@ -70,6 +90,18 @@ public class EffectCatalogGameTests {
 			helper.assertTrue(
 					BuiltInRegistries.SOUND_EVENT.containsKey(soundId),
 					"effect " + def.id() + " ambient sound does not resolve: " + soundId);
+		}
+
+		// Full matrix: every registered behavior x variants 0..6 under a synthetic
+		// definition, on both shapes' geometry inputs via the placed projector's shape.
+		for (Map.Entry<String, InsideEffectBehavior> entry : InsideEffectBehavior.REGISTRY.entrySet()) {
+			for (int variant = 0; variant <= 6; variant++) {
+				EffectDefinition def = EffectDefinition.of(0, 0xFFFF8800, 0xFF884400, SurfaceTemplate.AURORA, 0.5F, 0.8F,
+						entry.getKey(), variant, 1.0F, GuardStyle.NONE, ContextProfile.NONE, "block.beacon.ambient", 1.0F, 160, "tint");
+				for (long gameTime : new long[] {0L, 10L, 20L, 30L, 40L, 100L, 200L}) {
+					entry.getValue().tick(level, center, 6.0F, be.getShieldState().shape, def, gameTime, ContextState.NEUTRAL);
+				}
+			}
 		}
 
 		helper.succeed();
@@ -175,9 +207,10 @@ public class EffectCatalogGameTests {
 
 	/**
 	 * Every axis label used by the effect-picker tooltips resolves to a lang key:
-	 * 16 surface templates, 35 inside behaviors, 7 guard styles and 6 context profiles.
-	 * Keys are derived from the live enums/registry so the tooltip composition in
-	 * {@code EffectPickerScreen} and the lang files cannot drift apart.
+	 * 16 surface templates, 50 inside behaviors (pending ones included), 7 guard
+	 * styles and 6 context profiles. Keys are derived from the live enums/registry
+	 * so the tooltip composition in {@code EffectPickerScreen} and the lang files
+	 * cannot drift apart.
 	 */
 	@GameTest
 	public void axisLangKeysComplete(GameTestHelper helper) {
@@ -188,7 +221,7 @@ public class EffectCatalogGameTests {
 			helper.assertTrue(enKeys.contains(key), "missing lang key: " + key);
 		}
 
-		helper.assertTrue(InsideEffectBehavior.REGISTRY.size() == 35, "expected 35 registered behaviors");
+		helper.assertTrue(InsideEffectBehavior.REGISTRY.size() == 50, "expected 50 registered behaviors");
 		for (String behaviorId : InsideEffectBehavior.REGISTRY.keySet()) {
 			String key = "behavior.bubbleshield." + behaviorId;
 			helper.assertTrue(enKeys.contains(key), "missing lang key: " + key);

@@ -6,6 +6,7 @@ import com.bubbleshield.effect.InsideEffectBehavior;
 import com.bubbleshield.shield.ShieldShape;
 
 import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.core.particles.SimpleParticleType;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
@@ -17,6 +18,10 @@ import net.minecraft.world.phys.Vec3;
  * <li>v0: 3 columns with a gentle twist</li>
  * <li>v1: 5 columns twisting twice as tightly</li>
  * <li>v2: 7 taller columns counter-twisting against the slow ring drift</li>
+ * <li>v3: 4 columns of shimmering portal motes</li>
+ * <li>v4: 6 inky tendrils of squid ink</li>
+ * <li>v5: 5 columns of witch magic</li>
+ * <li>v6: 9 slender fast counter-twisting columns</li>
  * </ul>
  */
 public final class VoidTendrils implements InsideEffectBehavior {
@@ -35,12 +40,26 @@ public final class VoidTendrils implements InsideEffectBehavior {
 		int columns = switch (variant) {
 			case 1 -> 5;
 			case 2 -> 7;
+			case 3 -> 4;
+			case 4 -> 6;
+			case 5 -> 5;
+			case 6 -> 9;
 			default -> 3;
 		};
 		double twistRate = switch (variant) {
 			case 1 -> 2.4;
 			case 2 -> -1.8;
+			case 3 -> 1.6;
+			case 4 -> 0.9;
+			case 5 -> -1.4;
+			case 6 -> -3.2;
 			default -> 1.2;
+		};
+		SimpleParticleType particle = switch (variant) {
+			case 3 -> ParticleTypes.PORTAL;
+			case 4 -> ParticleTypes.SQUID_INK;
+			case 5 -> ParticleTypes.WITCH;
+			default -> ParticleTypes.REVERSE_PORTAL;
 		};
 		double height = radius * (variant == 2 ? 0.8 : 0.6);
 		double helixRadius = Math.min(radius * 0.12, 1.5);
@@ -69,7 +88,7 @@ public final class VoidTendrils implements InsideEffectBehavior {
 				}
 
 				// Reverse portal motes drift further upward on their own after spawning.
-				level.sendParticles(ParticleTypes.REVERSE_PORTAL, true, false, center.x + dx, center.y + dy, center.z + dz, 1, 0.02, 0.05, 0.02, 0.0);
+				level.sendParticles(particle, true, false, center.x + dx, center.y + dy, center.z + dz, 1, 0.02, 0.05, 0.02, 0.0);
 			}
 		}
 	}

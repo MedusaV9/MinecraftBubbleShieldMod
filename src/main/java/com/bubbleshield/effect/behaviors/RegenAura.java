@@ -21,6 +21,10 @@ import net.minecraft.world.phys.Vec3;
  * <li>v0: Regeneration I</li>
  * <li>v1: Regeneration I plus heart particles above each player</li>
  * <li>v2: Regeneration I plus Absorption I</li>
+ * <li>v3: Regeneration I plus happy-villager sparkles</li>
+ * <li>v4: a shorter but stronger Regeneration II</li>
+ * <li>v5: Regeneration I plus a small heart ring circling each player</li>
+ * <li>v6: Regeneration I plus Health Boost I</li>
  * </ul>
  */
 public final class RegenAura implements InsideEffectBehavior {
@@ -40,11 +44,27 @@ public final class RegenAura implements InsideEffectBehavior {
 				continue;
 			}
 
-			player.addEffect(new MobEffectInstance(MobEffects.REGENERATION, DURATION_TICKS, 0));
+			if (variant == 4) {
+				player.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 40, 1));
+			} else {
+				player.addEffect(new MobEffectInstance(MobEffects.REGENERATION, DURATION_TICKS, 0));
+			}
+
 			if (variant == 1) {
 				level.sendParticles(ParticleTypes.HEART, true, false, player.getX(), player.getY() + 1.5, player.getZ(), ctx.scaleCount(2, 8), 0.3, 0.3, 0.3, 0.0);
 			} else if (variant == 2) {
 				player.addEffect(new MobEffectInstance(MobEffects.ABSORPTION, DURATION_TICKS, 0));
+			} else if (variant == 3) {
+				level.sendParticles(ParticleTypes.HAPPY_VILLAGER, true, false, player.getX(), player.getY() + 1.2, player.getZ(), ctx.scaleCount(3, 8), 0.4, 0.5, 0.4, 0.0);
+			} else if (variant == 5) {
+				double spin = gameTime / 10.0 * 0.6;
+				for (int i = 0; i < 4; i++) {
+					double angle = spin + Math.PI * 2.0 * i / 4;
+					level.sendParticles(ParticleTypes.HEART, true, false,
+							player.getX() + Math.cos(angle) * 0.9, player.getY() + 1.0, player.getZ() + Math.sin(angle) * 0.9, 1, 0.02, 0.02, 0.02, 0.0);
+				}
+			} else if (variant == 6) {
+				player.addEffect(new MobEffectInstance(MobEffects.HEALTH_BOOST, DURATION_TICKS, 0));
 			}
 		}
 	}

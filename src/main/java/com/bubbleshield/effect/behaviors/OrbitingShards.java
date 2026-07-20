@@ -5,8 +5,9 @@ import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.InsideEffectBehavior;
 import com.bubbleshield.shield.ShieldShape;
 
+import net.minecraft.core.particles.DustParticleOptions;
+import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
-import net.minecraft.core.particles.SimpleParticleType;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
@@ -18,6 +19,10 @@ import net.minecraft.world.phys.Vec3;
  * <li>v0: one tilted end rod orbit ring</li>
  * <li>v1: two crossed orbits</li>
  * <li>v2: three orbits of electric sparks</li>
+ * <li>v3: two crossed orbits of glow motes</li>
+ * <li>v4: three orbits of palette-colored dust</li>
+ * <li>v5: one fast orbit of firework sparks</li>
+ * <li>v6: four orbits alternating end rod motes and electric sparks</li>
  * </ul>
  */
 public final class OrbitingShards implements InsideEffectBehavior {
@@ -32,12 +37,29 @@ public final class OrbitingShards implements InsideEffectBehavior {
 			return;
 		}
 
-		int orbits = def.behaviorVariant() + 1;
-		SimpleParticleType particle = def.behaviorVariant() == 2 ? ParticleTypes.ELECTRIC_SPARK : ParticleTypes.END_ROD;
+		int variant = def.behaviorVariant();
+		int orbits = switch (variant) {
+			case 3 -> 2;
+			case 4 -> 3;
+			case 5 -> 1;
+			case 6 -> 4;
+			default -> variant + 1;
+		};
+		DustParticleOptions dust = variant == 4
+				? new DustParticleOptions(ctx.pickColor(def.argbPrimary(), def.argbSecondary()) & 0xFFFFFF, 1.1F)
+				: null;
 		double orbitRadius = radius * 0.7;
 		int pointsPerOrbit = ctx.scaleCount(Mth.clamp((int) Math.round(orbitRadius * 2.0 * def.behaviorStrength()), 8, MAX_POINTS / orbits), MAX_POINTS / orbits);
-		double phase = gameTime / 10.0 * 0.35;
+		double phase = gameTime / 10.0 * (variant == 5 ? 0.9 : 0.35);
 		for (int orbit = 0; orbit < orbits; orbit++) {
+			ParticleOptions particle = switch (variant) {
+				case 2 -> ParticleTypes.ELECTRIC_SPARK;
+				case 3 -> ParticleTypes.GLOW;
+				case 4 -> dust;
+				case 5 -> ParticleTypes.FIREWORK;
+				case 6 -> orbit % 2 == 0 ? ParticleTypes.END_ROD : ParticleTypes.ELECTRIC_SPARK;
+				default -> ParticleTypes.END_ROD;
+			};
 			// Each orbit plane is tilted and rotated so multiple orbits visibly cross.
 			double tilt = Math.toRadians(35.0) + orbit * (Math.PI / (orbits + 1));
 			double cosTilt = Math.cos(tilt);

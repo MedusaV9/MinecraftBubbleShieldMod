@@ -6,6 +6,7 @@ import com.bubbleshield.effect.InsideEffectBehavior;
 import com.bubbleshield.shield.ShieldGeometry;
 import com.bubbleshield.shield.ShieldShape;
 
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
@@ -21,6 +22,10 @@ import net.minecraft.world.phys.Vec3;
  * <li>v0: Slowness II</li>
  * <li>v1: Slowness I plus Weakness I</li>
  * <li>v2: Slowness III plus Mining Fatigue I</li>
+ * <li>v3: Slowness II plus Blindness</li>
+ * <li>v4: Slowness I plus Glowing, marking intruders through walls</li>
+ * <li>v5: Slowness II plus a squid-ink drip on each hostile</li>
+ * <li>v6: a short but heavy Slowness V clamp</li>
  * </ul>
  */
 public final class SlowHostiles implements InsideEffectBehavior {
@@ -44,15 +49,22 @@ public final class SlowHostiles implements InsideEffectBehavior {
 			}
 
 			int slownessAmplifier = switch (variant) {
-				case 1 -> 0;
+				case 1, 4 -> 0;
 				case 2 -> 2;
+				case 6 -> 4;
 				default -> 1;
 			};
-			mob.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, DURATION_TICKS, slownessAmplifier));
+			mob.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, variant == 6 ? 30 : DURATION_TICKS, slownessAmplifier));
 			if (variant == 1) {
 				mob.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, DURATION_TICKS, 0));
 			} else if (variant == 2) {
 				mob.addEffect(new MobEffectInstance(MobEffects.MINING_FATIGUE, DURATION_TICKS, 0));
+			} else if (variant == 3) {
+				mob.addEffect(new MobEffectInstance(MobEffects.BLINDNESS, DURATION_TICKS, 0));
+			} else if (variant == 4) {
+				mob.addEffect(new MobEffectInstance(MobEffects.GLOWING, DURATION_TICKS, 0));
+			} else if (variant == 5) {
+				level.sendParticles(ParticleTypes.SQUID_INK, true, false, mob.getX(), mob.getY() + mob.getBbHeight(), mob.getZ(), ctx.scaleCount(3, 8), 0.2, 0.3, 0.2, 0.01);
 			}
 		}
 	}

@@ -6,6 +6,7 @@ import com.bubbleshield.effect.InsideEffectBehavior;
 import com.bubbleshield.shield.ShieldGeometry;
 import com.bubbleshield.shield.ShieldShape;
 
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
@@ -20,6 +21,10 @@ import net.minecraft.world.phys.Vec3;
  * <li>v0: Night Vision</li>
  * <li>v1: Night Vision plus Slow Falling</li>
  * <li>v2: Night Vision plus Luck</li>
+ * <li>v3: Night Vision plus Glowing, so companions stay visible</li>
+ * <li>v4: Night Vision plus an end rod halo above each player</li>
+ * <li>v5: Night Vision plus Speed I</li>
+ * <li>v6: Night Vision plus Jump Boost I</li>
  * </ul>
  */
 public final class NightGlowAura implements InsideEffectBehavior {
@@ -49,6 +54,14 @@ public final class NightGlowAura implements InsideEffectBehavior {
 				player.addEffect(new MobEffectInstance(MobEffects.SLOW_FALLING, DURATION_TICKS, 0));
 			} else if (variant == 2) {
 				player.addEffect(new MobEffectInstance(MobEffects.LUCK, DURATION_TICKS, 0));
+			} else if (variant == 3) {
+				player.addEffect(new MobEffectInstance(MobEffects.GLOWING, DURATION_TICKS, 0));
+			} else if (variant == 4) {
+				level.sendParticles(ParticleTypes.END_ROD, true, false, player.getX(), player.getY() + 2.4, player.getZ(), ctx.scaleCount(2, 6), 0.3, 0.1, 0.3, 0.0);
+			} else if (variant == 5) {
+				player.addEffect(new MobEffectInstance(MobEffects.SPEED, DURATION_TICKS, 0));
+			} else if (variant == 6) {
+				player.addEffect(new MobEffectInstance(MobEffects.JUMP_BOOST, DURATION_TICKS, 0));
 			}
 		}
 	}

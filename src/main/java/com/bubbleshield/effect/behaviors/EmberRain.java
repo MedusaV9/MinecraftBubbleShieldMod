@@ -17,6 +17,10 @@ import net.minecraft.world.phys.Vec3;
  * <li>v0: flame particles</li>
  * <li>v1: falling lava droplets plus lava pops</li>
  * <li>v2: soul fire flames ("cold fire")</li>
+ * <li>v3: green copper-fire flames</li>
+ * <li>v4: mixed flames and falling lava with landing pops at the floor</li>
+ * <li>v5: a gentle drizzle of small flames</li>
+ * <li>v6: an ember storm of flames laced with cosy campfire smoke</li>
  * </ul>
  */
 public final class EmberRain implements InsideEffectBehavior {
@@ -60,14 +64,43 @@ public final class EmberRain implements InsideEffectBehavior {
 			return;
 		}
 
-		int count = ctx.scaleCount(Mth.clamp((int) (radius * 2.5F * def.behaviorStrength()), 20, 128), 128);
-		level.sendParticles(
-				ParticleTypes.SOUL_FIRE_FLAME,
-				true, false,
-				center.x, center.y + radius * 0.6, center.z,
-				count,
-				radius * 0.5, radius * 0.25, radius * 0.5,
-				0.02
-		);
+		if (variant == 2) {
+			int count = ctx.scaleCount(Mth.clamp((int) (radius * 2.5F * def.behaviorStrength()), 20, 128), 128);
+			level.sendParticles(
+					ParticleTypes.SOUL_FIRE_FLAME,
+					true, false,
+					center.x, center.y + radius * 0.6, center.z,
+					count,
+					radius * 0.5, radius * 0.25, radius * 0.5,
+					0.02
+			);
+			return;
+		}
+
+		if (variant == 3) {
+			int count = ctx.scaleCount(Mth.clamp((int) (radius * 2.5F * def.behaviorStrength()), 20, 128), 128);
+			level.sendParticles(ParticleTypes.COPPER_FIRE_FLAME, true, false, center.x, center.y + radius * 0.6, center.z, count, radius * 0.5, radius * 0.25, radius * 0.5, 0.02);
+			return;
+		}
+
+		if (variant == 4) {
+			// 56 flames + 56 lava droplets + 16 landing pops = 128 particles/pulse max.
+			int count = ctx.scaleCount(Mth.clamp((int) (radius * 1.5F * def.behaviorStrength()), 12, 56), 56);
+			level.sendParticles(ParticleTypes.FLAME, true, false, center.x, center.y + radius * 0.6, center.z, count, radius * 0.5, radius * 0.25, radius * 0.5, 0.02);
+			level.sendParticles(ParticleTypes.FALLING_LAVA, true, false, center.x, center.y + radius * 0.5, center.z, count, radius * 0.5, radius * 0.2, radius * 0.5, 0.0);
+			level.sendParticles(ParticleTypes.LANDING_LAVA, true, false, center.x, center.y + 0.2, center.z, Math.min(16, count / 3), radius * 0.4, 0.1, radius * 0.4, 0.0);
+			return;
+		}
+
+		if (variant == 5) {
+			int count = ctx.scaleCount(Mth.clamp((int) (radius * 3.0F * def.behaviorStrength()), 24, 128), 128);
+			level.sendParticles(ParticleTypes.SMALL_FLAME, true, false, center.x, center.y + radius * 0.5, center.z, count, radius * 0.55, radius * 0.3, radius * 0.55, 0.005);
+			return;
+		}
+
+		// v6: flame storm with cosy campfire smoke wisps; 96 + 24 = 120 particles/pulse max.
+		int flames = ctx.scaleCount(Mth.clamp((int) (radius * 3.0F * def.behaviorStrength()), 24, 96), 96);
+		level.sendParticles(ParticleTypes.FLAME, true, false, center.x, center.y + radius * 0.6, center.z, flames, radius * 0.5, radius * 0.25, radius * 0.5, 0.04);
+		level.sendParticles(ParticleTypes.CAMPFIRE_COSY_SMOKE, true, false, center.x, center.y + radius * 0.3, center.z, Math.min(24, flames / 4), radius * 0.45, radius * 0.2, radius * 0.45, 0.005);
 	}
 }

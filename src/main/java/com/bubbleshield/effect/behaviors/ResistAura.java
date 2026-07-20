@@ -6,6 +6,7 @@ import com.bubbleshield.effect.InsideEffectBehavior;
 import com.bubbleshield.shield.ShieldGeometry;
 import com.bubbleshield.shield.ShieldShape;
 
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
@@ -20,6 +21,10 @@ import net.minecraft.world.phys.Vec3;
  * <li>v0: Resistance I</li>
  * <li>v1: Resistance I plus Fire Resistance I</li>
  * <li>v2: Resistance I plus Absorption I</li>
+ * <li>v3: Resistance II</li>
+ * <li>v4: Resistance I plus Slow Falling</li>
+ * <li>v5: Resistance I plus an enchanted-hit shimmer</li>
+ * <li>v6: the full fortress: Resistance, Fire Resistance and Absorption</li>
  * </ul>
  */
 public final class ResistAura implements InsideEffectBehavior {
@@ -39,10 +44,17 @@ public final class ResistAura implements InsideEffectBehavior {
 				continue;
 			}
 
-			player.addEffect(new MobEffectInstance(MobEffects.RESISTANCE, DURATION_TICKS, 0));
+			player.addEffect(new MobEffectInstance(MobEffects.RESISTANCE, DURATION_TICKS, variant == 3 ? 1 : 0));
 			if (variant == 1) {
 				player.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, DURATION_TICKS, 0));
 			} else if (variant == 2) {
+				player.addEffect(new MobEffectInstance(MobEffects.ABSORPTION, DURATION_TICKS, 0));
+			} else if (variant == 4) {
+				player.addEffect(new MobEffectInstance(MobEffects.SLOW_FALLING, DURATION_TICKS, 0));
+			} else if (variant == 5) {
+				level.sendParticles(ParticleTypes.ENCHANTED_HIT, true, false, player.getX(), player.getY() + 1.0, player.getZ(), ctx.scaleCount(3, 8), 0.4, 0.5, 0.4, 0.0);
+			} else if (variant == 6) {
+				player.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, DURATION_TICKS, 0));
 				player.addEffect(new MobEffectInstance(MobEffects.ABSORPTION, DURATION_TICKS, 0));
 			}
 		}

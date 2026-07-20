@@ -21,6 +21,10 @@ import net.minecraft.world.phys.Vec3;
  * <li>v0: Jump Boost II</li>
  * <li>v1: Jump Boost II plus cloud puffs at the players' feet</li>
  * <li>v2: Jump Boost II plus Slow Falling for soft landings</li>
+ * <li>v3: Jump Boost III</li>
+ * <li>v4: Jump Boost II plus Speed I</li>
+ * <li>v5: Jump Boost II plus poof launch puffs</li>
+ * <li>v6: a short burst of Jump Boost IV with Slow Falling</li>
  * </ul>
  */
 public final class LeapAura implements InsideEffectBehavior {
@@ -40,11 +44,20 @@ public final class LeapAura implements InsideEffectBehavior {
 				continue;
 			}
 
-			player.addEffect(new MobEffectInstance(MobEffects.JUMP_BOOST, DURATION_TICKS, 1));
+			int amplifier = switch (variant) {
+				case 3 -> 2;
+				case 6 -> 3;
+				default -> 1;
+			};
+			player.addEffect(new MobEffectInstance(MobEffects.JUMP_BOOST, variant == 6 ? 30 : DURATION_TICKS, amplifier));
 			if (variant == 1) {
 				level.sendParticles(ParticleTypes.CLOUD, true, false, player.getX(), player.getY() + 0.1, player.getZ(), ctx.scaleCount(3, 8), 0.3, 0.1, 0.3, 0.01);
-			} else if (variant == 2) {
+			} else if (variant == 2 || variant == 6) {
 				player.addEffect(new MobEffectInstance(MobEffects.SLOW_FALLING, DURATION_TICKS, 0));
+			} else if (variant == 4) {
+				player.addEffect(new MobEffectInstance(MobEffects.SPEED, DURATION_TICKS, 0));
+			} else if (variant == 5) {
+				level.sendParticles(ParticleTypes.POOF, true, false, player.getX(), player.getY() + 0.1, player.getZ(), ctx.scaleCount(2, 6), 0.2, 0.05, 0.2, 0.01);
 			}
 		}
 	}

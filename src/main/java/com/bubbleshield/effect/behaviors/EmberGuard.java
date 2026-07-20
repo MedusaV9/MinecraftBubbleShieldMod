@@ -7,6 +7,7 @@ import com.bubbleshield.shield.ShieldGeometry;
 import com.bubbleshield.shield.ShieldShape;
 
 import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.core.particles.SimpleParticleType;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
@@ -23,6 +24,10 @@ import net.minecraft.world.phys.Vec3;
  * <li>v0: Fire Resistance</li>
  * <li>v1: Fire Resistance plus a small-flame ring circling the projector</li>
  * <li>v2: Fire Resistance plus dripping-lava accents drifting down mid-bubble</li>
+ * <li>v3: Fire Resistance plus a counter-rotating copper-fire ring</li>
+ * <li>v4: Fire Resistance plus a soul-fire ring of cold flames</li>
+ * <li>v5: Fire Resistance plus sputtering lava-pop jets on the floor</li>
+ * <li>v6: Fire Resistance plus a campfire smoke column above the projector</li>
  * </ul>
  */
 public final class EmberGuard implements InsideEffectBehavior {
@@ -47,17 +52,41 @@ public final class EmberGuard implements InsideEffectBehavior {
 			player.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, DURATION_TICKS, 0));
 		}
 
-		if (variant == 1) {
-			// A rotating ring of small flames around the projector at knee height.
-			double ringRadius = radius * 0.45;
+		if (variant == 1 || variant == 3 || variant == 4) {
+			// A rotating ring of flames around the projector at knee height; v3 runs a
+			// wider counter-rotating copper ring, v4 a slow ring of cold soul flames.
+			double ringRadius = radius * (variant == 3 ? 0.6 : 0.45);
 			int points = ctx.scaleCount(Mth.clamp((int) Math.round(Math.PI * 2.0 * ringRadius / 1.5), 8, 48), 48);
-			double phase = gameTime / 10.0 * 0.3;
+			double phase = gameTime / 10.0 * switch (variant) {
+				case 3 -> -0.45;
+				case 4 -> 0.15;
+				default -> 0.3;
+			};
+			SimpleParticleType flame = switch (variant) {
+				case 3 -> ParticleTypes.COPPER_FIRE_FLAME;
+				case 4 -> ParticleTypes.SOUL_FIRE_FLAME;
+				default -> ParticleTypes.SMALL_FLAME;
+			};
 			for (int i = 0; i < points; i++) {
 				double angle = phase + Math.PI * 2.0 * i / points;
 				double x = center.x + Math.cos(angle) * ringRadius;
 				double z = center.z + Math.sin(angle) * ringRadius;
-				level.sendParticles(ParticleTypes.SMALL_FLAME, true, false, x, center.y + 0.5, z, 1, 0.05, 0.05, 0.05, 0.0);
+				level.sendParticles(flame, true, false, x, center.y + 0.5, z, 1, 0.05, 0.05, 0.05, 0.0);
 			}
+		} else if (variant == 5) {
+			// Sputtering floor jets: a few random lava pops erupting at ground level.
+			RandomSource random = level.getRandom();
+			int jets = ctx.scaleCount(4, 8);
+			for (int i = 0; i < jets; i++) {
+				double angle = random.nextDouble() * Math.PI * 2.0;
+				double dist = Math.sqrt(random.nextDouble()) * radius * 0.7;
+				level.sendParticles(ParticleTypes.LAVA, true, false,
+						center.x + Math.cos(angle) * dist, center.y + 0.2, center.z + Math.sin(angle) * dist, 4, 0.15, 0.1, 0.15, 0.0);
+			}
+		} else if (variant == 6) {
+			// A cosy smoke column above the projector, capped inside the shell.
+			int puffs = ctx.scaleCount(Mth.clamp((int) (radius * 0.8F * def.behaviorStrength()), 4, 24), 24);
+			level.sendParticles(ParticleTypes.CAMPFIRE_COSY_SMOKE, true, false, center.x, center.y + 1.0, center.z, puffs, 0.4, radius * 0.3, 0.4, 0.004);
 		} else if (variant == 2) {
 			// Sparse lava droplets drifting down from mid-bubble height. The gaussian
 			// spread of a single count>0 sendParticles call is unbounded (offsets are

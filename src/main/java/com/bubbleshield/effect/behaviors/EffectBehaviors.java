@@ -3,7 +3,9 @@ package com.bubbleshield.effect.behaviors;
 import com.bubbleshield.effect.InsideEffectBehavior;
 
 /**
- * Registers the 35 built-in {@link InsideEffectBehavior} implementations.
+ * Registers the 50 built-in {@link InsideEffectBehavior} implementations
+ * (35 legacy behaviors used by the current 105-effect catalogue plus 15 new
+ * behaviors staged for the 350-effect milestone).
  */
 public final class EffectBehaviors {
 	private EffectBehaviors() {
@@ -50,5 +52,20 @@ public final class EffectBehaviors {
 		InsideEffectBehavior.register(HoneyDrip.ID, new HoneyDrip());
 		InsideEffectBehavior.register(WaxGlow.ID, new WaxGlow());
 		InsideEffectBehavior.register(StormCage.ID, new StormCage());
+		InsideEffectBehavior.register(GravityWells.ID, new GravityWells());
+		InsideEffectBehavior.register(AuroraRibbons.ID, new AuroraRibbons());
+		InsideEffectBehavior.register(SandDevils.ID, new SandDevils());
+		InsideEffectBehavior.register(GlassShards.ID, new GlassShards());
+		InsideEffectBehavior.register(MothSwarm.ID, new MothSwarm());
+		InsideEffectBehavior.register(RuneOrbit.ID, new RuneOrbit());
+		InsideEffectBehavior.register(DripStalactite.ID, new DripStalactite());
+		InsideEffectBehavior.register(GeyserVents.ID, new GeyserVents());
+		InsideEffectBehavior.register(StaticOrbs.ID, new StaticOrbs());
+		InsideEffectBehavior.register(ShadowVeil.ID, new ShadowVeil());
+		InsideEffectBehavior.register(PrismBeams.ID, new PrismBeams());
+		InsideEffectBehavior.register(PollenHaze.ID, new PollenHaze());
+		InsideEffectBehavior.register(TidePools.ID, new TidePools());
+		InsideEffectBehavior.register(EmberSpiral.ID, new EmberSpiral());
+		InsideEffectBehavior.register(CometTails.ID, new CometTails());
 	}
 }

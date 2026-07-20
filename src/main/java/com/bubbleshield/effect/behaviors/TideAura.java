@@ -21,6 +21,10 @@ import net.minecraft.world.phys.Vec3;
  * <li>v0: Water Breathing</li>
  * <li>v1: Water Breathing plus Dolphin's Grace with dolphin trail particles</li>
  * <li>v2: Water Breathing plus Conduit Power</li>
+ * <li>v3: Water Breathing plus a splash ring circling each player</li>
+ * <li>v4: Water Breathing plus Dolphin's Grace and Speed I</li>
+ * <li>v5: Water Breathing plus nautilus glints swirling to each player</li>
+ * <li>v6: Water Breathing plus Regeneration while actually in water</li>
  * </ul>
  */
 public final class TideAura implements InsideEffectBehavior {
@@ -46,6 +50,23 @@ public final class TideAura implements InsideEffectBehavior {
 				level.sendParticles(ParticleTypes.DOLPHIN, true, false, player.getX(), player.getY() + 0.7, player.getZ(), ctx.scaleCount(4, 12), 0.4, 0.4, 0.4, 0.0);
 			} else if (variant == 2) {
 				player.addEffect(new MobEffectInstance(MobEffects.CONDUIT_POWER, DURATION_TICKS, 0));
+			} else if (variant == 3) {
+				double spin = gameTime / 10.0 * 0.5;
+				for (int i = 0; i < 5; i++) {
+					double angle = spin + Math.PI * 2.0 * i / 5;
+					level.sendParticles(ParticleTypes.SPLASH, true, false,
+							player.getX() + Math.cos(angle) * 1.0, player.getY() + 0.6, player.getZ() + Math.sin(angle) * 1.0, 1, 0.05, 0.15, 0.05, 0.02);
+				}
+			} else if (variant == 4) {
+				player.addEffect(new MobEffectInstance(MobEffects.DOLPHINS_GRACE, DURATION_TICKS, 0));
+				player.addEffect(new MobEffectInstance(MobEffects.SPEED, DURATION_TICKS, 0));
+			} else if (variant == 5) {
+				// Nautilus glints fly towards the player (count=0 fly-towards packet form).
+				double spawnAngle = gameTime / 10.0 * 0.7;
+				level.sendParticles(ParticleTypes.NAUTILUS, true, false, player.getX(), player.getY() + 1.0, player.getZ(), 0,
+						Math.cos(spawnAngle) * 1.6, 0.5, Math.sin(spawnAngle) * 1.6, 1.0);
+			} else if (variant == 6 && player.isInWater()) {
+				player.addEffect(new MobEffectInstance(MobEffects.REGENERATION, DURATION_TICKS, 0));
 			}
 		}
 	}

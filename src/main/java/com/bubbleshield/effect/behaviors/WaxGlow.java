@@ -20,6 +20,10 @@ import net.minecraft.world.phys.Vec3;
  * <li>v0: one wax-on ring circling at chest height</li>
  * <li>v1: wax-on and wax-off rings counter-rotating on a wider orbit</li>
  * <li>v2: a fast wax-on helix bobbing between feet and head</li>
+ * <li>v3: a copper-scrape glint ring</li>
+ * <li>v4: glow and wax-on rings counter-rotating at two heights</li>
+ * <li>v5: a fast bobbing ring of electric sparks</li>
+ * <li>v6: a small end rod halo hovering above each player's head</li>
  * </ul>
  */
 public final class WaxGlow implements InsideEffectBehavior {
@@ -34,8 +38,24 @@ public final class WaxGlow implements InsideEffectBehavior {
 		}
 
 		int variant = def.behaviorVariant();
-		double orbitRadius = variant == 1 ? 1.3 : 0.8;
-		double spin = gameTime / 10.0 * (variant == 2 ? 1.1 : 0.45);
+		double orbitRadius = switch (variant) {
+			case 1 -> 1.3;
+			case 3 -> 0.9;
+			case 4 -> 1.1;
+			case 6 -> 0.5;
+			default -> 0.8;
+		};
+		double spin = gameTime / 10.0 * switch (variant) {
+			case 2 -> 1.1;
+			case 5 -> 1.5;
+			default -> 0.45;
+		};
+		SimpleParticleType ringParticle = switch (variant) {
+			case 3 -> ParticleTypes.SCRAPE;
+			case 5 -> ParticleTypes.ELECTRIC_SPARK;
+			case 6 -> ParticleTypes.END_ROD;
+			default -> ParticleTypes.WAX_ON;
+		};
 		int points = ctx.scaleCount(variant == 0 ? 5 : 4, 8);
 		AABB box = AABB.ofSize(center, radius * 2.0, radius * 2.0, radius * 2.0);
 		for (Player player : level.getEntitiesOfClass(Player.class, box)) {
@@ -48,17 +68,29 @@ public final class WaxGlow implements InsideEffectBehavior {
 				double angle = spin + Math.PI * 2.0 * i / points;
 				double x = player.getX() + Math.cos(angle) * orbitRadius;
 				double z = player.getZ() + Math.sin(angle) * orbitRadius;
-				// v2 bobs the whole ring up and down the player's body like a helix scan.
-				double y = player.getY() + (variant == 2 ? 0.2 + 1.4 * (0.5 + 0.5 * Math.sin(spin + i)) : 1.1);
+				// v2 and v5 bob the whole ring up and down the body like a helix scan;
+				// v6 parks a small halo just above the head.
+				double y = player.getY() + switch (variant) {
+					case 2 -> 0.2 + 1.4 * (0.5 + 0.5 * Math.sin(spin + i));
+					case 5 -> 0.2 + 1.6 * (0.5 + 0.5 * Math.sin(spin * 1.3 + i));
+					case 6 -> 2.3;
+					default -> 1.1;
+				};
 				// A player hugging the wall puts parts of their orbit ring outside the
 				// shell; pull any such point back to 0.98r like the other behaviors.
-				sendContained(level, ParticleTypes.WAX_ON, center, radius, x, y, z);
+				sendContained(level, ringParticle, center, radius, x, y, z);
 				if (variant == 1) {
 					// The counter-rotating partner ring uses wax-off sparks.
 					double counterAngle = -angle + Math.PI / points;
 					sendContained(
 							level, ParticleTypes.WAX_OFF, center, radius,
 							player.getX() + Math.cos(counterAngle) * orbitRadius, player.getY() + 0.6, player.getZ() + Math.sin(counterAngle) * orbitRadius);
+				} else if (variant == 4) {
+					// The lower partner ring counter-rotates in glow motes.
+					double counterAngle = -angle + Math.PI / points;
+					sendContained(
+							level, ParticleTypes.GLOW, center, radius,
+							player.getX() + Math.cos(counterAngle) * orbitRadius, player.getY() + 0.5, player.getZ() + Math.sin(counterAngle) * orbitRadius);
 				}
 			}
 		}

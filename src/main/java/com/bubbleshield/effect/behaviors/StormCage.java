@@ -5,8 +5,11 @@ import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.InsideEffectBehavior;
 import com.bubbleshield.shield.ShieldShape;
 
+import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.phys.Vec3;
@@ -20,6 +23,10 @@ import net.minecraft.world.phys.Vec3;
  * <li>v0: one narrow band low above the equator</li>
  * <li>v1: two medium bands at mid latitudes</li>
  * <li>v2: three wide bands climbing to a polar crown</li>
+ * <li>v3: one broad equatorial storm belt with frequent gusts</li>
+ * <li>v4: four narrow fast bands with alternating spin</li>
+ * <li>v5: two bands mixing palette dust into the sparks</li>
+ * <li>v6: twin polar crowns crackling with periodic clicks</li>
  * </ul>
  */
 public final class StormCage implements InsideEffectBehavior {
@@ -39,15 +46,26 @@ public final class StormCage implements InsideEffectBehavior {
 		double[] latitudesDeg = switch (variant) {
 			case 1 -> new double[] {10.0, 45.0};
 			case 2 -> new double[] {20.0, 50.0, 75.0};
+			case 3 -> new double[] {8.0};
+			case 4 -> new double[] {12.0, 32.0, 52.0, 72.0};
+			case 5 -> new double[] {18.0, 48.0};
+			case 6 -> new double[] {62.0, 80.0};
 			default -> new double[] {15.0};
 		};
 		// Half-width of each band as jitter in latitude, in radians.
 		double halfWidth = Math.toRadians(switch (variant) {
 			case 1 -> 6.0;
 			case 2 -> 9.0;
+			case 3 -> 12.0;
+			case 4 -> 3.0;
+			case 5 -> 7.0;
+			case 6 -> 5.0;
 			default -> 3.0;
 		});
-		double spin = gameTime / 10.0 * 0.2;
+		double spin = gameTime / 10.0 * (variant == 4 ? 0.5 : 0.2);
+		DustParticleOptions dust = variant == 5
+				? new DustParticleOptions(ctx.pickColor(def.argbPrimary(), def.argbSecondary()) & 0xFFFFFF, 1.2F)
+				: null;
 		RandomSource random = level.getRandom();
 		int budgetPerBand = MAX_POINTS / latitudesDeg.length;
 		for (int band = 0; band < latitudesDeg.length; band++) {
@@ -62,12 +80,26 @@ public final class StormCage implements InsideEffectBehavior {
 				double x = center.x + Math.cos(angle) * ringRadius;
 				double y = center.y + radius * SHELL_FRAC * Math.sin(pointLatitude);
 				double z = center.z + Math.sin(angle) * ringRadius;
-				level.sendParticles(ParticleTypes.ELECTRIC_SPARK, true, false, x, y, z, 1, 0.05, 0.05, 0.05, 0.0);
-				// Every 4th point sheds a dust-plume wisp so the bands look like storm clouds.
-				if (i % 4 == 0) {
+				if (variant == 5 && i % 2 == 0) {
+					level.sendParticles(dust, true, false, x, y, z, 1, 0.05, 0.05, 0.05, 0.0);
+				} else {
+					level.sendParticles(ParticleTypes.ELECTRIC_SPARK, true, false, x, y, z, 1, 0.05, 0.05, 0.05, 0.0);
+				}
+
+				// Every 4th point sheds a dust-plume wisp so the bands look like storm clouds
+				// (skipped by v4, whose four bands already spend the whole particle budget).
+				if (i % 4 == 0 && variant != 4) {
 					level.sendParticles(ParticleTypes.DUST_PLUME, true, false, x, y, z, 1, 0.1, 0.1, 0.1, 0.0);
 				}
 			}
+		}
+
+		if (variant == 3 && gameTime % 20L == 0L) {
+			level.sendParticles(ParticleTypes.GUST, true, false, center.x, center.y + radius * 0.3, center.z, 2, radius * 0.4, radius * 0.15, radius * 0.4, 0.0);
+		}
+
+		if (variant == 6 && gameTime % 40L == 0L) {
+			level.playSound(null, center.x, center.y + radius * 0.7, center.z, SoundEvents.SCULK_CLICKING, SoundSource.AMBIENT, Mth.clamp(radius / 12.0F, 0.6F, 4.0F), 1.6F);
 		}
 	}
 }
