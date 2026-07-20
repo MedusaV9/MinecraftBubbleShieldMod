@@ -164,9 +164,13 @@ public class WorldIntegrationGameTests {
 			int firstPage = dispatcher.execute("bubbleshield list", player.createCommandSourceStack());
 			helper.assertTrue(firstPage == BubbleShieldCommand.LIST_PAGE_SIZE,
 					"list (page 1) should print 10 effects, got " + firstPage);
+			// COUNT-derived: the trailing page holds whatever the first LIST_PAGE_COUNT-1
+			// full pages leave over (a full LIST_PAGE_SIZE when COUNT divides evenly,
+			// e.g. 10 at the 350-effect catalogue -- NOT "COUNT % LIST_PAGE_SIZE" = 0).
+			int expectedLastPageSize = EffectRegistry.COUNT - (BubbleShieldCommand.LIST_PAGE_COUNT - 1) * BubbleShieldCommand.LIST_PAGE_SIZE;
 			int lastPage = dispatcher.execute("bubbleshield list " + BubbleShieldCommand.LIST_PAGE_COUNT, player.createCommandSourceStack());
-			helper.assertTrue(lastPage == EffectRegistry.COUNT % BubbleShieldCommand.LIST_PAGE_SIZE,
-					"the last page should print the trailing " + EffectRegistry.COUNT % BubbleShieldCommand.LIST_PAGE_SIZE + " effects, got " + lastPage);
+			helper.assertTrue(lastPage == expectedLastPageSize,
+					"the last page should print the trailing " + expectedLastPageSize + " effects, got " + lastPage);
 			int overflowPage = dispatcher.execute("bubbleshield list 9999", player.createCommandSourceStack());
 			helper.assertTrue(overflowPage == lastPage, "an out-of-range page should clamp to the last page, got " + overflowPage);
 			int info = dispatcher.execute("bubbleshield info 42", player.createCommandSourceStack());

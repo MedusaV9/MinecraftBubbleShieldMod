@@ -3,9 +3,9 @@ package com.bubbleshield.effect.behaviors;
 import com.bubbleshield.effect.InsideEffectBehavior;
 
 /**
- * Registers the 50 built-in {@link InsideEffectBehavior} implementations
- * (35 legacy behaviors used by the current 105-effect catalogue plus 15 new
- * behaviors staged for the 350-effect milestone).
+ * Registers the 50 built-in {@link InsideEffectBehavior} implementations. Every
+ * behavior is used by the 350-effect catalogue exactly 7 times (variants 0..6),
+ * an exact 50 x 7 cover enforced by {@link com.bubbleshield.effect.EffectRegistry#validate()}.
  */
 public final class EffectBehaviors {
 	private EffectBehaviors() {

@@ -12,15 +12,17 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 
 /**
- * The fixed catalogue of the 105 selectable shield effects (ids 0..104), organized as
- * 21 color families x 5 effects, but individually authored: every id is a unique row
+ * The fixed catalogue of the 350 selectable shield effects (ids 0..349), organized as
+ * 70 color families x 5 effects, but individually authored: every id is a unique row
  * in the flat table below (palette pair, surface, behavior@variant, guard style,
- * context profile, ambient sound and screen-fx template all vary per id).
+ * context profile, ambient sound and screen-fx template all vary per id). Ids 0..104
+ * are the frozen V1/V2 catalogue: their rows (and every artifact derived from them,
+ * e.g. the generated post_effect JSONs) must stay byte-identical across expansions.
  *
  * <p>Uniqueness is machine-enforced by {@link #validate()} and the gametests.
  */
 public final class EffectRegistry {
-	public static final int COUNT = 105;
+	public static final int COUNT = 350;
 
 	/**
 	 * Modulus/denominator of the per-id paramB/behaviorStrength derivations in
@@ -32,24 +34,15 @@ public final class EffectRegistry {
 	public static final int PARAM_CYCLE = 75;
 
 	/**
-	 * Number of behavior variants exercised by the current catalogue: every behavior
-	 * USED by a row must cover variants {@code 0..CATALOGUE_VARIANTS-1} exactly once
-	 * each. The behavior implementations themselves support variants 0..6; the
-	 * 105-row catalogue only exercises the first three.
+	 * Number of behavior variants exercised by the catalogue: every registered
+	 * behavior must be used by exactly {@code CATALOGUE_VARIANTS} rows, covering
+	 * variants {@code 0..CATALOGUE_VARIANTS-1} exactly once each. 50 behaviors x
+	 * 7 variants = an exact cover of the 350 rows. Ids 0..104 keep their original
+	 * variants 0..2; the expansion rows (105..349) contribute variants 3..6 of the
+	 * 35 legacy behaviors and all 7 variants of the 15 behaviors added for the
+	 * 350-effect catalogue.
 	 */
-	public static final int CATALOGUE_VARIANTS = 3;
-
-	/**
-	 * TEMPORARY (milestone C): behavior ids registered in
-	 * {@link InsideEffectBehavior#REGISTRY} but intentionally NOT yet referenced by
-	 * the 105-row catalogue. They are staged for the 350-effect catalogue; milestone
-	 * D wires them into new rows and REMOVES this allowlist ({@link #validate()}
-	 * then goes back to requiring every registered behavior to be used).
-	 */
-	public static final Set<String> PENDING_BEHAVIORS = Set.of(
-			"gravity_wells", "aurora_ribbons", "sand_devils", "glass_shards", "moth_swarm",
-			"rune_orbit", "drip_stalactite", "geyser_vents", "static_orbs", "shadow_veil",
-			"prism_beams", "pollen_haze", "tide_pools", "ember_spiral", "comet_tails");
+	public static final int CATALOGUE_VARIANTS = 7;
 
 	/** The full screen-fx template catalogue; every row's screenTemplate must be one of these. */
 	public static final Set<String> SCREEN_TEMPLATES = Set.of(
@@ -190,6 +183,300 @@ public final class EffectRegistry {
 		all.add(row(102, 0xFF6600, 0x0066FF, "petals", "honey_drip", 2, GuardStyle.NONE, ContextProfile.LOW_HEALTH_FRENZY, "block.honey_block.slide", 1.4F, 170, "pixelate"));
 		all.add(row(103, 0x00E5B0, 0xE5003F, "circuit", "wax_glow", 2, GuardStyle.DARK, ContextProfile.HEALTH_HUE, "block.chorus_flower.grow", 0.8F, 140, "radialblur"));
 		all.add(row(104, 0xFFE600, 0x3D0099, "interference", "storm_cage", 2, GuardStyle.GUST, ContextProfile.STORM_CHARGED, "block.bell.resonate", 1.2F, 125, "duotone"));
+		// F21 "Rose Quartz" (dusty rose x rosegold)
+		all.add(row(105, 0xF2859B, 0xB27150, "starfield", "particle_dome", 3, GuardStyle.SLOW, ContextProfile.HEALTH_HUE, "entity.allay.ambient_with_item", 1.0F, 170, "radialblur"));
+		all.add(row(106, 0xFFA6AA, 0xA3513B, "petals", "meteor_burst", 3, GuardStyle.STING, ContextProfile.HEALTH_HUE, "block.beacon.power_select", 1.3F, 145, "glitch"));
+		all.add(row(107, 0xDB698F, 0xC99C6B, "truchet", "drip_stalactite", 0, GuardStyle.GUST, ContextProfile.STORM_CHARGED, "block.beacon.ambient", 1.1F, 170, "posterize"));
+		all.add(row(108, 0xFFBBB5, 0x96392F, "plasma", "shadow_veil", 4, GuardStyle.NONE, ContextProfile.HEALTH_HUE, "block.sculk.spread", 1.4F, 160, "duotone"));
+		all.add(row(109, 0xE5639E, 0xC4A66E, "rings", "tide_aura", 4, GuardStyle.SLOW, ContextProfile.LOW_HEALTH_FRENZY, "entity.breeze.idle_ground", 1.1F, 85, "chroma"));
+		// F22 "Desert Mirage" (sand x heat haze)
+		all.add(row(110, 0xEBBB6A, 0x996436, "petals", "particle_dome", 4, GuardStyle.NONE, ContextProfile.NIGHT_BLOOM, "entity.slime.squish", 1.3F, 150, "frostlens"));
+		all.add(row(111, 0xFCE48B, 0x8A4724, "truchet", "meteor_burst", 4, GuardStyle.NONE, ContextProfile.NONE, "entity.axolotl.swim", 1.0F, 245, "radialblur"));
+		all.add(row(112, 0xD49250, 0xB08D4C, "plasma", "drip_stalactite", 1, GuardStyle.GLOW, ContextProfile.NIGHT_BLOOM, "block.conduit.ambient", 0.8F, 125, "glitch"));
+		all.add(row(113, 0xFFF79C, 0x7D311A, "rings", "shadow_veil", 5, GuardStyle.GUST, ContextProfile.HEALTH_HUE, "block.candle.ambient", 0.6F, 225, "posterize"));
+		all.add(row(114, 0xDE8249, 0xAB974F, "vortex", "tide_aura", 5, GuardStyle.GLOW, ContextProfile.CROWD_SCALE, "ambient.soul_sand_valley.loop", 0.9F, 175, "duotone"));
+		// F23 "Obsidian Flow" (void violet x magma black)
+		all.add(row(115, 0x512273, 0x400A40, "truchet", "particle_dome", 5, GuardStyle.GLOW, ContextProfile.NONE, "entity.bee.loop", 0.9F, 185, "frostlens"));
+		all.add(row(116, 0x6F3585, 0x2B0330, "plasma", "meteor_burst", 5, GuardStyle.SLOW, ContextProfile.STORM_CHARGED, "block.candle.ambient", 1.2F, 190, "radialblur"));
+		all.add(row(117, 0x35155C, 0x57144A, "rings", "drip_stalactite", 2, GuardStyle.GUST, ContextProfile.NIGHT_BLOOM, "entity.puffer_fish.blow_up", 0.6F, 230, "glitch"));
+		all.add(row(118, 0x874391, 0x1D0026, "vortex", "shadow_veil", 6, GuardStyle.STING, ContextProfile.HEALTH_HUE, "entity.breeze.idle_ground", 1.0F, 135, "wobble"));
+		all.add(row(119, 0x2E1266, 0x52153E, "lightning", "tide_aura", 6, GuardStyle.STING, ContextProfile.NIGHT_BLOOM, "block.sponge.absorb", 0.6F, 155, "posterize"));
+		// F24 "Jade Dynasty" (jade x imperial green)
+		all.add(row(120, 0x39BF7C, 0x177317, "plasma", "particle_dome", 6, GuardStyle.NONE, ContextProfile.NONE, "ambient.basalt_deltas.loop", 1.0F, 230, "desat"));
+		all.add(row(121, 0x54D1A5, 0x15630B, "rings", "meteor_burst", 6, GuardStyle.NONE, ContextProfile.NONE, "block.pointed_dripstone.drip_water", 1.3F, 145, "radialblur"));
+		all.add(row(122, 0x27A856, 0x278A39, "vortex", "drip_stalactite", 3, GuardStyle.BLIND, ContextProfile.NIGHT_BLOOM, "entity.blaze.burn", 1.0F, 140, "frostlens"));
+		all.add(row(123, 0x66DEC4, 0x185705, "lightning", "slow_hostiles", 3, GuardStyle.NONE, ContextProfile.STORM_CHARGED, "block.enchantment_table.use", 0.8F, 185, "heathaze"));
+		all.add(row(124, 0x20B245, 0x298546, "ridged", "ember_guard", 3, GuardStyle.STING, ContextProfile.LOW_HEALTH_FRENZY, "block.respawn_anchor.ambient", 1.3F, 200, "duotone"));
+		// F25 "Neon Tokyo" (electric cyan x hot magenta)
+		all.add(row(125, 0x18E0F2, 0xE60BAF, "rings", "enchant_stream", 3, GuardStyle.STING, ContextProfile.NONE, "block.note_block.harp", 0.8F, 90, "desat"));
+		all.add(row(126, 0x33CFFF, 0xD600BA, "vortex", "glass_shards", 0, GuardStyle.GUST, ContextProfile.NIGHT_BLOOM, "block.enchantment_table.use", 0.9F, 200, "glitch"));
+		all.add(row(127, 0x07DBD1, 0xFC219D, "lightning", "drip_stalactite", 4, GuardStyle.GLOW, ContextProfile.NONE, "entity.warden.heartbeat", 1.2F, 215, "pixelate"));
+		all.add(row(128, 0x42BAFF, 0xC900C6, "ridged", "slow_hostiles", 4, GuardStyle.DARK, ContextProfile.CROWD_SCALE, "block.trial_spawner.ambient", 1.3F, 80, "posterize"));
+		all.add(row(129, 0x00E5BF, 0xF72882, "hex", "ember_guard", 4, GuardStyle.BLIND, ContextProfile.HEALTH_HUE, "particle.soul_escape", 0.6F, 235, "radialblur"));
+		// F26 "Autumn Harvest" (russet x amber)
+		all.add(row(130, 0xD96B2B, 0x99700F, "vortex", "enchant_stream", 4, GuardStyle.BLIND, ContextProfile.STORM_CHARGED, "entity.parrot.fly", 1.3F, 110, "chroma"));
+		all.add(row(131, 0xEB9B46, 0x8A5101, "lightning", "glass_shards", 1, GuardStyle.NONE, ContextProfile.STORM_CHARGED, "block.sculk_sensor.clicking", 0.8F, 100, "wobble"));
+		all.add(row(132, 0xC24119, 0xB09F20, "ridged", "drip_stalactite", 5, GuardStyle.NONE, ContextProfile.HEALTH_HUE, "ambient.nether_wastes.loop", 1.2F, 190, "scanlines"));
+		all.add(row(133, 0xF7C059, 0x7D3A00, "hex", "slow_hostiles", 5, GuardStyle.GUST, ContextProfile.HEALTH_HUE, "block.sculk_sensor.clicking", 1.2F, 170, "duotone"));
+		all.add(row(134, 0xCC2610, 0xA9AB24, "voronoi", "ember_guard", 5, GuardStyle.SLOW, ContextProfile.LOW_HEALTH_FRENZY, "ambient.basalt_deltas.loop", 1.3F, 180, "edgeglow"));
+		// F27 "Arctic Dawn" (pale ice x dawn pink)
+		all.add(row(135, 0x9DD6F2, 0xE6A1B8, "lightning", "enchant_stream", 5, GuardStyle.NONE, ContextProfile.NONE, "ambient.cave", 1.1F, 245, "frostlens"));
+		all.add(row(136, 0xBFE0FF, 0xD683A8, "ridged", "glass_shards", 2, GuardStyle.NONE, ContextProfile.STORM_CHARGED, "block.water.ambient", 0.7F, 210, "glitch"));
+		all.add(row(137, 0x7FC9DB, 0xFCC5CD, "hex", "drip_stalactite", 6, GuardStyle.STING, ContextProfile.CROWD_SCALE, "block.note_block.harp", 1.0F, 195, "heathaze"));
+		all.add(row(138, 0xCFE1FF, 0xC971A3, "voronoi", "slow_hostiles", 6, GuardStyle.SLOW, ContextProfile.HEALTH_HUE, "block.sponge.absorb", 1.0F, 130, "pixelate"));
+		all.add(row(139, 0x7ADDE5, 0xF7C8C9, "interference", "ember_guard", 6, GuardStyle.GUST, ContextProfile.HEALTH_HUE, "block.portal.ambient", 1.1F, 235, "posterize"));
+		// F28 "Wisteria Garden" (lilac x deep violet)
+		all.add(row(140, 0xA877D9, 0x7E388C, "ridged", "enchant_stream", 6, GuardStyle.GUST, ContextProfile.NONE, "block.amethyst_block.resonate", 0.6F, 90, "radialblur"));
+		all.add(row(141, 0xCE98EB, 0x65277D, "hex", "glass_shards", 3, GuardStyle.STING, ContextProfile.HEALTH_HUE, "entity.elder_guardian.ambient", 1.4F, 95, "ripple"));
+		all.add(row(142, 0x825DC2, 0xA34EA2, "voronoi", "snowfall", 3, GuardStyle.DARK, ContextProfile.STORM_CHARGED, "ambient.crimson_forest.loop", 1.1F, 95, "wobble"));
+		all.add(row(143, 0xE8B0F7, 0x4F1D70, "interference", "orbiting_shards", 3, GuardStyle.SLOW, ContextProfile.CROWD_SCALE, "entity.parrot.fly", 0.6F, 120, "scanlines"));
+		all.add(row(144, 0x7558CC, 0x9E5192, "thinfilm", "ember_spiral", 0, GuardStyle.NONE, ContextProfile.CROWD_SCALE, "block.sculk_catalyst.bloom", 0.9F, 155, "bloomglow"));
+		// F29 "Deep Cavern" (slate x amber glow)
+		all.add(row(145, 0x475266, 0xA67032, "hex", "gravity_wells", 0, GuardStyle.BLIND, ContextProfile.CROWD_SCALE, "block.big_dripleaf.tilt_down", 1.1F, 165, "chroma"));
+		all.add(row(146, 0x606478, 0x965120, "voronoi", "glass_shards", 4, GuardStyle.BLIND, ContextProfile.NONE, "ambient.crimson_forest.loop", 1.4F, 105, "duotone"));
+		all.add(row(147, 0x323F4F, 0xBD9C48, "interference", "snowfall", 4, GuardStyle.NONE, ContextProfile.STORM_CHARGED, "block.big_dripleaf.tilt_down", 0.8F, 115, "frostlens"));
+		all.add(row(148, 0x727385, 0x8A3916, "thinfilm", "orbiting_shards", 4, GuardStyle.NONE, ContextProfile.NIGHT_BLOOM, "entity.bee.loop", 1.0F, 140, "desat"));
+		all.add(row(149, 0x344A59, 0xB8A74B, "moire", "ember_spiral", 1, GuardStyle.GLOW, ContextProfile.CROWD_SCALE, "block.conduit.ambient", 1.3F, 230, "edgeglow"));
+		// F30 "Citrus Grove" (lemon x lime)
+		all.add(row(150, 0xF2E124, 0x73BF26, "voronoi", "gravity_wells", 1, GuardStyle.BLIND, ContextProfile.NONE, "block.note_block.bell", 0.6F, 205, "glitch"));
+		all.add(row(151, 0xF2FF40, 0x74B013, "interference", "glass_shards", 5, GuardStyle.STING, ContextProfile.STORM_CHARGED, "block.honey_block.slide", 1.4F, 215, "heathaze"));
+		all.add(row(152, 0xDBB012, 0x6DD63C, "thinfilm", "snowfall", 5, GuardStyle.SLOW, ContextProfile.LOW_HEALTH_FRENZY, "entity.warden.heartbeat", 1.3F, 240, "pixelate"));
+		all.add(row(153, 0xDCFF4F, 0x7AA30A, "moire", "orbiting_shards", 5, GuardStyle.GLOW, ContextProfile.HEALTH_HUE, "ambient.basalt_deltas.loop", 1.3F, 225, "posterize"));
+		all.add(row(154, 0xE59B07, 0x5BD141, "waves", "ember_spiral", 2, GuardStyle.NONE, ContextProfile.LOW_HEALTH_FRENZY, "block.note_block.harp", 1.4F, 200, "scanlines"));
+		// F31 "Midnight Oil" (navy x lamplit teal)
+		all.add(row(155, 0x172E73, 0x2E9999, "interference", "gravity_wells", 2, GuardStyle.BLIND, ContextProfile.NONE, "entity.parrot.fly", 1.1F, 165, "radialblur"));
+		all.add(row(156, 0x283185, 0x1D8A7D, "thinfilm", "glass_shards", 6, GuardStyle.BLIND, ContextProfile.NONE, "block.lava.ambient", 1.1F, 220, "ripple"));
+		all.add(row(157, 0x0C2B5C, 0x439CB0, "moire", "snowfall", 6, GuardStyle.STING, ContextProfile.NONE, "block.respawn_anchor.ambient", 1.0F, 125, "tint"));
+		all.add(row(158, 0x373491, 0x147D64, "waves", "orbiting_shards", 6, GuardStyle.STING, ContextProfile.NONE, "block.pointed_dripstone.drip_water", 1.0F, 215, "vignette"));
+		all.add(row(159, 0x083766, 0x468BAB, "arcs", "ember_spiral", 3, GuardStyle.SLOW, ContextProfile.CROWD_SCALE, "particle.soul_escape", 1.3F, 175, "wobble"));
+		// F32 "Salted Caramel" (caramel x cream)
+		all.add(row(160, 0xD99C57, 0xF2E0AA, "thinfilm", "gravity_wells", 3, GuardStyle.DARK, ContextProfile.NONE, "block.sculk_sensor.clicking", 1.3F, 110, "chroma"));
+		all.add(row(161, 0xEBC575, 0xE3C28A, "moire", "purge_pulse", 3, GuardStyle.DARK, ContextProfile.LOW_HEALTH_FRENZY, "block.beacon.power_select", 0.7F, 100, "bloomglow"));
+		all.add(row(162, 0xC27440, 0xFFFBC7, "waves", "ember_rain", 3, GuardStyle.SLOW, ContextProfile.NIGHT_BLOOM, "entity.axolotl.swim", 1.2F, 90, "desat"));
+		all.add(row(163, 0xF7E38B, 0xD6A978, "arcs", "prism_beams", 0, GuardStyle.GLOW, ContextProfile.HEALTH_HUE, "block.honey_block.slide", 1.0F, 80, "duotone"));
+		all.add(row(164, 0xCC6339, 0xFCFFCF, "kaleido", "ember_spiral", 4, GuardStyle.NONE, ContextProfile.NONE, "block.bell.resonate", 1.3F, 150, "edgeglow"));
+		// F33 "Electric Grape" (grape purple x acid green)
+		all.add(row(165, 0x921FCC, 0x58CC1F, "moire", "gravity_wells", 4, GuardStyle.NONE, ContextProfile.STORM_CHARGED, "block.sculk_sensor.clicking", 0.7F, 205, "frostlens"));
+		all.add(row(166, 0xBF37DE, 0x5BBD0B, "waves", "purge_pulse", 4, GuardStyle.SLOW, ContextProfile.CROWD_SCALE, "entity.breeze.idle_ground", 1.0F, 220, "glitch"));
+		all.add(row(167, 0x670EB5, 0x4EE334, "arcs", "ember_rain", 4, GuardStyle.NONE, ContextProfile.STORM_CHARGED, "block.sculk_catalyst.bloom", 1.3F, 120, "heathaze"));
+		all.add(row(168, 0xE349EB, 0x64B002, "kaleido", "prism_beams", 1, GuardStyle.DARK, ContextProfile.NONE, "entity.axolotl.swim", 0.8F, 170, "pixelate"));
+		all.add(row(169, 0x5306BF, 0x3CDE3A, "caustic", "ember_spiral", 5, GuardStyle.NONE, ContextProfile.STORM_CHARGED, "entity.axolotl.swim", 0.8F, 145, "posterize"));
+		// F34 "Foxfire Marsh" (marsh green x haunted blue)
+		all.add(row(170, 0x36B24A, 0x2E6273, "waves", "gravity_wells", 5, GuardStyle.NONE, ContextProfile.STORM_CHARGED, "block.bubble_column.upwards_ambient", 0.7F, 245, "chroma"));
+		all.add(row(171, 0x4FC474, 0x1F5A63, "arcs", "purge_pulse", 5, GuardStyle.STING, ContextProfile.HEALTH_HUE, "block.beacon.ambient", 1.1F, 240, "radialblur"));
+		all.add(row(172, 0x249C28, 0x426B8A, "kaleido", "ember_rain", 5, GuardStyle.NONE, ContextProfile.HEALTH_HUE, "entity.glow_squid.ambient", 0.6F, 240, "ripple"));
+		all.add(row(173, 0x60D193, 0x175657, "caustic", "prism_beams", 2, GuardStyle.GUST, ContextProfile.LOW_HEALTH_FRENZY, "block.sponge.absorb", 0.9F, 125, "scanlines"));
+		all.add(row(174, 0x29A61E, 0x446085, "triweave", "ember_spiral", 6, GuardStyle.STING, ContextProfile.CROWD_SCALE, "block.beacon.power_select", 1.3F, 250, "tint"));
+		// F35 "Cherry Cola" (cherry red x cola brown)
+		all.add(row(175, 0x991722, 0x66391A, "arcs", "gravity_wells", 6, GuardStyle.NONE, ContextProfile.LOW_HEALTH_FRENZY, "entity.dolphin.ambient_water", 0.8F, 90, "bloomglow"));
+		all.add(row(176, 0xAB332B, 0x57240E, "kaleido", "purge_pulse", 6, GuardStyle.DARK, ContextProfile.NONE, "ambient.cave", 1.4F, 80, "vignette"));
+		all.add(row(177, 0x820A24, 0x7D5B29, "caustic", "ember_rain", 6, GuardStyle.GLOW, ContextProfile.LOW_HEALTH_FRENZY, "ambient.warped_forest.loop", 1.0F, 190, "wobble"));
+		all.add(row(178, 0xB85239, 0x4A1408, "triweave", "prism_beams", 3, GuardStyle.NONE, ContextProfile.LOW_HEALTH_FRENZY, "block.beacon.ambient", 1.3F, 145, "desat"));
+		all.add(row(179, 0x8C0432, 0x78632B, "aurora", "lucky_charm", 3, GuardStyle.NONE, ContextProfile.NONE, "entity.glow_squid.ambient", 0.9F, 150, "duotone"));
+		// F36 "Silver Birch" (silver x birch green)
+		all.add(row(180, 0xBED9A3, 0x548C67, "kaleido", "night_glow_aura", 3, GuardStyle.NONE, ContextProfile.NONE, "ambient.soul_sand_valley.loop", 0.6F, 110, "frostlens"));
+		all.add(row(181, 0xD4EBC7, 0x407D4D, "caustic", "haste_aura", 3, GuardStyle.GLOW, ContextProfile.STORM_CHARGED, "entity.elder_guardian.ambient", 1.4F, 180, "edgeglow"));
+		all.add(row(182, 0xABC284, 0x6FA38A, "triweave", "geyser_vents", 0, GuardStyle.NONE, ContextProfile.NONE, "entity.puffer_fish.blow_up", 1.0F, 210, "glitch"));
+		all.add(row(183, 0xE4F7DF, 0x34703A, "aurora", "prism_beams", 4, GuardStyle.SLOW, ContextProfile.HEALTH_HUE, "block.sculk_sensor.clicking", 0.6F, 240, "heathaze"));
+		all.add(row(184, 0xB9CC81, 0x709E8E, "scales", "lucky_charm", 4, GuardStyle.SLOW, ContextProfile.NONE, "entity.parrot.fly", 1.0F, 145, "pixelate"));
+		// F37 "Dragonfruit" (pitaya pink x seed green)
+		all.add(row(185, 0xF230A1, 0x4AB236, "caustic", "night_glow_aura", 4, GuardStyle.GUST, ContextProfile.NONE, "block.pointed_dripstone.drip_water", 0.7F, 130, "radialblur"));
+		all.add(row(186, 0xFF4C9A, 0x47A322, "triweave", "haste_aura", 4, GuardStyle.NONE, ContextProfile.NONE, "particle.soul_escape", 1.4F, 85, "posterize"));
+		all.add(row(187, 0xDB1DA5, 0x4DC94F, "aurora", "geyser_vents", 1, GuardStyle.GLOW, ContextProfile.CROWD_SCALE, "block.beacon.ambient", 0.6F, 235, "chroma"));
+		all.add(row(188, 0xFF5C8D, 0x4B9618, "scales", "prism_beams", 5, GuardStyle.NONE, ContextProfile.CROWD_SCALE, "block.honey_block.slide", 0.7F, 180, "ripple"));
+		all.add(row(189, 0xE512C2, 0x51C462, "circuit", "lucky_charm", 5, GuardStyle.NONE, ContextProfile.HEALTH_HUE, "block.honey_block.slide", 0.6F, 240, "scanlines"));
+		// F38 "Stormglass" (storm grey-green x silver)
+		all.add(row(190, 0x6B9991, 0x8FA7BF, "triweave", "night_glow_aura", 5, GuardStyle.NONE, ContextProfile.NONE, "block.amethyst_block.resonate", 1.2F, 180, "vignette"));
+		all.add(row(191, 0x89ABAA, 0x7499B0, "aurora", "haste_aura", 5, GuardStyle.DARK, ContextProfile.NONE, "block.lava.ambient", 0.6F, 210, "desat"));
+		all.add(row(192, 0x528274, 0xB2BDD6, "scales", "geyser_vents", 2, GuardStyle.SLOW, ContextProfile.NIGHT_BLOOM, "ambient.basalt_deltas.loop", 1.0F, 165, "wobble"));
+		all.add(row(193, 0x9EB5B8, 0x6492A3, "circuit", "prism_beams", 6, GuardStyle.BLIND, ContextProfile.STORM_CHARGED, "block.big_dripleaf.tilt_down", 0.7F, 120, "bloomglow"));
+		all.add(row(194, 0x518C74, 0xB4B9D1, "curlsmoke", "lucky_charm", 6, GuardStyle.BLIND, ContextProfile.STORM_CHARGED, "block.conduit.ambient", 0.7F, 165, "tint"));
+		// F39 "Honeycomb Hive" (honey gold x comb amber)
+		all.add(row(195, 0xE6AB22, 0x8C4D0E, "aurora", "night_glow_aura", 6, GuardStyle.DARK, ContextProfile.NONE, "block.lava.ambient", 0.8F, 185, "edgeglow"));
+		all.add(row(196, 0xF7DC3E, 0x7D3101, "scales", "haste_aura", 6, GuardStyle.BLIND, ContextProfile.NIGHT_BLOOM, "block.end_portal_frame.fill", 0.7F, 155, "glitch"));
+		all.add(row(197, 0xCF7C11, 0xA3791D, "circuit", "geyser_vents", 3, GuardStyle.DARK, ContextProfile.LOW_HEALTH_FRENZY, "ambient.underwater.loop", 1.1F, 185, "frostlens"));
+		all.add(row(198, 0xFFFC4F, 0x701E00, "curlsmoke", "frost_intruders", 3, GuardStyle.SLOW, ContextProfile.NIGHT_BLOOM, "entity.evoker.cast_spell", 1.3F, 175, "duotone"));
+		all.add(row(199, 0xD96507, 0x9E8721, "nebula", "echo_pulse", 3, GuardStyle.BLIND, ContextProfile.NIGHT_BLOOM, "block.note_block.chime", 1.2F, 210, "heathaze"));
+		// F40 "Blue Ice Cave" (glacial blue x deep ice)
+		all.add(row(200, 0x45A3E6, 0x1C2F8C, "scales", "falling_petals", 3, GuardStyle.NONE, ContextProfile.NIGHT_BLOOM, "block.portal.ambient", 1.1F, 200, "posterize"));
+		all.add(row(201, 0x63A3F7, 0x0E2D7D, "circuit", "moth_swarm", 0, GuardStyle.GUST, ContextProfile.STORM_CHARGED, "block.big_dripleaf.tilt_down", 1.0F, 105, "pixelate"));
+		all.add(row(202, 0x30A1CF, 0x302EA3, "curlsmoke", "geyser_vents", 4, GuardStyle.GUST, ContextProfile.LOW_HEALTH_FRENZY, "block.water.ambient", 0.9F, 220, "radialblur"));
+		all.add(row(203, 0x759FFF, 0x073170, "nebula", "frost_intruders", 4, GuardStyle.SLOW, ContextProfile.LOW_HEALTH_FRENZY, "block.conduit.ambient", 1.0F, 245, "ripple"));
+		all.add(row(204, 0x27BBD9, 0x41319E, "sparkle", "echo_pulse", 4, GuardStyle.BLIND, ContextProfile.CROWD_SCALE, "block.candle.ambient", 1.1F, 135, "scanlines"));
+		// F41 "Velvet Underground" (dark magenta x plum)
+		all.add(row(205, 0x802671, 0x381659, "circuit", "falling_petals", 4, GuardStyle.GLOW, ContextProfile.NIGHT_BLOOM, "block.portal.ambient", 0.9F, 125, "vignette"));
+		all.add(row(206, 0x913A76, 0x240C4A, "curlsmoke", "moth_swarm", 1, GuardStyle.GLOW, ContextProfile.NONE, "entity.axolotl.swim", 1.3F, 220, "wobble"));
+		all.add(row(207, 0x691866, 0x582570, "nebula", "geyser_vents", 5, GuardStyle.NONE, ContextProfile.NIGHT_BLOOM, "entity.dolphin.ambient_water", 1.0F, 235, "tint"));
+		all.add(row(208, 0x9E4978, 0x15073D, "sparkle", "frost_intruders", 5, GuardStyle.NONE, ContextProfile.HEALTH_HUE, "ambient.nether_wastes.loop", 1.1F, 190, "duotone"));
+		all.add(row(209, 0x6B1573, 0x5F276B, "starfield", "echo_pulse", 5, GuardStyle.DARK, ContextProfile.STORM_CHARGED, "block.amethyst_block.chime", 1.0F, 205, "desat"));
+		// F42 "Prairie Wind" (wheat x sage)
+		all.add(row(210, 0xE6D47E, 0x7FA663, "curlsmoke", "falling_petals", 5, GuardStyle.GUST, ContextProfile.LOW_HEALTH_FRENZY, "entity.allay.ambient_with_item", 0.6F, 150, "bloomglow"));
+		all.add(row(211, 0xF7F6A1, 0x74964D, "nebula", "moth_swarm", 2, GuardStyle.SLOW, ContextProfile.NONE, "block.vault.ambient", 0.7F, 130, "chroma"));
+		all.add(row(212, 0xCFAE63, 0x8EBD80, "sparkle", "geyser_vents", 6, GuardStyle.NONE, ContextProfile.STORM_CHARGED, "block.vault.ambient", 0.8F, 95, "edgeglow"));
+		all.add(row(213, 0xF6FFB5, 0x708A3F, "starfield", "frost_intruders", 6, GuardStyle.GUST, ContextProfile.NIGHT_BLOOM, "block.candle.ambient", 0.7F, 80, "glitch"));
+		all.add(row(214, 0xD9A55D, 0x88B882, "petals", "echo_pulse", 6, GuardStyle.NONE, ContextProfile.NIGHT_BLOOM, "block.portal.ambient", 0.7F, 140, "heathaze"));
+		// F43 "Galactic Core" (deep purple x starlight)
+		all.add(row(215, 0x411C8C, 0xF2E3B6, "nebula", "falling_petals", 6, GuardStyle.SLOW, ContextProfile.LOW_HEALTH_FRENZY, "ambient.nether_wastes.loop", 1.1F, 80, "frostlens"));
+		all.add(row(216, 0x652F9E, 0xE3C796, "sparkle", "moth_swarm", 3, GuardStyle.DARK, ContextProfile.NONE, "entity.parrot.fly", 0.8F, 135, "posterize"));
+		all.add(row(217, 0x240F75, 0xFFFCD4, "starfield", "fire_ward", 3, GuardStyle.NONE, ContextProfile.HEALTH_HUE, "block.bell.resonate", 1.4F, 240, "pixelate"));
+		all.add(row(218, 0x813EAB, 0xD6AE83, "petals", "firefly_swarm", 3, GuardStyle.DARK, ContextProfile.HEALTH_HUE, "ambient.underwater.loop", 1.1F, 170, "ripple"));
+		all.add(row(219, 0x140A80, 0xFDFFDB, "truchet", "comet_tails", 0, GuardStyle.DARK, ContextProfile.STORM_CHARGED, "block.water.ambient", 1.0F, 190, "scanlines"));
+		// F44 "Copper Canyon" (copper x rust)
+		all.add(row(220, 0xBF5B30, 0x731E11, "sparkle", "aurora_ribbons", 0, GuardStyle.STING, ContextProfile.CROWD_SCALE, "block.big_dripleaf.tilt_down", 0.8F, 155, "radialblur"));
+		all.add(row(221, 0xD18649, 0x630806, "starfield", "moth_swarm", 4, GuardStyle.GUST, ContextProfile.HEALTH_HUE, "ambient.warped_forest.loop", 1.0F, 235, "tint"));
+		all.add(row(222, 0xA8351E, 0x8A4120, "petals", "fire_ward", 4, GuardStyle.GUST, ContextProfile.LOW_HEALTH_FRENZY, "entity.dolphin.ambient_water", 1.4F, 225, "vignette"));
+		all.add(row(223, 0xDEA75B, 0x570109, "truchet", "firefly_swarm", 4, GuardStyle.STING, ContextProfile.NONE, "block.candle.ambient", 1.0F, 130, "wobble"));
+		all.add(row(224, 0xB21F17, 0x854F22, "plasma", "comet_tails", 1, GuardStyle.STING, ContextProfile.LOW_HEALTH_FRENZY, "entity.puffer_fish.blow_up", 1.1F, 120, "bloomglow"));
+		// F45 "Mint Chocolate" (mint x dark cocoa)
+		all.add(row(225, 0x67E6BB, 0x59351B, "starfield", "aurora_ribbons", 1, GuardStyle.DARK, ContextProfile.NIGHT_BLOOM, "block.vault.ambient", 0.8F, 170, "duotone"));
+		all.add(row(226, 0x88F7E3, 0x4A2110, "petals", "moth_swarm", 5, GuardStyle.NONE, ContextProfile.NONE, "entity.warden.heartbeat", 1.2F, 230, "chroma"));
+		all.add(row(227, 0x4ECF93, 0x70542B, "truchet", "fire_ward", 5, GuardStyle.DARK, ContextProfile.HEALTH_HUE, "block.note_block.chime", 1.0F, 240, "desat"));
+		all.add(row(228, 0x9CFFFA, 0x3D130A, "plasma", "firefly_swarm", 5, GuardStyle.STING, ContextProfile.NIGHT_BLOOM, "entity.warden.heartbeat", 1.2F, 150, "edgeglow"));
+		all.add(row(229, 0x48D984, 0x6B5A2C, "rings", "comet_tails", 2, GuardStyle.GLOW, ContextProfile.CROWD_SCALE, "entity.puffer_fish.blow_up", 1.2F, 230, "heathaze"));
+		// F46 "Thunderhead" (charcoal x lightning yellow)
+		all.add(row(230, 0x3A3F59, 0xF2E018, "petals", "aurora_ribbons", 2, GuardStyle.NONE, ContextProfile.NONE, "block.big_dripleaf.tilt_down", 0.9F, 215, "posterize"));
+		all.add(row(231, 0x50516B, 0xE3B602, "truchet", "moth_swarm", 6, GuardStyle.NONE, ContextProfile.HEALTH_HUE, "block.chorus_flower.grow", 1.4F, 105, "glitch"));
+		all.add(row(232, 0x262F42, 0xEAFF2E, "plasma", "fire_ward", 6, GuardStyle.STING, ContextProfile.LOW_HEALTH_FRENZY, "block.beacon.ambient", 1.2F, 80, "frostlens"));
+		all.add(row(233, 0x646178, 0xD69200, "rings", "firefly_swarm", 6, GuardStyle.NONE, ContextProfile.NIGHT_BLOOM, "block.bell.resonate", 0.9F, 105, "vignette"));
+		all.add(row(234, 0x29384C, 0xD0FF36, "vortex", "comet_tails", 3, GuardStyle.GLOW, ContextProfile.CROWD_SCALE, "block.portal.ambient", 0.8F, 120, "radialblur"));
+		// F47 "Lavender Fields" (lavender x soft purple)
+		all.add(row(235, 0xB08AE6, 0x8F4BA6, "truchet", "aurora_ribbons", 3, GuardStyle.GUST, ContextProfile.NONE, "block.sculk_catalyst.bloom", 1.2F, 245, "pixelate"));
+		all.add(row(236, 0xD7ADF7, 0x733696, "plasma", "bubble_veil", 3, GuardStyle.NONE, ContextProfile.NONE, "block.note_block.bell", 0.6F, 130, "ripple"));
+		all.add(row(237, 0x896DCF, 0xB764BD, "rings", "speed_aura", 3, GuardStyle.SLOW, ContextProfile.LOW_HEALTH_FRENZY, "block.bell.resonate", 1.3F, 110, "duotone"));
+		all.add(row(238, 0xEDC2FF, 0x5C2B8A, "vortex", "pollen_haze", 0, GuardStyle.NONE, ContextProfile.HEALTH_HUE, "block.note_block.harp", 1.1F, 195, "tint"));
+		all.add(row(239, 0x7B68D9, 0xB867B2, "lightning", "comet_tails", 4, GuardStyle.NONE, ContextProfile.STORM_CHARGED, "block.conduit.ambient", 0.7F, 210, "bloomglow"));
+		// F48 "Bioluminal Reef" (abyss cyan x biolume green)
+		all.add(row(240, 0x16B8D9, 0x1C8C1C, "plasma", "aurora_ribbons", 4, GuardStyle.NONE, ContextProfile.NONE, "entity.axolotl.swim", 0.9F, 95, "scanlines"));
+		all.add(row(241, 0x2FAFEB, 0x1B7D0E, "rings", "bubble_veil", 4, GuardStyle.BLIND, ContextProfile.NONE, "block.bubble_column.upwards_ambient", 1.3F, 245, "wobble"));
+		all.add(row(242, 0x06BCC2, 0x2EA343, "vortex", "speed_aura", 4, GuardStyle.NONE, ContextProfile.HEALTH_HUE, "ambient.cave", 0.8F, 250, "edgeglow"));
+		all.add(row(243, 0x40A5F7, 0x1F7007, "lightning", "pollen_haze", 1, GuardStyle.NONE, ContextProfile.NONE, "block.sculk_catalyst.bloom", 0.9F, 135, "desat"));
+		all.add(row(244, 0x00CCBB, 0x319E54, "ridged", "comet_tails", 5, GuardStyle.DARK, ContextProfile.CROWD_SCALE, "block.beacon.power_select", 0.8F, 225, "chroma"));
+		// F49 "Sunset Boulevard" (vermilion x dusk pink)
+		all.add(row(245, 0xF25824, 0xBF3971, "rings", "aurora_ribbons", 5, GuardStyle.GUST, ContextProfile.NONE, "block.bubble_column.upwards_ambient", 1.2F, 160, "frostlens"));
+		all.add(row(246, 0xFF8C40, 0xB0256F, "vortex", "bubble_veil", 5, GuardStyle.STING, ContextProfile.NONE, "entity.blaze.burn", 0.8F, 215, "vignette"));
+		all.add(row(247, 0xDB2912, 0xD65170, "lightning", "speed_aura", 5, GuardStyle.DARK, ContextProfile.NIGHT_BLOOM, "entity.slime.squish", 1.4F, 150, "radialblur"));
+		all.add(row(248, 0xFFAD4F, 0xA31A73, "ridged", "pollen_haze", 2, GuardStyle.NONE, ContextProfile.NIGHT_BLOOM, "ambient.nether_wastes.loop", 1.3F, 160, "heathaze"));
+		all.add(row(249, 0xE50707, 0xD15662, "hex", "comet_tails", 6, GuardStyle.SLOW, ContextProfile.LOW_HEALTH_FRENZY, "entity.breeze.idle_ground", 0.9F, 215, "glitch"));
+		// F50 "Frostbitten Rose" (icy pink x deep red)
+		all.add(row(250, 0xF29DB3, 0x8C0E0E, "vortex", "aurora_ribbons", 6, GuardStyle.DARK, ContextProfile.HEALTH_HUE, "entity.parrot.fly", 0.7F, 235, "bloomglow"));
+		all.add(row(251, 0xFFBFC6, 0x7D0110, "lightning", "bubble_veil", 6, GuardStyle.BLIND, ContextProfile.HEALTH_HUE, "block.big_dripleaf.tilt_down", 0.7F, 155, "ripple"));
+		all.add(row(252, 0xDB7FA3, 0xA3361D, "ridged", "speed_aura", 6, GuardStyle.NONE, ContextProfile.HEALTH_HUE, "block.lava.ambient", 1.2F, 175, "pixelate"));
+		all.add(row(253, 0xFFD0CF, 0x70001A, "hex", "pollen_haze", 3, GuardStyle.GUST, ContextProfile.LOW_HEALTH_FRENZY, "block.chorus_flower.grow", 1.2F, 225, "posterize"));
+		all.add(row(254, 0xE57AB0, 0x9E4921, "voronoi", "prismatic_rays", 3, GuardStyle.NONE, ContextProfile.LOW_HEALTH_FRENZY, "entity.puffer_fish.blow_up", 0.8F, 160, "chroma"));
+		// F51 "Emerald City" (emerald x gilded)
+		all.add(row(255, 0x1BB24D, 0xD9D957, "lightning", "music_pulse", 3, GuardStyle.GUST, ContextProfile.NIGHT_BLOOM, "ambient.nether_wastes.loop", 1.0F, 180, "tint"));
+		all.add(row(256, 0x31C478, 0xC9B93E, "ridged", "regen_aura", 3, GuardStyle.STING, ContextProfile.NIGHT_BLOOM, "block.sculk_sensor.clicking", 0.9F, 140, "wobble"));
+		all.add(row(257, 0x0C9C29, 0xD9F073, "hex", "static_orbs", 0, GuardStyle.NONE, ContextProfile.CROWD_SCALE, "entity.bee.loop", 0.6F, 120, "vignette"));
+		all.add(row(258, 0x41D19A, 0xBD9C31, "voronoi", "pollen_haze", 4, GuardStyle.STING, ContextProfile.LOW_HEALTH_FRENZY, "entity.firework_rocket.twinkle", 1.2F, 90, "frostlens"));
+		all.add(row(259, 0x05A612, 0xC6EB78, "interference", "prismatic_rays", 4, GuardStyle.GUST, ContextProfile.CROWD_SCALE, "block.sponge.absorb", 0.6F, 140, "glitch"));
+		// F52 "Ash and Bone" (ash grey x ivory)
+		all.add(row(260, 0xB2AAA1, 0x5A5E66, "ridged", "music_pulse", 4, GuardStyle.STING, ContextProfile.NONE, "ambient.underwater.loop", 1.3F, 85, "desat"));
+		all.add(row(261, 0xC4BDB1, 0x444D57, "hex", "regen_aura", 4, GuardStyle.GLOW, ContextProfile.NIGHT_BLOOM, "block.end_portal_frame.fill", 1.3F, 140, "tint"));
+		all.add(row(262, 0x9C8B81, 0x70727D, "voronoi", "static_orbs", 1, GuardStyle.NONE, ContextProfile.NONE, "entity.slime.squish", 1.1F, 250, "radialblur"));
+		all.add(row(263, 0xD1CDBC, 0x37424A, "interference", "pollen_haze", 5, GuardStyle.GUST, ContextProfile.NONE, "ambient.basalt_deltas.loop", 1.1F, 135, "pixelate"));
+		all.add(row(264, 0xA68A81, 0x6C6C78, "thinfilm", "prismatic_rays", 5, GuardStyle.SLOW, ContextProfile.STORM_CHARGED, "ambient.warped_forest.loop", 0.8F, 80, "scanlines"));
+		// F53 "Ultraviolet" (blacklight violet x indigo)
+		all.add(row(265, 0x7012B2, 0x1D0566, "hex", "music_pulse", 5, GuardStyle.GUST, ContextProfile.HEALTH_HUE, "block.trial_spawner.ambient", 0.6F, 155, "wobble"));
+		all.add(row(266, 0x9A27C4, 0x0C0057, "voronoi", "regen_aura", 5, GuardStyle.GUST, ContextProfile.NONE, "block.note_block.bell", 0.6F, 115, "ripple"));
+		all.add(row(267, 0x49059C, 0x3F107D, "interference", "static_orbs", 2, GuardStyle.GLOW, ContextProfile.STORM_CHARGED, "block.bell.resonate", 1.3F, 225, "chroma"));
+		all.add(row(268, 0xBC36D1, 0x01004A, "thinfilm", "pollen_haze", 6, GuardStyle.GUST, ContextProfile.LOW_HEALTH_FRENZY, "block.note_block.harp", 0.7F, 125, "duotone"));
+		all.add(row(269, 0x3700A6, 0x4C1378, "moire", "prismatic_rays", 6, GuardStyle.NONE, ContextProfile.NIGHT_BLOOM, "block.sculk_sensor.clicking", 1.3F, 155, "heathaze"));
+		// F54 "Peach Melba" (peach x raspberry)
+		all.add(row(270, 0xFAB17D, 0xCC3366, "voronoi", "music_pulse", 6, GuardStyle.STING, ContextProfile.LOW_HEALTH_FRENZY, "ambient.warped_forest.loop", 0.6F, 235, "edgeglow"));
+		all.add(row(271, 0xFFD399, 0xBD1E66, "interference", "regen_aura", 6, GuardStyle.NONE, ContextProfile.NONE, "ambient.basalt_deltas.loop", 1.2F, 180, "tint"));
+		all.add(row(272, 0xE38662, 0xE34B62, "thinfilm", "static_orbs", 3, GuardStyle.DARK, ContextProfile.HEALTH_HUE, "block.amethyst_block.resonate", 0.9F, 150, "posterize"));
+		all.add(row(273, 0xFFE5A8, 0xB0136C, "moire", "spore_drift", 3, GuardStyle.GUST, ContextProfile.CROWD_SCALE, "block.beacon.power_select", 1.3F, 100, "scanlines"));
+		all.add(row(274, 0xED735A, 0xDE5052, "waves", "void_tendrils", 3, GuardStyle.GUST, ContextProfile.CROWD_SCALE, "block.honey_block.slide", 0.7F, 120, "duotone"));
+		// F55 "Kelp Forest" (kelp green x ocean blue)
+		all.add(row(275, 0x408C31, 0x327FA6, "interference", "particle_spiral", 3, GuardStyle.NONE, ContextProfile.NIGHT_BLOOM, "ambient.nether_wastes.loop", 1.4F, 195, "wobble"));
+		all.add(row(276, 0x499E47, 0x207D96, "thinfilm", "rune_orbit", 0, GuardStyle.NONE, ContextProfile.NONE, "entity.slime.squish", 0.9F, 185, "edgeglow"));
+		all.add(row(277, 0x3A7521, 0x4880BD, "moire", "static_orbs", 4, GuardStyle.STING, ContextProfile.NONE, "block.note_block.bell", 1.3F, 240, "desat"));
+		all.add(row(278, 0x57AB61, 0x167E8A, "waves", "spore_drift", 4, GuardStyle.DARK, ContextProfile.STORM_CHARGED, "entity.slime.squish", 1.1F, 165, "frostlens"));
+		all.add(row(279, 0x46801D, 0x4B71B8, "arcs", "void_tendrils", 4, GuardStyle.NONE, ContextProfile.NONE, "entity.slime.squish", 1.2F, 150, "glitch"));
+		// F56 "Royal Amethyst" (amethyst x royal gold)
+		all.add(row(280, 0xA83DCC, 0xD9BA41, "thinfilm", "particle_spiral", 4, GuardStyle.GUST, ContextProfile.STORM_CHARGED, "entity.blaze.burn", 0.9F, 195, "heathaze"));
+		all.add(row(281, 0xD159DE, 0xC9972A, "moire", "rune_orbit", 1, GuardStyle.GLOW, ContextProfile.LOW_HEALTH_FRENZY, "block.amethyst_block.resonate", 0.9F, 235, "pixelate"));
+		all.add(row(282, 0x802AB5, 0xF0ED5B, "waves", "static_orbs", 5, GuardStyle.STING, ContextProfile.LOW_HEALTH_FRENZY, "entity.parrot.fly", 0.6F, 230, "posterize"));
+		all.add(row(283, 0xEB6CE6, 0xBD781E, "arcs", "spore_drift", 5, GuardStyle.NONE, ContextProfile.CROWD_SCALE, "block.lava.ambient", 0.7F, 165, "ripple"));
+		all.add(row(284, 0x7122BF, 0xDAEB60, "kaleido", "void_tendrils", 5, GuardStyle.GUST, ContextProfile.NONE, "block.note_block.harp", 1.3F, 100, "radialblur"));
+		// F57 "Paper Lantern" (lantern red x ricepaper gold)
+		all.add(row(285, 0xE63D2E, 0xE6BA39, "moire", "particle_spiral", 5, GuardStyle.NONE, ContextProfile.NONE, "block.sculk_sensor.clicking", 1.1F, 170, "vignette"));
+		all.add(row(286, 0xF7734A, 0xD69422, "waves", "rune_orbit", 2, GuardStyle.STING, ContextProfile.STORM_CHARGED, "ambient.underwater.loop", 1.3F, 225, "edgeglow"));
+		all.add(row(287, 0xCF1B24, 0xFCF153, "arcs", "static_orbs", 6, GuardStyle.SLOW, ContextProfile.NONE, "entity.slime.squish", 0.6F, 160, "desat"));
+		all.add(row(288, 0xFF985C, 0xC97316, "kaleido", "spore_drift", 6, GuardStyle.NONE, ContextProfile.CROWD_SCALE, "block.note_block.chime", 0.9F, 110, "scanlines"));
+		all.add(row(289, 0xD91133, 0xEDF759, "caustic", "void_tendrils", 6, GuardStyle.NONE, ContextProfile.NONE, "entity.puffer_fish.blow_up", 0.7F, 155, "bloomglow"));
+		// F58 "Glacier Melt" (aqua x meltwater white)
+		all.add(row(290, 0x6DF2E7, 0xC8E1FA, "waves", "particle_spiral", 6, GuardStyle.NONE, ContextProfile.NONE, "entity.glow_squid.ambient", 1.0F, 125, "heathaze"));
+		all.add(row(291, 0x8CF7FF, 0xA7D1EB, "arcs", "rune_orbit", 3, GuardStyle.GUST, ContextProfile.NONE, "entity.warden.heartbeat", 1.3F, 250, "frostlens"));
+		all.add(row(292, 0x53DBBE, 0xE0EAFF, "kaleido", "heartbeat_pulse", 3, GuardStyle.NONE, ContextProfile.NIGHT_BLOOM, "block.end_portal_frame.fill", 0.7F, 95, "chroma"));
+		all.add(row(293, 0x9CEBFF, 0x92CADE, "caustic", "leap_aura", 3, GuardStyle.STING, ContextProfile.NIGHT_BLOOM, "block.note_block.harp", 0.6F, 200, "duotone"));
+		all.add(row(294, 0x4CE5B2, 0xE6EAFF, "triweave", "honey_drip", 3, GuardStyle.NONE, ContextProfile.NIGHT_BLOOM, "block.honey_block.slide", 1.4F, 115, "bloomglow"));
+		// F59 "Cinder Bloom" (ember orange x ash pink)
+		all.add(row(295, 0xCC411F, 0xD98293, "arcs", "sand_devils", 0, GuardStyle.NONE, ContextProfile.NIGHT_BLOOM, "entity.axolotl.swim", 1.4F, 115, "pixelate"));
+		all.add(row(296, 0xDE7237, 0xC96786, "kaleido", "rune_orbit", 4, GuardStyle.GLOW, ContextProfile.NONE, "block.beacon.power_select", 1.0F, 120, "tint"));
+		all.add(row(297, 0xB51A0E, 0xF0A3A4, "caustic", "heartbeat_pulse", 4, GuardStyle.GUST, ContextProfile.NIGHT_BLOOM, "block.enchantment_table.use", 1.2F, 165, "glitch"));
+		all.add(row(298, 0xEB9749, 0xBD5783, "triweave", "leap_aura", 4, GuardStyle.GLOW, ContextProfile.NONE, "entity.evoker.cast_spell", 0.7F, 190, "radialblur"));
+		all.add(row(299, 0xBF060F, 0xEBAFA7, "aurora", "honey_drip", 4, GuardStyle.GLOW, ContextProfile.STORM_CHARGED, "ambient.underwater.loop", 1.4F, 210, "posterize"));
+		// F60 "Moonlit Fen" (silvered green x mist blue)
+		all.add(row(300, 0x7CBFA3, 0x546C8C, "kaleido", "sand_devils", 1, GuardStyle.STING, ContextProfile.NONE, "ambient.nether_wastes.loop", 1.4F, 120, "wobble"));
+		all.add(row(301, 0x9DD1C3, 0x40607D, "caustic", "rune_orbit", 5, GuardStyle.SLOW, ContextProfile.CROWD_SCALE, "entity.elder_guardian.ambient", 0.8F, 105, "ripple"));
+		all.add(row(302, 0x62A881, 0x6F7BA3, "triweave", "heartbeat_pulse", 5, GuardStyle.GUST, ContextProfile.CROWD_SCALE, "entity.glow_squid.ambient", 1.4F, 170, "scanlines"));
+		all.add(row(303, 0xB4DED8, 0x345B70, "aurora", "leap_aura", 5, GuardStyle.NONE, ContextProfile.NONE, "block.sponge.absorb", 1.4F, 220, "glitch"));
+		all.add(row(304, 0x5FB27B, 0x70759E, "scales", "honey_drip", 5, GuardStyle.NONE, ContextProfile.HEALTH_HUE, "entity.firework_rocket.twinkle", 1.3F, 240, "desat"));
+		// F61 "Sunflare" (solar yellow x flare orange)
+		all.add(row(305, 0xFAD20C, 0xD97621, "caustic", "sand_devils", 2, GuardStyle.NONE, ContextProfile.NONE, "block.bubble_column.upwards_ambient", 0.9F, 185, "vignette"));
+		all.add(row(306, 0xFFFB26, 0xC94E0C, "triweave", "rune_orbit", 6, GuardStyle.DARK, ContextProfile.CROWD_SCALE, "block.bubble_column.upwards_ambient", 0.6F, 180, "chroma"));
+		all.add(row(307, 0xE39F00, 0xF0AF37, "aurora", "heartbeat_pulse", 6, GuardStyle.STING, ContextProfile.CROWD_SCALE, "block.big_dripleaf.tilt_down", 1.4F, 145, "pixelate"));
+		all.add(row(308, 0xE7FF36, 0xBD2D02, "scales", "leap_aura", 6, GuardStyle.BLIND, ContextProfile.CROWD_SCALE, "block.water.ambient", 0.6F, 120, "edgeglow"));
+		all.add(row(309, 0xED8A00, 0xEBC53D, "circuit", "honey_drip", 6, GuardStyle.STING, ContextProfile.LOW_HEALTH_FRENZY, "entity.glow_squid.ambient", 0.8F, 170, "heathaze"));
+		// F62 "Ink Wash" (ink blue-black x wash grey)
+		all.add(row(310, 0x2A384C, 0x7A7A99, "triweave", "sand_devils", 3, GuardStyle.NONE, ContextProfile.NONE, "block.honey_block.slide", 0.7F, 95, "duotone"));
+		all.add(row(311, 0x3D465E, 0x62668A, "aurora", "resist_aura", 3, GuardStyle.NONE, ContextProfile.LOW_HEALTH_FRENZY, "entity.parrot.fly", 1.4F, 165, "radialblur"));
+		all.add(row(312, 0x1A2936, 0x9F9BB0, "scales", "rising_souls", 3, GuardStyle.DARK, ContextProfile.NIGHT_BLOOM, "entity.allay.ambient_with_item", 0.9F, 180, "scanlines"));
+		all.add(row(313, 0x4C506B, 0x525C7D, "circuit", "tide_pools", 0, GuardStyle.GLOW, ContextProfile.NIGHT_BLOOM, "entity.dolphin.ambient_water", 1.0F, 150, "posterize"));
+		all.add(row(314, 0x1B3440, 0x9F9AAB, "curlsmoke", "wax_glow", 3, GuardStyle.NONE, ContextProfile.NONE, "block.copper_bulb.turn_on", 1.3F, 230, "frostlens"));
+		// F63 "Coralline" (coral x pearl)
+		all.add(row(315, 0xF26A55, 0xF2DEC2, "aurora", "sand_devils", 4, GuardStyle.NONE, ContextProfile.NONE, "entity.warden.heartbeat", 1.0F, 235, "bloomglow"));
+		all.add(row(316, 0xFF9A73, 0xE3C0A1, "scales", "resist_aura", 4, GuardStyle.NONE, ContextProfile.NONE, "entity.firework_rocket.twinkle", 1.3F, 210, "radialblur"));
+		all.add(row(317, 0xDB3D3D, 0xFFF8E0, "circuit", "rising_souls", 4, GuardStyle.STING, ContextProfile.NIGHT_BLOOM, "block.amethyst_block.chime", 0.7F, 195, "ripple"));
+		all.add(row(318, 0xFFB682, 0xD6A78D, "curlsmoke", "tide_pools", 1, GuardStyle.NONE, ContextProfile.NONE, "block.note_block.harp", 1.2F, 95, "vignette"));
+		all.add(row(319, 0xE53549, 0xFFFCE6, "nebula", "wax_glow", 4, GuardStyle.DARK, ContextProfile.NONE, "entity.breeze.idle_ground", 0.9F, 130, "wobble"));
+		// F64 "Tidal Bore" (murky teal x foam)
+		all.add(row(320, 0x369199, 0x8DD9C6, "scales", "sand_devils", 5, GuardStyle.NONE, ContextProfile.NIGHT_BLOOM, "block.bubble_column.upwards_ambient", 0.7F, 225, "tint"));
+		all.add(row(321, 0x4D95AB, 0x71C9A9, "circuit", "resist_aura", 5, GuardStyle.DARK, ContextProfile.STORM_CHARGED, "block.sculk.spread", 1.4F, 85, "chroma"));
+		all.add(row(322, 0x24827D, 0xAFF0EB, "curlsmoke", "rising_souls", 5, GuardStyle.STING, ContextProfile.NONE, "entity.blaze.burn", 1.1F, 95, "desat"));
+		all.add(row(323, 0x5E97B8, 0x60BD90, "nebula", "tide_pools", 2, GuardStyle.GUST, ContextProfile.NONE, "block.portal.ambient", 0.8F, 225, "bloomglow"));
+		all.add(row(324, 0x208C7A, 0xB2E7EB, "sparkle", "wax_glow", 5, GuardStyle.STING, ContextProfile.NONE, "block.big_dripleaf.tilt_down", 1.1F, 210, "frostlens"));
+		// F65 "Redwood Grove" (bark red x deep green)
+		all.add(row(325, 0x8C432A, 0x246634, "circuit", "sand_devils", 6, GuardStyle.BLIND, ContextProfile.NONE, "ambient.soul_sand_valley.loop", 0.6F, 115, "edgeglow"));
+		all.add(row(326, 0x9E653F, 0x17571F, "curlsmoke", "resist_aura", 6, GuardStyle.BLIND, ContextProfile.NONE, "particle.soul_escape", 1.0F, 85, "glitch"));
+		all.add(row(327, 0x75261B, 0x367D55, "nebula", "rising_souls", 6, GuardStyle.NONE, ContextProfile.LOW_HEALTH_FRENZY, "block.note_block.chime", 0.6F, 210, "duotone"));
+		all.add(row(328, 0xAB804F, 0x104A11, "sparkle", "tide_pools", 3, GuardStyle.NONE, ContextProfile.NONE, "ambient.warped_forest.loop", 1.2F, 160, "heathaze"));
+		all.add(row(329, 0x801717, 0x37785C, "starfield", "wax_glow", 6, GuardStyle.GUST, ContextProfile.LOW_HEALTH_FRENZY, "block.end_portal_frame.fill", 1.4F, 215, "posterize"));
+		// F66 "Aurora Australis" (austral teal x violet)
+		all.add(row(330, 0x2BD9AD, 0x752E99, "curlsmoke", "static_field", 3, GuardStyle.GLOW, ContextProfile.NONE, "entity.slime.squish", 1.1F, 235, "pixelate"));
+		all.add(row(331, 0x46EBDA, 0x591D8A, "nebula", "mist_layer", 3, GuardStyle.BLIND, ContextProfile.NONE, "particle.soul_escape", 0.8F, 130, "scanlines"));
+		all.add(row(332, 0x19C281, 0xA043B0, "sparkle", "shadow_veil", 0, GuardStyle.GLOW, ContextProfile.NIGHT_BLOOM, "ambient.soul_sand_valley.loop", 1.4F, 135, "ripple"));
+		all.add(row(333, 0x59F2F7, 0x41147D, "starfield", "tide_pools", 4, GuardStyle.NONE, ContextProfile.HEALTH_HUE, "entity.warden.heartbeat", 0.8F, 250, "vignette"));
+		all.add(row(334, 0x10CC6E, 0xA946AB, "petals", "storm_cage", 3, GuardStyle.STING, ContextProfile.STORM_CHARGED, "block.note_block.chime", 1.3F, 100, "tint"));
+		// F67 "Quicksilver" (mercury silver x steel blue)
+		all.add(row(335, 0xB8C8D9, 0x638C99, "nebula", "static_field", 4, GuardStyle.NONE, ContextProfile.LOW_HEALTH_FRENZY, "entity.blaze.burn", 1.4F, 220, "desat"));
+		all.add(row(336, 0xD3DBEB, 0x4D828A, "sparkle", "mist_layer", 4, GuardStyle.GLOW, ContextProfile.HEALTH_HUE, "block.copper_bulb.turn_on", 0.6F, 210, "glitch"));
+		all.add(row(337, 0x97B2C2, 0x809BB0, "starfield", "shadow_veil", 1, GuardStyle.GUST, ContextProfile.CROWD_SCALE, "block.sponge.absorb", 1.0F, 160, "wobble"));
+		all.add(row(338, 0xDFE4F7, 0x407C7D, "petals", "tide_pools", 5, GuardStyle.GUST, ContextProfile.CROWD_SCALE, "entity.blaze.burn", 1.0F, 195, "bloomglow"));
+		all.add(row(339, 0x95BECC, 0x8294AB, "truchet", "storm_cage", 4, GuardStyle.STING, ContextProfile.LOW_HEALTH_FRENZY, "entity.allay.ambient_with_item", 0.7F, 130, "chroma"));
+		// F68 "Basalt Garden" (basalt grey x lava orange)
+		all.add(row(340, 0x41414C, 0xBF4C13, "sparkle", "static_field", 5, GuardStyle.NONE, ContextProfile.NONE, "block.note_block.harp", 1.4F, 250, "duotone"));
+		all.add(row(341, 0x56555E, 0xB02802, "starfield", "mist_layer", 5, GuardStyle.NONE, ContextProfile.NONE, "block.amethyst_block.resonate", 1.4F, 90, "heathaze"));
+		all.add(row(342, 0x2A2B36, 0xD68127, "petals", "shadow_veil", 2, GuardStyle.BLIND, ContextProfile.STORM_CHARGED, "ambient.soul_sand_valley.loop", 1.0F, 120, "scanlines"));
+		all.add(row(343, 0x63606B, 0xA31000, "truchet", "tide_pools", 6, GuardStyle.BLIND, ContextProfile.NONE, "ambient.basalt_deltas.loop", 1.1F, 170, "edgeglow"));
+		all.add(row(344, 0x2F3340, 0xD1972C, "plasma", "storm_cage", 5, GuardStyle.NONE, ContextProfile.STORM_CHARGED, "entity.axolotl.swim", 1.4F, 140, "posterize"));
+		// F69 "Prismatic Finale" (full-spectrum complements)
+		all.add(row(345, 0xE617E6, 0x17E617, "starfield", "static_field", 6, GuardStyle.BLIND, ContextProfile.HEALTH_HUE, "ambient.soul_sand_valley.loop", 1.3F, 80, "scanlines"));
+		all.add(row(346, 0xE62F17, 0x14B2C7, "petals", "mist_layer", 6, GuardStyle.BLIND, ContextProfile.STORM_CHARGED, "entity.warden.heartbeat", 1.0F, 170, "wobble"));
+		all.add(row(347, 0xB5E617, 0x4717E6, "truchet", "shadow_veil", 3, GuardStyle.DARK, ContextProfile.HEALTH_HUE, "block.sculk_sensor.clicking", 1.0F, 175, "ripple"));
+		all.add(row(348, 0x17E65F, 0xC71488, "plasma", "tide_aura", 3, GuardStyle.GLOW, ContextProfile.LOW_HEALTH_FRENZY, "block.amethyst_block.chime", 0.7F, 140, "tint"));
+		all.add(row(349, 0x1785E6, 0xE67717, "rings", "storm_cage", 6, GuardStyle.NONE, ContextProfile.NONE, "block.vault.ambient", 1.3F, 135, "pixelate"));
 
 		return List.copyOf(all);
 	}
@@ -219,18 +506,20 @@ public final class EffectRegistry {
 	/**
 	 * Fails fast when the catalogue is malformed. Enforces: exactly {@link #COUNT}
 	 * entries with ids 0..COUNT-1; all palette pairs pairwise distinct; all
-	 * (insideBehaviorId, behaviorVariant) pairs pairwise distinct with every USED
-	 * behavior id covering variants 0..{@link #CATALOGUE_VARIANTS}-1 exactly once
-	 * each; every registered behavior either used by the catalogue or listed in
-	 * {@link #PENDING_BEHAVIORS} (and pending behaviors never used); ambientPeriodTicks positive;
+	 * (insideBehaviorId, behaviorVariant) pairs pairwise distinct with every
+	 * registered behavior used by the catalogue and covering variants
+	 * 0..{@link #CATALOGUE_VARIANTS}-1 exactly once each (50 x 7 = an exact cover
+	 * of the 350 rows); ambientPeriodTicks positive;
 	 * every (ambientSoundId, ambientPitch, ambientPeriodTicks) triple distinct;
 	 * every behavior id registered in {@link InsideEffectBehavior#REGISTRY};
 	 * every screenTemplate one of the 16 {@link #SCREEN_TEMPLATES}; every
 	 * ambientSoundId resolvable in the vanilla sound registry; no surface,
 	 * screenTemplate or behavior id repeated within a 5-effect color family
 	 * (id / 5); no (surface, screenTemplate) pair used more than 3 times across
-	 * the whole catalogue; and every {@link #SCREEN_TEMPLATES} entry used by at
-	 * least one effect.
+	 * the whole catalogue (the tightest cap the 350-row table satisfies: three
+	 * legacy pairs already sit at 3, and the expansion rows never push any pair
+	 * past it); and every {@link #SCREEN_TEMPLATES} entry used by at least one
+	 * effect.
 	 */
 	public static void validate() {
 		if (ALL.size() != COUNT) {
@@ -303,37 +592,25 @@ public final class EffectRegistry {
 			screenTemplatesUsed.add(def.screenTemplate());
 		}
 
-		// Derived invariant: every USED behavior id must cover variants
+		// Derived invariant: every registered behavior id must cover variants
 		// 0..CATALOGUE_VARIANTS-1 exactly once each (the per-row uniqueness check
-		// above already rules out duplicates within a behavior).
+		// above already rules out duplicates within a behavior), giving the exact
+		// 50 x 7 = 350 cover.
 		Set<Integer> requiredVariants = new HashSet<>();
 		for (int v = 0; v < CATALOGUE_VARIANTS; v++) {
 			requiredVariants.add(v);
 		}
 
 		for (Map.Entry<String, Set<Integer>> entry : behaviorVariants.entrySet()) {
-			if (PENDING_BEHAVIORS.contains(entry.getKey())) {
-				throw new IllegalStateException("Pending behavior " + entry.getKey() + " must not be used by the catalogue yet");
-			}
-
 			if (!entry.getValue().equals(requiredVariants)) {
 				throw new IllegalStateException("Behavior " + entry.getKey() + " must be used exactly " + CATALOGUE_VARIANTS
 						+ " times with variants " + requiredVariants + ", found variants " + entry.getValue());
 			}
 		}
 
-		// TEMPORARY (milestone C, removed with PENDING_BEHAVIORS in milestone D):
-		// registered behaviors must be either used by the catalogue or explicitly
-		// pending, and every pending id must actually be registered.
 		for (String registered : InsideEffectBehavior.REGISTRY.keySet()) {
-			if (!behaviorVariants.containsKey(registered) && !PENDING_BEHAVIORS.contains(registered)) {
-				throw new IllegalStateException("Registered behavior " + registered + " is neither used by the catalogue nor in PENDING_BEHAVIORS");
-			}
-		}
-
-		for (String pending : PENDING_BEHAVIORS) {
-			if (!InsideEffectBehavior.REGISTRY.containsKey(pending)) {
-				throw new IllegalStateException("PENDING_BEHAVIORS entry is not registered: " + pending);
+			if (!behaviorVariants.containsKey(registered)) {
+				throw new IllegalStateException("Registered behavior " + registered + " is not used by the catalogue");
 			}
 		}
 

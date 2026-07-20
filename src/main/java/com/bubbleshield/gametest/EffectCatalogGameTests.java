@@ -32,32 +32,27 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Machine-enforcement of the 105-effect catalogue invariants: registry validity,
+ * Machine-enforcement of the 350-effect catalogue invariants: registry validity,
  * the uniqueness matrix, EN/DE lang parity and the screen-fx JSON cross-check.
  */
 public class EffectCatalogGameTests {
 	@GameTest
 	public void allEffectsValid(GameTestHelper helper) {
 		EffectRegistry.validate();
-		helper.assertTrue(EffectRegistry.COUNT == 105, "catalogue should contain exactly 105 effects");
+		helper.assertTrue(EffectRegistry.COUNT == 350, "catalogue should contain exactly 350 effects");
 		helper.assertTrue(EffectRegistry.ALL.size() == EffectRegistry.COUNT, "registry should expose exactly " + EffectRegistry.COUNT + " effect definitions");
 		helper.assertTrue(InsideEffectBehavior.REGISTRY.size() == 50, "exactly 50 inside behaviors should be registered");
 
-		// Allowlist-aware usage rule: the 105-row catalogue uses every registered
-		// behavior EXCEPT the PENDING_BEHAVIORS staged for the 350-effect milestone,
-		// and never uses a pending behavior.
+		// Exact-cover usage rule: the 350-row catalogue uses every registered
+		// behavior (each exactly CATALOGUE_VARIANTS = 7 times, per validate()).
 		Set<String> used = new HashSet<>();
 		for (EffectDefinition def : EffectRegistry.ALL) {
 			used.add(def.insideBehaviorId());
 		}
 		helper.assertTrue(
-				used.size() == InsideEffectBehavior.REGISTRY.size() - EffectRegistry.PENDING_BEHAVIORS.size(),
-				"used behaviors (" + used.size() + ") plus pending allowlist (" + EffectRegistry.PENDING_BEHAVIORS.size()
-						+ ") should exactly cover the " + InsideEffectBehavior.REGISTRY.size() + " registered behaviors");
-		for (String pending : EffectRegistry.PENDING_BEHAVIORS) {
-			helper.assertTrue(InsideEffectBehavior.REGISTRY.containsKey(pending), "pending behavior is not registered: " + pending);
-			helper.assertTrue(!used.contains(pending), "pending behavior must not be used by the catalogue yet: " + pending);
-		}
+				used.equals(InsideEffectBehavior.REGISTRY.keySet()),
+				"the catalogue should use exactly the " + InsideEffectBehavior.REGISTRY.size()
+						+ " registered behaviors, used " + used.size());
 
 		helper.succeed();
 	}
@@ -65,35 +60,21 @@ public class EffectCatalogGameTests {
 	/**
 	 * Ticks every effect's inside behavior directly for several game times and checks
 	 * that every effect's ambient sound id resolves in the vanilla sound registry.
-	 * Then ticks the FULL behavior matrix — all 50 registered behaviors (including
-	 * the pending ones not yet used by the catalogue) across variants 0..6 — so no
-	 * variant path can throw.
+	 * Split into two id ranges (0..174 here, 175..349 in
+	 * {@link #allBehaviorsSmokeUpper}) so neither half's synchronous tick storm
+	 * dominates its batch at the 350-effect catalogue size.
 	 */
 	@GameTest(padding = 16)
 	public void allBehaviorsSmoke(GameTestHelper helper) {
+		smokeIdRange(helper, 0, 175);
+
+		// Full matrix: every registered behavior x variants 0..6 under a synthetic
+		// definition, on both shapes' geometry inputs via the placed projector's shape.
 		BlockPos projectorPos = new BlockPos(4, 2, 4);
 		helper.setBlock(projectorPos, ModBlocks.BUBBLE_SHIELD_PROJECTOR);
 		BubbleShieldBlockEntity be = helper.getBlockEntity(projectorPos, BubbleShieldBlockEntity.class);
 		ServerLevel level = helper.getLevel();
 		Vec3 center = Vec3.atCenterOf(helper.absolutePos(projectorPos));
-
-		for (EffectDefinition def : EffectRegistry.ALL) {
-			be.getShieldState().effectId = def.id();
-
-			InsideEffectBehavior behavior = InsideEffectBehavior.get(def.insideBehaviorId());
-			helper.assertTrue(behavior != null, "effect " + def.id() + " references unregistered behavior " + def.insideBehaviorId());
-			for (long gameTime : new long[] {0L, 10L, 20L, 30L, 40L}) {
-				behavior.tick(level, center, 6.0F, be.getShieldState().shape, def, gameTime, ContextState.NEUTRAL);
-			}
-
-			Identifier soundId = Identifier.parse("minecraft:" + def.ambientSoundId());
-			helper.assertTrue(
-					BuiltInRegistries.SOUND_EVENT.containsKey(soundId),
-					"effect " + def.id() + " ambient sound does not resolve: " + soundId);
-		}
-
-		// Full matrix: every registered behavior x variants 0..6 under a synthetic
-		// definition, on both shapes' geometry inputs via the placed projector's shape.
 		for (Map.Entry<String, InsideEffectBehavior> entry : InsideEffectBehavior.REGISTRY.entrySet()) {
 			for (int variant = 0; variant <= 6; variant++) {
 				EffectDefinition def = EffectDefinition.of(0, 0xFFFF8800, 0xFF884400, SurfaceTemplate.AURORA, 0.5F, 0.8F,
@@ -107,15 +88,47 @@ public class EffectCatalogGameTests {
 		helper.succeed();
 	}
 
+	/** Second half of the per-effect smoke: ids 175..349 (see {@link #allBehaviorsSmoke}). */
+	@GameTest(padding = 16)
+	public void allBehaviorsSmokeUpper(GameTestHelper helper) {
+		smokeIdRange(helper, 175, 350);
+		helper.succeed();
+	}
+
+	/** Ticks each effect in [firstId, endExclusive) and checks its ambient sound resolves. */
+	private static void smokeIdRange(GameTestHelper helper, int firstId, int endExclusive) {
+		BlockPos projectorPos = new BlockPos(4, 2, 4);
+		helper.setBlock(projectorPos, ModBlocks.BUBBLE_SHIELD_PROJECTOR);
+		BubbleShieldBlockEntity be = helper.getBlockEntity(projectorPos, BubbleShieldBlockEntity.class);
+		ServerLevel level = helper.getLevel();
+		Vec3 center = Vec3.atCenterOf(helper.absolutePos(projectorPos));
+
+		for (int id = firstId; id < endExclusive; id++) {
+			EffectDefinition def = EffectRegistry.get(id);
+			be.getShieldState().effectId = def.id();
+
+			InsideEffectBehavior behavior = InsideEffectBehavior.get(def.insideBehaviorId());
+			helper.assertTrue(behavior != null, "effect " + def.id() + " references unregistered behavior " + def.insideBehaviorId());
+			for (long gameTime : new long[] {0L, 10L, 20L, 30L, 40L}) {
+				behavior.tick(level, center, 6.0F, be.getShieldState().shape, def, gameTime, ContextState.NEUTRAL);
+			}
+
+			Identifier soundId = Identifier.parse("minecraft:" + def.ambientSoundId());
+			helper.assertTrue(
+					BuiltInRegistries.SOUND_EVENT.containsKey(soundId),
+					"effect " + def.id() + " ambient sound does not resolve: " + soundId);
+		}
+	}
+
 	/**
-	 * The surface-template axis is complete: 16 templates exist and every one of them is
-	 * used by the catalogue. The bubble shader files themselves live in the CLIENT source
-	 * set (not on this dedicated-server classpath), so their GLSL is verified out-of-band
-	 * by {@code tools/validate_shaders.py} (glslangValidator) plus the build.
+	 * The surface-family axis is complete: 24 technique families exist and every one of
+	 * them is used by the catalogue. The bubble shader files themselves live in the CLIENT
+	 * source set (not on this dedicated-server classpath), so their GLSL is verified
+	 * out-of-band by {@code tools/validate_shaders.py} (glslangValidator) plus the build.
 	 */
 	@GameTest
 	public void surfaceTemplateCatalogComplete(GameTestHelper helper) {
-		helper.assertTrue(SurfaceTemplate.values().length == 16, "exactly 16 surface templates should exist, found " + SurfaceTemplate.values().length);
+		helper.assertTrue(SurfaceTemplate.values().length == 24, "exactly 24 surface families should exist, found " + SurfaceTemplate.values().length);
 
 		Set<SurfaceTemplate> used = new HashSet<>();
 		for (EffectDefinition def : EffectRegistry.ALL) {
@@ -153,7 +166,9 @@ public class EffectCatalogGameTests {
 	 * {@link EffectRegistry#validate()} (checked by {@link #allEffectsValid}) so it
 	 * also runs at mod init; this test keeps the remaining pairwise-uniqueness axes,
 	 * plus the global "(surface, screenTemplate) pair used at most 3 times" cap and
-	 * the per-family "no repeated behavior id" rule.
+	 * the per-family "no repeated behavior id" rule. The cap of 3 is the tightest
+	 * the 350-row table satisfies: three legacy pairs (frozen ids 0..104) already
+	 * sit at 3 and the expansion rows never push any pair past it.
 	 */
 	@GameTest
 	public void uniquenessMatrixHolds(GameTestHelper helper) {
@@ -185,7 +200,7 @@ public class EffectCatalogGameTests {
 	/**
 	 * EN/DE parity over the ENTIRE key set (not just effect names): the key sets must be
 	 * identical, so every gui/advancement/axis key added in one language must exist in
-	 * the other. Effect names 00..104 must additionally be present in both.
+	 * the other. Effect names 00..349 must additionally be present in both.
 	 */
 	@GameTest
 	public void langKeysComplete(GameTestHelper helper) {
@@ -207,7 +222,7 @@ public class EffectCatalogGameTests {
 
 	/**
 	 * Every axis label used by the effect-picker tooltips resolves to a lang key:
-	 * 16 surface templates, 50 inside behaviors (pending ones included), 7 guard
+	 * 24 surface families, 50 inside behaviors, 7 guard
 	 * styles and 6 context profiles. Keys are derived from the live enums/registry
 	 * so the tooltip composition in {@code EffectPickerScreen} and the lang files
 	 * cannot drift apart.

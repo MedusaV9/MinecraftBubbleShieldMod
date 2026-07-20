@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Dev tool: generates the 105 shield screen post-effect JSONs.
+"""Dev tool: generates the 350 shield screen post-effect JSONs.
 
 Emits src/main/resources/assets/bubbleshield/post_effect/effect_00.json ...
-effect_104.json. The assets live in the main (not client) source set so the
+effect_349.json (the %02d name format never truncates 3-digit ids, so ids
+0..104 keep their historical file names byte-identically).
+The assets live in the main (not client) source set so the
 postEffectAssetsExist game test can find them on the dedicated-server classpath;
 the client resource manager loads them from the merged mod jar all the same.
 Not wired into the build; rerun manually after changing the mapping below and
@@ -27,7 +29,7 @@ from pathlib import Path
 
 OUT_DIR = Path(__file__).resolve().parent.parent / "src/main/resources/assets/bubbleshield/post_effect"
 
-EFFECT_COUNT = 105
+EFFECT_COUNT = 350
 
 # Modulus/denominator of the per-id param_b derivation below. FROZEN at the V1
 # catalogue size (75): retuning it to EFFECT_COUNT would silently change the
@@ -163,6 +165,300 @@ EFFECTS = [
     (0xFFFF6600, 0xFF0066FF, "pixelate"),   # 102 Carnival Clash
     (0xFF00E5B0, 0xFFE5003F, "radialblur"), # 103 Ringmaster's Glow
     (0xFFFFE600, 0xFF3D0099, "duotone"),    # 104 Spectral Finale
+    # F21 "Rose Quartz" (dusty rose x rosegold)
+    (0xFFF2859B, 0xFFB27150, "radialblur"), # 105 Quartzlight Bloom
+    (0xFFFFA6AA, 0xFFA3513B, "glitch"),     # 106 Rosewater Veil
+    (0xFFDB698F, 0xFFC99C6B, "posterize"),  # 107 Dawnstone Halo
+    (0xFFFFBBB5, 0xFF96392F, "duotone"),    # 108 Blushing Geode
+    (0xFFE5639E, 0xFFC4A66E, "chroma"),     # 109 Gilded Thorn
+    # F22 "Desert Mirage" (sand x heat haze)
+    (0xFFEBBB6A, 0xFF996436, "frostlens"),  # 110 Dune Shimmer
+    (0xFFFCE48B, 0xFF8A4724, "radialblur"), # 111 Caravan Ghost
+    (0xFFD49250, 0xFFB08D4C, "glitch"),     # 112 Sandglass Drift
+    (0xFFFFF79C, 0xFF7D311A, "posterize"),  # 113 Mirage Walker
+    (0xFFDE8249, 0xFFAB974F, "duotone"),    # 114 Sunbaked Seal
+    # F23 "Obsidian Flow" (void violet x magma black)
+    (0xFF512273, 0xFF400A40, "frostlens"),  # 115 Obsidian Heart
+    (0xFF6F3585, 0xFF2B0330, "radialblur"), # 116 Voidglass River
+    (0xFF35155C, 0xFF57144A, "glitch"),     # 117 Nightflow Crust
+    (0xFF874391, 0xFF1D0026, "wobble"),     # 118 Shardfall Abyss
+    (0xFF2E1266, 0xFF52153E, "posterize"),  # 119 Molten Umbra
+    # F24 "Jade Dynasty" (jade x imperial green)
+    (0xFF39BF7C, 0xFF177317, "desat"),      # 120 Jade Emperor
+    (0xFF54D1A5, 0xFF15630B, "radialblur"), # 121 Dynasty Lantern
+    (0xFF27A856, 0xFF278A39, "frostlens"),  # 122 Celadon Court
+    (0xFF66DEC4, 0xFF185705, "heathaze"),   # 123 Imperial Serpent
+    (0xFF20B245, 0xFF298546, "duotone"),    # 124 Bamboo Rampart
+    # F25 "Neon Tokyo" (electric cyan x hot magenta)
+    (0xFF18E0F2, 0xFFE60BAF, "desat"),      # 125 Shibuya Pulse
+    (0xFF33CFFF, 0xFFD600BA, "glitch"),     # 126 Neon Alley
+    (0xFF07DBD1, 0xFFFC219D, "pixelate"),   # 127 Hologram Rain
+    (0xFF42BAFF, 0xFFC900C6, "posterize"),  # 128 Midnight Arcade
+    (0xFF00E5BF, 0xFFF72882, "radialblur"), # 129 Kanji Glow
+    # F26 "Autumn Harvest" (russet x amber)
+    (0xFFD96B2B, 0xFF99700F, "chroma"),     # 130 Harvest Moonrise
+    (0xFFEB9B46, 0xFF8A5101, "wobble"),     # 131 Russet Whirl
+    (0xFFC24119, 0xFFB09F20, "scanlines"),  # 132 Maple Ember
+    (0xFFF7C059, 0xFF7D3A00, "duotone"),    # 133 Orchard Keeper
+    (0xFFCC2610, 0xFFA9AB24, "edgeglow"),   # 134 Cider Mist
+    # F27 "Arctic Dawn" (pale ice x dawn pink)
+    (0xFF9DD6F2, 0xFFE6A1B8, "frostlens"),  # 135 Polar Blush
+    (0xFFBFE0FF, 0xFFD683A8, "glitch"),     # 136 Dawnfrost Arc
+    (0xFF7FC9DB, 0xFFFCC5CD, "heathaze"),   # 137 Icelight Chorus
+    (0xFFCFE1FF, 0xFFC971A3, "pixelate"),   # 138 Tundra Glow
+    (0xFF7ADDE5, 0xFFF7C8C9, "posterize"),  # 139 Morning Floe
+    # F28 "Wisteria Garden" (lilac x deep violet)
+    (0xFFA877D9, 0xFF7E388C, "radialblur"), # 140 Wisteria Rain
+    (0xFFCE98EB, 0xFF65277D, "ripple"),     # 141 Lilac Trellis
+    (0xFF825DC2, 0xFFA34EA2, "wobble"),     # 142 Petalfall Arbor
+    (0xFFE8B0F7, 0xFF4F1D70, "scanlines"),  # 143 Violet Pergola
+    (0xFF7558CC, 0xFF9E5192, "bloomglow"),  # 144 Twilight Vine
+    # F29 "Deep Cavern" (slate x amber glow)
+    (0xFF475266, 0xFFA67032, "chroma"),     # 145 Cavern Echo
+    (0xFF606478, 0xFF965120, "duotone"),    # 146 Stalactite Choir
+    (0xFF323F4F, 0xFFBD9C48, "frostlens"),  # 147 Gloomlight Vein
+    (0xFF727385, 0xFF8A3916, "desat"),      # 148 Bedrock Whisper
+    (0xFF344A59, 0xFFB8A74B, "edgeglow"),   # 149 Amberdrip Grotto
+    # F30 "Citrus Grove" (lemon x lime)
+    (0xFFF2E124, 0xFF73BF26, "glitch"),     # 150 Lemon Spark
+    (0xFFF2FF40, 0xFF74B013, "heathaze"),   # 151 Lime Cascade
+    (0xFFDBB012, 0xFF6DD63C, "pixelate"),   # 152 Citrus Sunburst
+    (0xFFDCFF4F, 0xFF7AA30A, "posterize"),  # 153 Grove Sparkler
+    (0xFFE59B07, 0xFF5BD141, "scanlines"),  # 154 Zest Cyclone
+    # F31 "Midnight Oil" (navy x lamplit teal)
+    (0xFF172E73, 0xFF2E9999, "radialblur"), # 155 Midnight Refinery
+    (0xFF283185, 0xFF1D8A7D, "ripple"),     # 156 Lamplit Vigil
+    (0xFF0C2B5C, 0xFF439CB0, "tint"),       # 157 Inkwell Tide
+    (0xFF373491, 0xFF147D64, "vignette"),   # 158 Nocturne Sheen
+    (0xFF083766, 0xFF468BAB, "wobble"),     # 159 Burning Hour
+    # F32 "Salted Caramel" (caramel x cream)
+    (0xFFD99C57, 0xFFF2E0AA, "chroma"),     # 160 Caramel Swirl
+    (0xFFEBC575, 0xFFE3C28A, "bloomglow"),  # 161 Butterscotch Dome
+    (0xFFC27440, 0xFFFFFBC7, "desat"),      # 162 Praline Drift
+    (0xFFF7E38B, 0xFFD6A978, "duotone"),    # 163 Toffee Lattice
+    (0xFFCC6339, 0xFFFCFFCF, "edgeglow"),   # 164 Sugarglass Shell
+    # F33 "Electric Grape" (grape purple x acid green)
+    (0xFF921FCC, 0xFF58CC1F, "frostlens"),  # 165 Grape Voltage
+    (0xFFBF37DE, 0xFF5BBD0B, "glitch"),     # 166 Fizzing Vine
+    (0xFF670EB5, 0xFF4EE334, "heathaze"),   # 167 Static Vineyard
+    (0xFFE349EB, 0xFF64B002, "pixelate"),   # 168 Volt Cluster
+    (0xFF5306BF, 0xFF3CDE3A, "posterize"),  # 169 Overcharged Bloom
+    # F34 "Foxfire Marsh" (marsh green x haunted blue)
+    (0xFF36B24A, 0xFF2E6273, "chroma"),     # 170 Foxfire Wisp
+    (0xFF4FC474, 0xFF1F5A63, "radialblur"), # 171 Marshlight Lure
+    (0xFF249C28, 0xFF426B8A, "ripple"),     # 172 Bogbound Lantern
+    (0xFF60D193, 0xFF175657, "scanlines"),  # 173 Willow Gleam
+    (0xFF29A61E, 0xFF446085, "tint"),       # 174 Peat Phantom
+    # F35 "Cherry Cola" (cherry red x cola brown)
+    (0xFF991722, 0xFF66391A, "bloomglow"),  # 175 Cola Fizz
+    (0xFFAB332B, 0xFF57240E, "vignette"),   # 176 Cherry Syrup
+    (0xFF820A24, 0xFF7D5B29, "wobble"),     # 177 Soda Fountain
+    (0xFFB85239, 0xFF4A1408, "desat"),      # 178 Maraschino Night
+    (0xFF8C0432, 0xFF78632B, "duotone"),    # 179 Sarsaparilla Halo
+    # F36 "Silver Birch" (silver x birch green)
+    (0xFFBED9A3, 0xFF548C67, "frostlens"),  # 180 Birchbark Gleam
+    (0xFFD4EBC7, 0xFF407D4D, "edgeglow"),   # 181 Silverleaf Waltz
+    (0xFFABC284, 0xFF6FA38A, "glitch"),     # 182 Catkin Drift
+    (0xFFE4F7DF, 0xFF34703A, "heathaze"),   # 183 Pale Canopy
+    (0xFFB9CC81, 0xFF709E8E, "pixelate"),   # 184 Sapling Sentinel
+    # F37 "Dragonfruit" (pitaya pink x seed green)
+    (0xFFF230A1, 0xFF4AB236, "radialblur"), # 185 Dragonfruit Slice
+    (0xFFFF4C9A, 0xFF47A322, "posterize"),  # 186 Pitaya Burst
+    (0xFFDB1DA5, 0xFF4DC94F, "chroma"),     # 187 Seedspark Rind
+    (0xFFFF5C8D, 0xFF4B9618, "ripple"),     # 188 Tropic Fang
+    (0xFFE512C2, 0xFF51C462, "scanlines"),  # 189 Magenta Scale
+    # F38 "Stormglass" (storm grey-green x silver)
+    (0xFF6B9991, 0xFF8FA7BF, "vignette"),   # 190 Stormglass Omen
+    (0xFF89ABAA, 0xFF7499B0, "desat"),      # 191 Barometer Falling
+    (0xFF528274, 0xFFB2BDD6, "wobble"),     # 192 Squall Crystal
+    (0xFF9EB5B8, 0xFF6492A3, "bloomglow"),  # 193 Grey Horizon
+    (0xFF518C74, 0xFFB4B9D1, "tint"),       # 194 Weathervane Spin
+    # F39 "Honeycomb Hive" (honey gold x comb amber)
+    (0xFFE6AB22, 0xFF8C4D0E, "edgeglow"),   # 195 Hive Warden
+    (0xFFF7DC3E, 0xFF7D3101, "glitch"),     # 196 Honeycomb Heart
+    (0xFFCF7C11, 0xFFA3791D, "frostlens"),  # 197 Royal Jelly
+    (0xFFFFFC4F, 0xFF701E00, "duotone"),    # 198 Waggle Dance
+    (0xFFD96507, 0xFF9E8721, "heathaze"),   # 199 Nectar Vault
+    # F40 "Blue Ice Cave" (glacial blue x deep ice)
+    (0xFF45A3E6, 0xFF1C2F8C, "posterize"),  # 200 Glacier Hollow
+    (0xFF63A3F7, 0xFF0E2D7D, "pixelate"),   # 201 Blue Ice Mirror
+    (0xFF30A1CF, 0xFF302EA3, "radialblur"), # 202 Crevasse Light
+    (0xFF759FFF, 0xFF073170, "ripple"),     # 203 Frozen Cathedral
+    (0xFF27BBD9, 0xFF41319E, "scanlines"),  # 204 Serac Shadow
+    # F41 "Velvet Underground" (dark magenta x plum)
+    (0xFF802671, 0xFF381659, "vignette"),   # 205 Velvet Fog
+    (0xFF913A76, 0xFF240C4A, "wobble"),     # 206 Plum Lounge
+    (0xFF691866, 0xFF582570, "tint"),       # 207 Damask Whisper
+    (0xFF9E4978, 0xFF15073D, "duotone"),    # 208 Wine Cellar Waltz
+    (0xFF6B1573, 0xFF5F276B, "desat"),      # 209 Crushed Velour
+    # F42 "Prairie Wind" (wheat x sage)
+    (0xFFE6D47E, 0xFF7FA663, "bloomglow"),  # 210 Prairie Gale
+    (0xFFF7F6A1, 0xFF74964D, "chroma"),     # 211 Wheatfield Wave
+    (0xFFCFAE63, 0xFF8EBD80, "edgeglow"),   # 212 Sage Whisper
+    (0xFFF6FFB5, 0xFF708A3F, "glitch"),     # 213 Meadowlark Song
+    (0xFFD9A55D, 0xFF88B882, "heathaze"),   # 214 Tallgrass Tide
+    # F43 "Galactic Core" (deep purple x starlight)
+    (0xFF411C8C, 0xFFF2E3B6, "frostlens"),  # 215 Galactic Anchor
+    (0xFF652F9E, 0xFFE3C796, "posterize"),  # 216 Singularity Hymn
+    (0xFF240F75, 0xFFFFFCD4, "pixelate"),   # 217 Star Nursery
+    (0xFF813EAB, 0xFFD6AE83, "ripple"),     # 218 Accretion Crown
+    (0xFF140A80, 0xFFFDFFDB, "scanlines"),  # 219 Event Chorus
+    # F44 "Copper Canyon" (copper x rust)
+    (0xFFBF5B30, 0xFF731E11, "radialblur"), # 220 Canyon Forge
+    (0xFFD18649, 0xFF630806, "tint"),       # 221 Rustfall Ridge
+    (0xFFA8351E, 0xFF8A4120, "vignette"),   # 222 Coppervein Dusk
+    (0xFFDEA75B, 0xFF570109, "wobble"),     # 223 Red Mesa
+    (0xFFB21F17, 0xFF854F22, "bloomglow"),  # 224 Ironwood Ember
+    # F45 "Mint Chocolate" (mint x dark cocoa)
+    (0xFF67E6BB, 0xFF59351B, "duotone"),    # 225 Mint Ganache
+    (0xFF88F7E3, 0xFF4A2110, "chroma"),     # 226 Cocoa Frost
+    (0xFF4ECF93, 0xFF70542B, "desat"),      # 227 Peppermint Shard
+    (0xFF9CFFFA, 0xFF3D130A, "edgeglow"),   # 228 Truffle Shell
+    (0xFF48D984, 0xFF6B5A2C, "heathaze"),   # 229 Choc-Mint Aura
+    # F46 "Thunderhead" (charcoal x lightning yellow)
+    (0xFF3A3F59, 0xFFF2E018, "posterize"),  # 230 Anvil Cloud
+    (0xFF50516B, 0xFFE3B602, "glitch"),     # 231 Downburst Drum
+    (0xFF262F42, 0xFFEAFF2E, "frostlens"),  # 232 Static Ceiling
+    (0xFF646178, 0xFFD69200, "vignette"),   # 233 Rumble Front
+    (0xFF29384C, 0xFFD0FF36, "radialblur"), # 234 Flashover Peak
+    # F47 "Lavender Fields" (lavender x soft purple)
+    (0xFFB08AE6, 0xFF8F4BA6, "pixelate"),   # 235 Lavender Hush
+    (0xFFD7ADF7, 0xFF733696, "ripple"),     # 236 Provence Haze
+    (0xFF896DCF, 0xFFB764BD, "duotone"),    # 237 Bumble Row
+    (0xFFEDC2FF, 0xFF5C2B8A, "tint"),       # 238 Purple Furrow
+    (0xFF7B68D9, 0xFFB867B2, "bloomglow"),  # 239 Scented Twilight
+    # F48 "Bioluminal Reef" (abyss cyan x biolume green)
+    (0xFF16B8D9, 0xFF1C8C1C, "scanlines"),  # 240 Lanternfish Ball
+    (0xFF2FAFEB, 0xFF1B7D0E, "wobble"),     # 241 Abyssal Glow
+    (0xFF06BCC2, 0xFF2EA343, "edgeglow"),   # 242 Plankton Bloom
+    (0xFF40A5F7, 0xFF1F7007, "desat"),      # 243 Anglerlight Deep
+    (0xFF00CCBB, 0xFF319E54, "chroma"),     # 244 Jellyfish Drift
+    # F49 "Sunset Boulevard" (vermilion x dusk pink)
+    (0xFFF25824, 0xFFBF3971, "frostlens"),  # 245 Boulevard Blaze
+    (0xFFFF8C40, 0xFFB0256F, "vignette"),   # 246 Palm Silhouette
+    (0xFFDB2912, 0xFFD65170, "radialblur"), # 247 Vermilion Mile
+    (0xFFFFAD4F, 0xFFA31A73, "heathaze"),   # 248 Marquee Glow
+    (0xFFE50707, 0xFFD15662, "glitch"),     # 249 Golden Hour Strip
+    # F50 "Frostbitten Rose" (icy pink x deep red)
+    (0xFFF29DB3, 0xFF8C0E0E, "bloomglow"),  # 250 Frozen Petal
+    (0xFFFFBFC6, 0xFF7D0110, "ripple"),     # 251 Winter Rose
+    (0xFFDB7FA3, 0xFFA3361D, "pixelate"),   # 252 Rimehedge Thorn
+    (0xFFFFD0CF, 0xFF70001A, "posterize"),  # 253 Crystal Corsage
+    (0xFFE57AB0, 0xFF9E4921, "chroma"),     # 254 Bitter Bloom
+    # F51 "Emerald City" (emerald x gilded)
+    (0xFF1BB24D, 0xFFD9D957, "tint"),       # 255 Emerald Gate
+    (0xFF31C478, 0xFFC9B93E, "wobble"),     # 256 Oz Mirage
+    (0xFF0C9C29, 0xFFD9F073, "vignette"),   # 257 Greenspire Road
+    (0xFF41D19A, 0xFFBD9C31, "frostlens"),  # 258 Curtain Wizard
+    (0xFF05A612, 0xFFC6EB78, "glitch"),     # 259 Malachite Crown
+    # F52 "Ash and Bone" (ash grey x ivory)
+    (0xFFB2AAA1, 0xFF5A5E66, "desat"),      # 260 Bonechime Dust
+    (0xFFC4BDB1, 0xFF444D57, "tint"),       # 261 Ashen Reliquary
+    (0xFF9C8B81, 0xFF70727D, "radialblur"), # 262 Ivory Vigil
+    (0xFFD1CDBC, 0xFF37424A, "pixelate"),   # 263 Cinder Psalm
+    (0xFFA68A81, 0xFF6C6C78, "scanlines"),  # 264 Pale Marrow
+    # F53 "Ultraviolet" (blacklight violet x indigo)
+    (0xFF7012B2, 0xFF1D0566, "wobble"),     # 265 Blacklight Bloom
+    (0xFF9A27C4, 0xFF0C0057, "ripple"),     # 266 UV Resonance
+    (0xFF49059C, 0xFF3F107D, "chroma"),     # 267 Violet Spectrum
+    (0xFFBC36D1, 0xFF01004A, "duotone"),    # 268 Afterimage Purple
+    (0xFF3700A6, 0xFF4C1378, "heathaze"),   # 269 Radiant Dusk
+    # F54 "Peach Melba" (peach x raspberry)
+    (0xFFFAB17D, 0xFFCC3366, "edgeglow"),   # 270 Peach Parfait
+    (0xFFFFD399, 0xFFBD1E66, "tint"),       # 271 Melba Swirl
+    (0xFFE38662, 0xFFE34B62, "posterize"),  # 272 Raspberry Ripple
+    (0xFFFFE5A8, 0xFFB0136C, "scanlines"),  # 273 Sorbet Sunrise
+    (0xFFED735A, 0xFFDE5052, "duotone"),    # 274 Vanilla Cloudlet
+    # F55 "Kelp Forest" (kelp green x ocean blue)
+    (0xFF408C31, 0xFF327FA6, "wobble"),     # 275 Kelpway Canopy
+    (0xFF499E47, 0xFF207D96, "edgeglow"),   # 276 Otter's Cradle
+    (0xFF3A7521, 0xFF4880BD, "desat"),      # 277 Driftwood Sway
+    (0xFF57AB61, 0xFF167E8A, "frostlens"),  # 278 Urchin Grove
+    (0xFF46801D, 0xFF4B71B8, "glitch"),     # 279 Tidal Frond
+    # F56 "Royal Amethyst" (amethyst x royal gold)
+    (0xFFA83DCC, 0xFFD9BA41, "heathaze"),   # 280 Amethyst Scepter
+    (0xFFD159DE, 0xFFC9972A, "pixelate"),   # 281 Coronation Gleam
+    (0xFF802AB5, 0xFFF0ED5B, "posterize"),  # 282 Geodeheart Throne
+    (0xFFEB6CE6, 0xFFBD781E, "ripple"),     # 283 Violet Regalia
+    (0xFF7122BF, 0xFFDAEB60, "radialblur"), # 284 Crownjewel Facet
+    # F57 "Paper Lantern" (lantern red x ricepaper gold)
+    (0xFFE63D2E, 0xFFE6BA39, "vignette"),   # 285 Lantern Festival
+    (0xFFF7734A, 0xFFD69422, "edgeglow"),   # 286 Ricepaper Glow
+    (0xFFCF1B24, 0xFFFCF153, "desat"),      # 287 Festival Ember
+    (0xFFFF985C, 0xFFC97316, "scanlines"),  # 288 Crimson Fold
+    (0xFFD91133, 0xFFEDF759, "bloomglow"),  # 289 Skyward Wish
+    # F58 "Glacier Melt" (aqua x meltwater white)
+    (0xFF6DF2E7, 0xFFC8E1FA, "heathaze"),   # 290 Meltwater Rush
+    (0xFF8CF7FF, 0xFFA7D1EB, "frostlens"),  # 291 Aquamarine Thaw
+    (0xFF53DBBE, 0xFFE0EAFF, "chroma"),     # 292 Runoff Ribbon
+    (0xFF9CEBFF, 0xFF92CADE, "duotone"),    # 293 Icecap Tear
+    (0xFF4CE5B2, 0xFFE6EAFF, "bloomglow"),  # 294 Spring Torrent
+    # F59 "Cinder Bloom" (ember orange x ash pink)
+    (0xFFCC411F, 0xFFD98293, "pixelate"),   # 295 Cinder Petal
+    (0xFFDE7237, 0xFFC96786, "tint"),       # 296 Emberbloom Crown
+    (0xFFB51A0E, 0xFFF0A3A4, "glitch"),     # 297 Sootrose Drift
+    (0xFFEB9749, 0xFFBD5783, "radialblur"), # 298 Charred Blossom
+    (0xFFBF060F, 0xFFEBAFA7, "posterize"),  # 299 Phoenix Garden
+    # F60 "Moonlit Fen" (silvered green x mist blue)
+    (0xFF7CBFA3, 0xFF546C8C, "wobble"),     # 300 Fenlight Mirror
+    (0xFF9DD1C3, 0xFF40607D, "ripple"),     # 301 Moonmoth Flight
+    (0xFF62A881, 0xFF6F7BA3, "scanlines"),  # 302 Silvergrass Pool
+    (0xFFB4DED8, 0xFF345B70, "glitch"),     # 303 Midnight Reeds
+    (0xFF5FB27B, 0xFF70759E, "desat"),      # 304 Stillwater Charm
+    # F61 "Sunflare" (solar yellow x flare orange)
+    (0xFFFAD20C, 0xFFD97621, "vignette"),   # 305 Solar Lash
+    (0xFFFFFB26, 0xFFC94E0C, "chroma"),     # 306 Corona Loop
+    (0xFFE39F00, 0xFFF0AF37, "pixelate"),   # 307 Prominence Arch
+    (0xFFE7FF36, 0xFFBD2D02, "edgeglow"),   # 308 Sunspot Waltz
+    (0xFFED8A00, 0xFFEBC53D, "heathaze"),   # 309 Radiance Overload
+    # F62 "Ink Wash" (ink blue-black x wash grey)
+    (0xFF2A384C, 0xFF7A7A99, "duotone"),    # 310 Inkstroke Mountain
+    (0xFF3D465E, 0xFF62668A, "radialblur"), # 311 Sumi Mist
+    (0xFF1A2936, 0xFF9F9BB0, "scanlines"),  # 312 Grinding Stone
+    (0xFF4C506B, 0xFF525C7D, "posterize"),  # 313 Paper Horizon
+    (0xFF1B3440, 0xFF9F9AAB, "frostlens"),  # 314 Charcoal Stream
+    # F63 "Coralline" (coral x pearl)
+    (0xFFF26A55, 0xFFF2DEC2, "bloomglow"),  # 315 Coral Filigree
+    (0xFFFF9A73, 0xFFE3C0A1, "radialblur"), # 316 Pearl Atoll
+    (0xFFDB3D3D, 0xFFFFF8E0, "ripple"),     # 317 Reefsong Lace
+    (0xFFFFB682, 0xFFD6A78D, "vignette"),   # 318 Rosy Polyp
+    (0xFFE53549, 0xFFFFFCE6, "wobble"),     # 319 Nacre Shimmer
+    # F64 "Tidal Bore" (murky teal x foam)
+    (0xFF369199, 0xFF8DD9C6, "tint"),       # 320 Tidal Wall
+    (0xFF4D95AB, 0xFF71C9A9, "chroma"),     # 321 River Reversal
+    (0xFF24827D, 0xFFAFF0EB, "desat"),      # 322 Foamcrest Charge
+    (0xFF5E97B8, 0xFF60BD90, "bloomglow"),  # 323 Estuary Thunder
+    (0xFF208C7A, 0xFFB2E7EB, "frostlens"),  # 324 Undertow Grip
+    # F65 "Redwood Grove" (bark red x deep green)
+    (0xFF8C432A, 0xFF246634, "edgeglow"),   # 325 Redwood Pillar
+    (0xFF9E653F, 0xFF17571F, "glitch"),     # 326 Sequoia Crown
+    (0xFF75261B, 0xFF367D55, "duotone"),    # 327 Fernfloor Hush
+    (0xFFAB804F, 0xFF104A11, "heathaze"),   # 328 Canopy Cathedral
+    (0xFF801717, 0xFF37785C, "posterize"),  # 329 Heartwood Ring
+    # F66 "Aurora Australis" (austral teal x violet)
+    (0xFF2BD9AD, 0xFF752E99, "pixelate"),   # 330 Southern Curtain
+    (0xFF46EBDA, 0xFF591D8A, "scanlines"),  # 331 Antipodal Glow
+    (0xFF19C281, 0xFFA043B0, "ripple"),     # 332 Solar Wind Shore
+    (0xFF59F2F7, 0xFF41147D, "vignette"),   # 333 Magnetic Ribbon
+    (0xFF10CC6E, 0xFFA946AB, "tint"),       # 334 Polar Twilight
+    # F67 "Quicksilver" (mercury silver x steel blue)
+    (0xFFB8C8D9, 0xFF638C99, "desat"),      # 335 Mercury Bead
+    (0xFFD3DBEB, 0xFF4D828A, "glitch"),     # 336 Quicksilver Sheen
+    (0xFF97B2C2, 0xFF809BB0, "wobble"),     # 337 Liquid Mirror
+    (0xFFDFE4F7, 0xFF407C7D, "bloomglow"),  # 338 Gallium Rain
+    (0xFF95BECC, 0xFF8294AB, "chroma"),     # 339 Chrome Cascade
+    # F68 "Basalt Garden" (basalt grey x lava orange)
+    (0xFF41414C, 0xFFBF4C13, "duotone"),    # 340 Basalt Column
+    (0xFF56555E, 0xFFB02802, "heathaze"),   # 341 Hexstone Terrace
+    (0xFF2A2B36, 0xFFD68127, "scanlines"),  # 342 Lava Seam
+    (0xFF63606B, 0xFFA31000, "edgeglow"),   # 343 Pillowstone Bed
+    (0xFF2F3340, 0xFFD1972C, "posterize"),  # 344 Obsidian Sprout
+    # F69 "Prismatic Finale" (full-spectrum complements)
+    (0xFFE617E6, 0xFF17E617, "scanlines"),  # 345 Prism Overture
+    (0xFFE62F17, 0xFF14B2C7, "wobble"),     # 346 Spectrum Encore
+    (0xFFB5E617, 0xFF4717E6, "ripple"),     # 347 Chromatic Crescendo
+    (0xFF17E65F, 0xFFC71488, "tint"),       # 348 Rainbow Reprise
+    (0xFF1785E6, 0xFFE67717, "pixelate"),   # 349 Grand Prismatic
 ]
 
 
