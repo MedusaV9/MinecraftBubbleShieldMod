@@ -57,7 +57,7 @@ public final class NightGlowAura implements InsideEffectBehavior {
 			} else if (variant == 3) {
 				player.addEffect(new MobEffectInstance(MobEffects.GLOWING, DURATION_TICKS, 0));
 			} else if (variant == 4) {
-				level.sendParticles(ParticleTypes.END_ROD, true, false, player.getX(), player.getY() + 2.4, player.getZ(), ctx.scaleCount(2, 6), 0.3, 0.1, 0.3, 0.0);
+				BehaviorSupport.sendContained(level, ParticleTypes.END_ROD, shape, center, radius, player.getX(), player.getY() + 2.4, player.getZ(), ctx.scaleCount(2, 6), 0.3, 0.1, 0.3, 0.0);
 			} else if (variant == 5) {
 				player.addEffect(new MobEffectInstance(MobEffects.SPEED, DURATION_TICKS, 0));
 			} else if (variant == 6) {

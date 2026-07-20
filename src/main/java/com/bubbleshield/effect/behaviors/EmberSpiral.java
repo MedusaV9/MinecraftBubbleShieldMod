@@ -60,7 +60,9 @@ public final class EmberSpiral implements InsideEffectBehavior {
 				double girth = variant == 4
 						? Math.sqrt(Math.max(0.0, 1.0 - rise * rise)) * baseGirth
 						: baseGirth * (1.0 - 0.75 * rise) + 0.2;
-				level.sendParticles(ember, true, false,
+				// A strength-boosted crown (height up to 1.14r for the v4 wall strand)
+				// can clear the shell, so contain every strand point.
+				BehaviorSupport.sendContained(level, ember, shape, center, radius,
 						center.x + Math.cos(angle) * girth, center.y + 0.2 + height * rise, center.z + Math.sin(angle) * girth,
 						1, 0.02, 0.02, 0.02, 0.0);
 			}

@@ -57,7 +57,7 @@ public final class SpeedAura implements InsideEffectBehavior {
 			} else if (variant == 4) {
 				player.addEffect(new MobEffectInstance(MobEffects.DOLPHINS_GRACE, DURATION_TICKS, 0));
 			} else if (variant == 5) {
-				level.sendParticles(ParticleTypes.CLOUD, true, false, player.getX(), player.getY() + 0.1, player.getZ(), ctx.scaleCount(3, 8), 0.3, 0.05, 0.3, 0.01);
+				BehaviorSupport.sendContained(level, ParticleTypes.CLOUD, shape, center, radius, player.getX(), player.getY() + 0.1, player.getZ(), ctx.scaleCount(3, 8), 0.3, 0.05, 0.3, 0.01);
 			}
 		}
 	}

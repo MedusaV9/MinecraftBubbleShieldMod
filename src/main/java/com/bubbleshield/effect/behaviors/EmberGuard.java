@@ -33,8 +33,6 @@ import net.minecraft.world.phys.Vec3;
 public final class EmberGuard implements InsideEffectBehavior {
 	public static final String ID = "ember_guard";
 	private static final int DURATION_TICKS = 60;
-	/** Emitted points stay within this fraction of the radius (inside the shell). */
-	private static final double MAX_DIST_FRAC = 0.98;
 
 	@Override
 	public void tick(ServerLevel level, Vec3 center, float radius, ShieldShape shape, EffectDefinition def, long gameTime, ContextState ctx) {
@@ -90,24 +88,16 @@ public final class EmberGuard implements InsideEffectBehavior {
 		} else if (variant == 2) {
 			// Sparse lava droplets drifting down from mid-bubble height. The gaussian
 			// spread of a single count>0 sendParticles call is unbounded (offsets are
-			// nextGaussian() * dist), so sample the spread here instead and rescale any
-			// point past 0.98r back inside the shell, like the other behaviors.
+			// nextGaussian() * dist), so sample the spread here instead and contain any
+			// point past 0.98r (or under a dome's base plane) back inside the shell.
 			int count = ctx.scaleCount(Mth.clamp((int) (radius * 1.2F * def.behaviorStrength()), 6, 32), 32);
 			RandomSource random = level.getRandom();
-			double maxDist = radius * MAX_DIST_FRAC;
 			for (int i = 0; i < count; i++) {
 				double dx = random.nextGaussian() * radius * 0.45;
 				double dy = radius * 0.5 + random.nextGaussian() * radius * 0.2;
 				double dz = random.nextGaussian() * radius * 0.45;
-				double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-				if (dist > maxDist) {
-					double scale = maxDist / dist;
-					dx *= scale;
-					dy *= scale;
-					dz *= scale;
-				}
-
-				level.sendParticles(ParticleTypes.DRIPPING_LAVA, true, false, center.x + dx, center.y + dy, center.z + dz, 1, 0.0, 0.0, 0.0, 0.0);
+				BehaviorSupport.sendContained(level, ParticleTypes.DRIPPING_LAVA, shape, center, radius,
+						center.x + dx, center.y + dy, center.z + dz, 1, 0.0, 0.0, 0.0, 0.0);
 			}
 		}
 	}

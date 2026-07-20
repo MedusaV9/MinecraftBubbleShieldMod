@@ -62,7 +62,9 @@ public final class AuroraRibbons implements InsideEffectBehavior {
 				double x = center.x + dirX * span * t - dirZ * waveAmp * 0.3 * wave;
 				double y = center.y + height + waveAmp * wave;
 				double z = center.z + dirZ * span * t + dirX * waveAmp * 0.3 * wave;
-				level.sendParticles(particle, true, false, x, y, z, 1, 0.05, 0.2, 0.05, 0.0);
+				// A ribbon end riding a wave crest can reach ~1.16r (span + height + amp
+				// co-peaking); pull any such point back inside the shell.
+				BehaviorSupport.sendContained(level, particle, shape, center, radius, x, y, z, 1, 0.05, 0.2, 0.05, 0.0);
 			}
 		}
 	}

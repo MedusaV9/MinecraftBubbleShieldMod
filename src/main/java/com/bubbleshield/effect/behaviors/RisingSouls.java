@@ -64,19 +64,8 @@ public final class RisingSouls implements InsideEffectBehavior {
 			if (variant == 1) {
 				// Keep the apex pop inside the shell: a column base at 0.8r horizontally
 				// used to put the fixed 0.6r-high apex at ~1.0r, straddling the wall.
-				double ax = x - center.x;
-				double ay = radius * 0.6;
-				double az = z - center.z;
-				double apexDist = Math.sqrt(ax * ax + ay * ay + az * az);
-				double maxDist = radius * 0.98;
-				if (apexDist > maxDist) {
-					double scale = maxDist / apexDist;
-					ax *= scale;
-					ay *= scale;
-					az *= scale;
-				}
-
-				level.sendParticles(ParticleTypes.SCULK_CHARGE_POP, true, false, center.x + ax, center.y + ay, center.z + az, 1, 0.1, 0.1, 0.1, 0.0);
+				BehaviorSupport.sendContained(level, ParticleTypes.SCULK_CHARGE_POP, shape, center, radius,
+						x, center.y + radius * 0.6, z, 1, 0.1, 0.1, 0.1, 0.0);
 			}
 		}
 	}

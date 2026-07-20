@@ -53,7 +53,9 @@ public final class BubbleVeil implements InsideEffectBehavior {
 				double x = center.x + Math.cos(angle) * dist;
 				double y = center.y + 0.5 + random.nextDouble() * radius * 0.5;
 				double z = center.z + Math.sin(angle) * dist;
-				level.sendParticles(ParticleTypes.BUBBLE_POP, true, false, x, y, z, 12, 0.3, 0.3, 0.3, 0.05);
+				// On the smallest shields a pocket at 0.8r out and 0.5 + 0.5r up lands
+				// past the shell (~1.02r at radius 4), so contain each burst anchor.
+				BehaviorSupport.sendContained(level, ParticleTypes.BUBBLE_POP, shape, center, radius, x, y, z, 12, 0.3, 0.3, 0.3, 0.05);
 			}
 			return;
 		}

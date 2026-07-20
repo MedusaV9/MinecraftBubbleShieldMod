@@ -51,16 +51,16 @@ public final class RegenAura implements InsideEffectBehavior {
 			}
 
 			if (variant == 1) {
-				level.sendParticles(ParticleTypes.HEART, true, false, player.getX(), player.getY() + 1.5, player.getZ(), ctx.scaleCount(2, 8), 0.3, 0.3, 0.3, 0.0);
+				BehaviorSupport.sendContained(level, ParticleTypes.HEART, shape, center, radius, player.getX(), player.getY() + 1.5, player.getZ(), ctx.scaleCount(2, 8), 0.3, 0.3, 0.3, 0.0);
 			} else if (variant == 2) {
 				player.addEffect(new MobEffectInstance(MobEffects.ABSORPTION, DURATION_TICKS, 0));
 			} else if (variant == 3) {
-				level.sendParticles(ParticleTypes.HAPPY_VILLAGER, true, false, player.getX(), player.getY() + 1.2, player.getZ(), ctx.scaleCount(3, 8), 0.4, 0.5, 0.4, 0.0);
+				BehaviorSupport.sendContained(level, ParticleTypes.HAPPY_VILLAGER, shape, center, radius, player.getX(), player.getY() + 1.2, player.getZ(), ctx.scaleCount(3, 8), 0.4, 0.5, 0.4, 0.0);
 			} else if (variant == 5) {
 				double spin = gameTime / 10.0 * 0.6;
 				for (int i = 0; i < 4; i++) {
 					double angle = spin + Math.PI * 2.0 * i / 4;
-					level.sendParticles(ParticleTypes.HEART, true, false,
+					BehaviorSupport.sendContained(level, ParticleTypes.HEART, shape, center, radius,
 							player.getX() + Math.cos(angle) * 0.9, player.getY() + 1.0, player.getZ() + Math.sin(angle) * 0.9, 1, 0.02, 0.02, 0.02, 0.0);
 				}
 			} else if (variant == 6) {

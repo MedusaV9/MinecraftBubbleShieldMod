@@ -64,19 +64,23 @@ public final class PrismBeams implements InsideEffectBehavior {
 			double angle = sweep + Math.PI * 2.0 * beam / beams;
 			double baseX = center.x + Math.cos(angle) * ringDist;
 			double baseZ = center.z + Math.sin(angle) * ringDist;
-			// Searchlights lean outward, staying inside the wall at full height.
+			// Searchlights lean outward; the tips are contained below, so the beams
+			// stay inside the wall at full height.
 			double tilt = variant == 4 ? 0.35 : 0.0;
 			double topX = baseX + Math.cos(angle) * beamHeight * tilt;
 			double topZ = baseZ + Math.sin(angle) * beamHeight * tilt;
 			for (int i = 0; i <= steps; i++) {
 				double t = (double) i / steps;
-				level.sendParticles(dust, true, false,
+				// The v4 searchlight tips can reach ~1.05r; contain every step so the
+				// upper beam segment bends back along the shell instead of poking out.
+				BehaviorSupport.sendContained(level, dust, shape, center, radius,
 						Mth.lerp(t, baseX, topX), center.y + 0.2 + beamHeight * t, Mth.lerp(t, baseZ, topZ),
 						1, 0.04, 0.1, 0.04, 0.0);
 			}
 
 			ParticleOptions cap = variant == 6 ? ParticleTypes.FIREWORK : ParticleTypes.GLOW;
-			level.sendParticles(cap, true, false, topX, center.y + 0.2 + beamHeight, topZ, 1, 0.05, 0.05, 0.05, variant == 6 ? 0.05 : 0.0);
+			BehaviorSupport.sendContained(level, cap, shape, center, radius,
+					topX, center.y + 0.2 + beamHeight, topZ, 1, 0.05, 0.05, 0.05, variant == 6 ? 0.05 : 0.0);
 		}
 	}
 }

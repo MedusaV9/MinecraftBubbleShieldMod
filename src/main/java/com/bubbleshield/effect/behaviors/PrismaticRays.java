@@ -6,6 +6,7 @@ import com.bubbleshield.effect.InsideEffectBehavior;
 import com.bubbleshield.shield.ShieldShape;
 
 import net.minecraft.core.particles.DustParticleOptions;
+import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
@@ -88,23 +89,10 @@ public final class PrismaticRays implements InsideEffectBehavior {
 					double dy = 0.8 + dirY * dist;
 					double dz = dirZ * dist + sideZ;
 					// The 0.8-block emitter offset can push steep ray tips past the shell at
-					// small radii; rescale any point beyond 0.98r back inside.
-					double offset = Math.sqrt(dx * dx + dy * dy + dz * dz);
-					double maxDist = radius * 0.98;
-					if (offset > maxDist) {
-						double scale = maxDist / offset;
-						dx *= scale;
-						dy *= scale;
-						dz *= scale;
-					}
-
-					if (variant == 3) {
-						level.sendParticles(dust, true, false, center.x + dx, center.y + dy, center.z + dz, 1, 0.0, 0.0, 0.0, 0.0);
-					} else if (variant == 6) {
-						level.sendParticles(ParticleTypes.FIREWORK, true, false, center.x + dx, center.y + dy, center.z + dz, 1, 0.0, 0.0, 0.0, 0.0);
-					} else {
-						level.sendParticles(ParticleTypes.END_ROD, true, false, center.x + dx, center.y + dy, center.z + dz, 1, 0.0, 0.0, 0.0, 0.0);
-					}
+					// small radii; contain any point beyond 0.98r back inside.
+					ParticleOptions particle = variant == 3 ? dust : variant == 6 ? ParticleTypes.FIREWORK : ParticleTypes.END_ROD;
+					BehaviorSupport.sendContained(level, particle, shape, center, radius,
+							center.x + dx, center.y + dy, center.z + dz, 1, 0.0, 0.0, 0.0, 0.0);
 				}
 			}
 		}

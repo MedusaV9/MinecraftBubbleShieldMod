@@ -77,8 +77,11 @@ public final class EnchantStream implements InsideEffectBehavior {
 					double fx = center.x + Math.cos(angle) * radius * 0.5;
 					double fz = center.z + Math.sin(angle) * radius * 0.5;
 					double capY = center.y + radius * (0.55 + 0.3 * (i % 3) / 2.0);
+					// The tallest cap spawn (0.5r out, 0.85r up = ~0.99r) grazes the
+					// shell; contain the spawn point before deriving the fly offset.
+					Vec3 spawn = BehaviorSupport.containPoint(shape, center, radius, new Vec3(fx, capY, fz));
 					level.sendParticles(ParticleTypes.ENCHANT, true, false, fx, center.y + 0.2, fz, 0,
-							0.0, capY - (center.y + 0.2), 0.0, 1.0);
+							spawn.x - fx, spawn.y - (center.y + 0.2), spawn.z - fz, 1.0);
 				}
 				case 6 -> {
 					// Pulse: even glyphs fly inward while odd glyphs fly outward.

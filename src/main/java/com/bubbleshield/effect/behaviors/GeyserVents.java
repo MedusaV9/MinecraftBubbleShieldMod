@@ -22,7 +22,7 @@ import net.minecraft.world.phys.Vec3;
  * <li>v1: four smaller poof vents, faster rota</li>
  * <li>v2: three white-smoke fumaroles (no eruption jet, tall simmer)</li>
  * <li>v3: two big campfire-smoke chimneys</li>
- * <li>v4: three bubble-pop vents with a bubble-column burst</li>
+ * <li>v4: three bubble-pop vents with a popping bubble burst (air-safe)</li>
  * <li>v5: three soul-flame vents (silent, eerie)</li>
  * <li>v6: five micro-vents popping in quick succession</li>
  * </ul>
@@ -69,18 +69,24 @@ public final class GeyserVents implements InsideEffectBehavior {
 				continue;
 			}
 
-			SimpleParticleType jet = switch (variant) {
-				case 1 -> ParticleTypes.POOF;
-				case 3 -> ParticleTypes.CAMPFIRE_SIGNAL_SMOKE;
-				case 4 -> ParticleTypes.BUBBLE_COLUMN_UP;
-				case 5 -> ParticleTypes.SOUL;
-				default -> ParticleTypes.SPLASH;
-			};
+			// v4's burst must NOT be BUBBLE_COLUMN_UP: it self-removes outside water
+			// (see BehaviorSupport.AIR_UNSAFE_PARTICLES), so the whole eruption was an
+			// invisible one-frame flicker in an air bubble. BUBBLE_POP is the air-safe
+			// bubble particle and matches the vent's simmer.
+		SimpleParticleType jet = switch (variant) {
+			case 1 -> ParticleTypes.POOF;
+			case 3 -> ParticleTypes.CAMPFIRE_SIGNAL_SMOKE;
+			case 4 -> ParticleTypes.BUBBLE_POP;
+			case 5 -> ParticleTypes.SOUL;
+			default -> ParticleTypes.SPLASH;
+		};
 			double jetHeight = Math.min(radius * 0.7, variant == 6 ? 2.0 : 5.0);
 			int steps = ctx.scaleCount(Mth.clamp((int) (jetHeight / 0.4), 4, MAX_JET), MAX_JET);
 			for (int i = 0; i < steps; i++) {
+				// A full-height jet from a strength-widened vent ring grazes the shell on
+				// the smallest shields; contain each jet step.
 				double y = center.y + 0.3 + jetHeight * i / steps;
-				level.sendParticles(jet, true, false, x, y, z, 1, 0.1, 0.05, 0.1, 0.15);
+				BehaviorSupport.sendContained(level, jet, shape, center, radius, x, y, z, 1, 0.1, 0.05, 0.1, 0.15);
 			}
 
 			if (variant != 5) {

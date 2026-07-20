@@ -53,11 +53,11 @@ public final class HasteAura implements InsideEffectBehavior {
 			if (variant == 2) {
 				player.addEffect(new MobEffectInstance(MobEffects.CONDUIT_POWER, DURATION_TICKS, 0));
 			} else if (variant == 3) {
-				level.sendParticles(ParticleTypes.CRIT, true, false, player.getX(), player.getY() + 1.0, player.getZ(), ctx.scaleCount(3, 8), 0.4, 0.3, 0.4, 0.05);
+				BehaviorSupport.sendContained(level, ParticleTypes.CRIT, shape, center, radius, player.getX(), player.getY() + 1.0, player.getZ(), ctx.scaleCount(3, 8), 0.4, 0.3, 0.4, 0.05);
 			} else if (variant == 4) {
 				player.addEffect(new MobEffectInstance(MobEffects.SPEED, DURATION_TICKS, 0));
 			} else if (variant == 5) {
-				level.sendParticles(ParticleTypes.SCRAPE, true, false, player.getX(), player.getY() + 1.2, player.getZ(), ctx.scaleCount(2, 6), 0.3, 0.4, 0.3, 0.0);
+				BehaviorSupport.sendContained(level, ParticleTypes.SCRAPE, shape, center, radius, player.getX(), player.getY() + 1.2, player.getZ(), ctx.scaleCount(2, 6), 0.3, 0.4, 0.3, 0.0);
 			}
 		}
 	}

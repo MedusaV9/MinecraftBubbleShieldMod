@@ -73,7 +73,10 @@ public final class StormCage implements InsideEffectBehavior {
 			double bandRadius = radius * SHELL_FRAC * Math.cos(latitude);
 			int points = ctx.scaleCount(Mth.clamp((int) Math.round(Math.PI * 2.0 * bandRadius / 2.5 * def.behaviorStrength()), 6, budgetPerBand), budgetPerBand);
 			for (int i = 0; i < points; i++) {
-				// Jitter each point's latitude within the band so it reads as a belt, not a line.
+				// Jitter each point's latitude within the band so it reads as a belt, not a
+				// line. The jitter can dip a low band below the equator (v3: 8 degrees with
+				// a 12-degree half-width), so the emission is shape-contained: a dome clamps
+				// those points back onto its base plane.
 				double pointLatitude = latitude + (random.nextDouble() * 2.0 - 1.0) * halfWidth;
 				double ringRadius = radius * SHELL_FRAC * Math.cos(pointLatitude);
 				double angle = spin * (band % 2 == 0 ? 1.0 : -1.0) + Math.PI * 2.0 * i / points;
@@ -81,15 +84,15 @@ public final class StormCage implements InsideEffectBehavior {
 				double y = center.y + radius * SHELL_FRAC * Math.sin(pointLatitude);
 				double z = center.z + Math.sin(angle) * ringRadius;
 				if (variant == 5 && i % 2 == 0) {
-					level.sendParticles(dust, true, false, x, y, z, 1, 0.05, 0.05, 0.05, 0.0);
+					BehaviorSupport.sendContained(level, dust, shape, center, radius, x, y, z, 1, 0.05, 0.05, 0.05, 0.0);
 				} else {
-					level.sendParticles(ParticleTypes.ELECTRIC_SPARK, true, false, x, y, z, 1, 0.05, 0.05, 0.05, 0.0);
+					BehaviorSupport.sendContained(level, ParticleTypes.ELECTRIC_SPARK, shape, center, radius, x, y, z, 1, 0.05, 0.05, 0.05, 0.0);
 				}
 
 				// Every 4th point sheds a dust-plume wisp so the bands look like storm clouds
 				// (skipped by v4, whose four bands already spend the whole particle budget).
 				if (i % 4 == 0 && variant != 4) {
-					level.sendParticles(ParticleTypes.DUST_PLUME, true, false, x, y, z, 1, 0.1, 0.1, 0.1, 0.0);
+					BehaviorSupport.sendContained(level, ParticleTypes.DUST_PLUME, shape, center, radius, x, y, z, 1, 0.1, 0.1, 0.1, 0.0);
 				}
 			}
 		}

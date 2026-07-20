@@ -50,12 +50,18 @@ public final class PollenHaze implements InsideEffectBehavior {
 			return;
 		}
 
-		if (variant == 3 && gameTime % 40L == 0L) {
-			// Sneezes pop just above the floor, one spot per cycle.
-			double angle = gameTime / 40.0;
-			level.sendParticles(ParticleTypes.SNEEZE, true, false,
-					center.x + Math.cos(angle) * radius * 0.4, center.y + 0.4, center.z + Math.sin(angle) * radius * 0.4,
-					ctx.scaleCount(4, 8), 0.2, 0.1, 0.2, 0.02);
+		if (variant == 3) {
+			// v3 is haze + sneezes ONLY: it must never fall through to the bloom sift.
+			// (The old "variant == 3 && %40" guard let every non-40-tick pulse run v0's
+			// sift loop as well, which was never the intent.)
+			if (gameTime % 40L == 0L) {
+				// Sneezes pop just above the floor, one spot per cycle.
+				double angle = gameTime / 40.0;
+				level.sendParticles(ParticleTypes.SNEEZE, true, false,
+						center.x + Math.cos(angle) * radius * 0.4, center.y + 0.4, center.z + Math.sin(angle) * radius * 0.4,
+						ctx.scaleCount(4, 8), 0.2, 0.1, 0.2, 0.02);
+			}
+
 			return;
 		}
 

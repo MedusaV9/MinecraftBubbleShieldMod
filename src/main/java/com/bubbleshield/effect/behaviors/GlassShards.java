@@ -24,7 +24,8 @@ import net.minecraft.world.phys.Vec3;
  * <li>v3: firework sparkles on a tighter shell</li>
  * <li>v4: enchanted-hit glints drifting upward</li>
  * <li>v5: electric sparks with a resonant bell instead of the chime</li>
- * <li>v6: wax-on glints pulsing on alternating hemispheres</li>
+ * <li>v6: wax-on glints where alternating halves of the interleaved shard
+ * indices pulse on alternating waves (even indices one wave, odd the next)</li>
  * </ul>
  */
 public final class GlassShards implements InsideEffectBehavior {

@@ -58,14 +58,14 @@ public final class FrostIntruders implements InsideEffectBehavior {
 			}
 
 			mob.setTicksFrozen(Math.min(MAX_FROZEN_TICKS, mob.getTicksFrozen() + freezeTicks));
-			level.sendParticles(ParticleTypes.SNOWFLAKE, true, false, mob.getX(), mob.getY() + mob.getBbHeight() * 0.5, mob.getZ(), ctx.scaleCount(8, 16), 0.3, 0.4, 0.3, 0.02);
+			BehaviorSupport.sendContained(level, ParticleTypes.SNOWFLAKE, shape, center, radius, mob.getX(), mob.getY() + mob.getBbHeight() * 0.5, mob.getZ(), ctx.scaleCount(8, 16), 0.3, 0.4, 0.3, 0.02);
 			if (variant == 2) {
 				mob.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, DURATION_TICKS, 0));
 			} else if (variant == 3) {
 				double spin = gameTime / 10.0 * 0.5;
 				for (int i = 0; i < 6; i++) {
 					double angle = spin + Math.PI * 2.0 * i / 6;
-					level.sendParticles(ParticleTypes.SNOWFLAKE, true, false,
+					BehaviorSupport.sendContained(level, ParticleTypes.SNOWFLAKE, shape, center, radius,
 							mob.getX() + Math.cos(angle) * 0.9, mob.getY() + mob.getBbHeight() * 0.5, mob.getZ() + Math.sin(angle) * 0.9, 1, 0.02, 0.1, 0.02, 0.0);
 				}
 			} else if (variant == 4) {
@@ -73,7 +73,7 @@ public final class FrostIntruders implements InsideEffectBehavior {
 			} else if (variant == 5) {
 				mob.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, DURATION_TICKS, 0));
 			} else if (variant == 6) {
-				level.sendParticles(ParticleTypes.ITEM_SNOWBALL, true, false, mob.getX(), mob.getY() + mob.getBbHeight() * 0.7, mob.getZ(), ctx.scaleCount(6, 12), 0.3, 0.3, 0.3, 0.05);
+				BehaviorSupport.sendContained(level, ParticleTypes.ITEM_SNOWBALL, shape, center, radius, mob.getX(), mob.getY() + mob.getBbHeight() * 0.7, mob.getZ(), ctx.scaleCount(6, 12), 0.3, 0.3, 0.3, 0.05);
 			}
 		}
 	}

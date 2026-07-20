@@ -28,8 +28,6 @@ import net.minecraft.world.phys.Vec3;
 public final class OrbitingShards implements InsideEffectBehavior {
 	public static final String ID = "orbiting_shards";
 	private static final int MAX_POINTS = 128;
-	/** Emitted points are rescaled to at most this fraction of the radius (stay inside the shell). */
-	private static final double MAX_DIST_FRAC = 0.98;
 
 	@Override
 	public void tick(ServerLevel level, Vec3 center, float radius, ShieldShape shape, EffectDefinition def, long gameTime, ContextState ctx) {
@@ -77,18 +75,10 @@ public final class OrbitingShards implements InsideEffectBehavior {
 				double dx = px * cosAzimuth - pz * sinAzimuth;
 				double dy = radius * 0.5 + py;
 				double dz = px * sinAzimuth + pz * cosAzimuth;
-				// The mid-bubble anchor plus the tilted orbit can reach ~1.2r; rescale any
+				// The mid-bubble anchor plus the tilted orbit can reach ~1.2r; contain any
 				// point beyond 0.98r back inside so shards never render outside the shell.
-				double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-				double maxDist = radius * MAX_DIST_FRAC;
-				if (dist > maxDist) {
-					double scale = maxDist / dist;
-					dx *= scale;
-					dy *= scale;
-					dz *= scale;
-				}
-
-				level.sendParticles(particle, true, false, center.x + dx, center.y + dy, center.z + dz, 1, 0.0, 0.0, 0.0, 0.0);
+				BehaviorSupport.sendContained(level, particle, shape, center, radius,
+						center.x + dx, center.y + dy, center.z + dz, 1, 0.0, 0.0, 0.0, 0.0);
 			}
 		}
 	}

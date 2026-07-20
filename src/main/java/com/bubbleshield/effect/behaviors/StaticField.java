@@ -88,9 +88,11 @@ public final class StaticField implements InsideEffectBehavior {
 			double z = center.z + horizontal * Math.sin(theta) * shell;
 			level.sendParticles(ParticleTypes.ELECTRIC_SPARK, true, false, x, y, z, 1, 0.05, 0.05, 0.05, 0.0);
 			if (variant == 3 && i % 3 == 0) {
-				level.sendParticles(ParticleTypes.CRIT, true, false, x, y - 0.3, z, 1, 0.1, 0.1, 0.1, 0.02);
+				// The fleck hangs 0.3 below its spark: near the equator that dips under a
+				// dome's base plane, so contain it shape-aware.
+				BehaviorSupport.sendContained(level, ParticleTypes.CRIT, shape, center, radius, x, y - 0.3, z, 1, 0.1, 0.1, 0.1, 0.02);
 			} else if (variant == 5 && i % 4 == 0) {
-				level.sendParticles(ParticleTypes.WAX_OFF, true, false, x, y - 0.2, z, 1, 0.1, 0.1, 0.1, 0.0);
+				BehaviorSupport.sendContained(level, ParticleTypes.WAX_OFF, shape, center, radius, x, y - 0.2, z, 1, 0.1, 0.1, 0.1, 0.0);
 			}
 		}
 
@@ -103,13 +105,16 @@ public final class StaticField implements InsideEffectBehavior {
 		}
 
 		if (variant == 2 && gameTime % 40L == 0L) {
-			// Crackle burst at one random surface point, synced to a sharp click.
+			// Crackle burst at one random surface point, synced to a sharp click. The
+			// raw 0.9r ring point plus the random 1.0..(1.0 + 0.4r) height can land past
+			// the shell (~1.06r worst case), so contain the burst anchor onto 0.98r.
 			double angle = random.nextDouble() * Math.PI * 2.0;
-			double x = center.x + Math.cos(angle) * radius * 0.9;
-			double z = center.z + Math.sin(angle) * radius * 0.9;
-			double y = center.y + 1.0 + random.nextDouble() * radius * 0.4;
-			level.sendParticles(ParticleTypes.ELECTRIC_SPARK, true, false, x, y, z, 24, 0.4, 0.4, 0.4, 0.1);
-			level.playSound(null, x, y, z, SoundEvents.SCULK_CLICKING, SoundSource.AMBIENT, Mth.clamp(radius / 12.0F, 0.6F, 4.0F), 1.8F);
+			Vec3 burst = BehaviorSupport.containPoint(shape, center, radius, new Vec3(
+					center.x + Math.cos(angle) * radius * 0.9,
+					center.y + 1.0 + random.nextDouble() * radius * 0.4,
+					center.z + Math.sin(angle) * radius * 0.9));
+			level.sendParticles(ParticleTypes.ELECTRIC_SPARK, true, false, burst.x, burst.y, burst.z, 24, 0.4, 0.4, 0.4, 0.1);
+			level.playSound(null, burst.x, burst.y, burst.z, SoundEvents.SCULK_CLICKING, SoundSource.AMBIENT, Mth.clamp(radius / 12.0F, 0.6F, 4.0F), 1.8F);
 		}
 	}
 }

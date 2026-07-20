@@ -67,13 +67,15 @@ public final class RuneOrbit implements InsideEffectBehavior {
 				ParticleOptions glyph = variant == 2
 						? new DustParticleOptions(ctx.pickColor(def.argbPrimary(), def.argbSecondary()) & 0xFFFFFF, 1.0F)
 						: variant == 4 ? ParticleTypes.SCRAPE : ParticleTypes.ENCHANT;
-				level.sendParticles(glyph, true, false, x, y, z, glyphs, 0.15, 0.2, 0.15, 0.0);
+				// A wide strength-boosted ring plus the fixed station height (and v5's
+				// bob or v6's upper ring) can graze the shell on the smallest shields.
+				BehaviorSupport.sendContained(level, glyph, shape, center, radius, x, y, z, glyphs, 0.15, 0.2, 0.15, 0.0);
 				// The activation flare marches one station (or ring) per pulse.
 				boolean flared = variant == 6
 						? flare % 2L == ring && flare / 2L % stations == station
 						: flare % stations == station;
 				if (flared) {
-					level.sendParticles(variant == 2 ? ParticleTypes.FIREWORK : ParticleTypes.GLOW, true, false,
+					BehaviorSupport.sendContained(level, variant == 2 ? ParticleTypes.FIREWORK : ParticleTypes.GLOW, shape, center, radius,
 							x, y + 0.2, z, ctx.scaleCount(4, 8), 0.1, 0.1, 0.1, 0.02);
 				}
 			}

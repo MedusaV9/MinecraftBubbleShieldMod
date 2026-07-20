@@ -28,7 +28,8 @@ import net.minecraft.world.phys.Vec3;
  * <li>v3: glow-squid ink carpet (eerie teal shimmer)</li>
  * <li>v4: fast thin smoke carpet spiralling inward</li>
  * <li>v5: mycelium dust carpet with drifting spore columns</li>
- * <li>v6: ink carpet plus a shrieker cry when a player first enters it</li>
+ * <li>v6: ink carpet plus a periodic silent shriek pip above each veiled player
+ * (one pip every 200 ticks; no sound and no entry detection)</li>
  * </ul>
  */
 public final class ShadowVeil implements InsideEffectBehavior {
@@ -58,7 +59,8 @@ public final class ShadowVeil implements InsideEffectBehavior {
 				double t = (i + 0.5) / points;
 				double angle = crawl + Math.PI * 2.0 * arm / arms + t * Math.PI * 1.5;
 				double dist = reach * t;
-				level.sendParticles(wisp, true, false,
+				// A strength-widened carpet (reach up to 0.99r) can cross the 0.98r line.
+				BehaviorSupport.sendContained(level, wisp, shape, center, radius,
 						center.x + Math.cos(angle) * dist, center.y + 0.15, center.z + Math.sin(angle) * dist,
 						1, 0.15, 0.02, 0.15, 0.0);
 			}
@@ -78,8 +80,10 @@ public final class ShadowVeil implements InsideEffectBehavior {
 				if (variant == 2 && player.isShiftKeyDown()) {
 					player.addEffect(new MobEffectInstance(MobEffects.INVISIBILITY, 60, 0));
 				} else if (variant == 6 && gameTime % 200L == 0L) {
-					// A shriek pip above the veiled player once per ten seconds.
-					level.sendParticles(new ShriekParticleOption(0), true, false, player.getX(), player.getY() + 2.2, player.getZ(), 1, 0.0, 0.0, 0.0, 0.0);
+					// A silent shriek pip above the veiled player once per ten seconds
+					// (contained: a tall player hugging the wall could poke it out).
+					BehaviorSupport.sendContained(level, new ShriekParticleOption(0), shape, center, radius,
+							player.getX(), player.getY() + 2.2, player.getZ(), 1, 0.0, 0.0, 0.0, 0.0);
 				}
 			}
 		}

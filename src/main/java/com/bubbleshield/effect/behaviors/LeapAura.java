@@ -51,13 +51,13 @@ public final class LeapAura implements InsideEffectBehavior {
 			};
 			player.addEffect(new MobEffectInstance(MobEffects.JUMP_BOOST, variant == 6 ? 30 : DURATION_TICKS, amplifier));
 			if (variant == 1) {
-				level.sendParticles(ParticleTypes.CLOUD, true, false, player.getX(), player.getY() + 0.1, player.getZ(), ctx.scaleCount(3, 8), 0.3, 0.1, 0.3, 0.01);
+				BehaviorSupport.sendContained(level, ParticleTypes.CLOUD, shape, center, radius, player.getX(), player.getY() + 0.1, player.getZ(), ctx.scaleCount(3, 8), 0.3, 0.1, 0.3, 0.01);
 			} else if (variant == 2 || variant == 6) {
 				player.addEffect(new MobEffectInstance(MobEffects.SLOW_FALLING, DURATION_TICKS, 0));
 			} else if (variant == 4) {
 				player.addEffect(new MobEffectInstance(MobEffects.SPEED, DURATION_TICKS, 0));
 			} else if (variant == 5) {
-				level.sendParticles(ParticleTypes.POOF, true, false, player.getX(), player.getY() + 0.1, player.getZ(), ctx.scaleCount(2, 6), 0.2, 0.05, 0.2, 0.01);
+				BehaviorSupport.sendContained(level, ParticleTypes.POOF, shape, center, radius, player.getX(), player.getY() + 0.1, player.getZ(), ctx.scaleCount(2, 6), 0.2, 0.05, 0.2, 0.01);
 			}
 		}
 	}

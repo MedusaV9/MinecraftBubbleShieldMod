@@ -52,7 +52,7 @@ public final class ResistAura implements InsideEffectBehavior {
 			} else if (variant == 4) {
 				player.addEffect(new MobEffectInstance(MobEffects.SLOW_FALLING, DURATION_TICKS, 0));
 			} else if (variant == 5) {
-				level.sendParticles(ParticleTypes.ENCHANTED_HIT, true, false, player.getX(), player.getY() + 1.0, player.getZ(), ctx.scaleCount(3, 8), 0.4, 0.5, 0.4, 0.0);
+				BehaviorSupport.sendContained(level, ParticleTypes.ENCHANTED_HIT, shape, center, radius, player.getX(), player.getY() + 1.0, player.getZ(), ctx.scaleCount(3, 8), 0.4, 0.5, 0.4, 0.0);
 			} else if (variant == 6) {
 				player.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, DURATION_TICKS, 0));
 				player.addEffect(new MobEffectInstance(MobEffects.ABSORPTION, DURATION_TICKS, 0));

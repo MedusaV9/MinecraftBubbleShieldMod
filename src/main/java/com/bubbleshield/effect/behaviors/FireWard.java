@@ -50,7 +50,7 @@ public final class FireWard implements InsideEffectBehavior {
 				}
 
 				entity.clearFire();
-				level.sendParticles(ParticleTypes.SMOKE, true, false, entity.getX(), entity.getY() + entity.getBbHeight() * 0.6, entity.getZ(), ctx.scaleCount(10, 20), 0.3, 0.4, 0.3, 0.02);
+				BehaviorSupport.sendContained(level, ParticleTypes.SMOKE, shape, center, radius, entity.getX(), entity.getY() + entity.getBbHeight() * 0.6, entity.getZ(), ctx.scaleCount(10, 20), 0.3, 0.4, 0.3, 0.02);
 			}
 			return;
 		}
@@ -77,7 +77,7 @@ public final class FireWard implements InsideEffectBehavior {
 				// A quenching splash ring instead of the smoke puff.
 				for (int i = 0; i < 8; i++) {
 					double angle = Math.PI * 2.0 * i / 8;
-					level.sendParticles(ParticleTypes.SPLASH, true, false,
+					BehaviorSupport.sendContained(level, ParticleTypes.SPLASH, shape, center, radius,
 							player.getX() + Math.cos(angle) * 0.8, player.getY() + 0.8, player.getZ() + Math.sin(angle) * 0.8, 1, 0.05, 0.2, 0.05, 0.05);
 				}
 				level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.FIRE_EXTINGUISH, SoundSource.AMBIENT, 0.7F, 1.3F);
@@ -85,14 +85,14 @@ public final class FireWard implements InsideEffectBehavior {
 			}
 
 			if (variant == 4) {
-				level.sendParticles(ParticleTypes.WHITE_SMOKE, true, false, player.getX(), player.getY() + 1.0, player.getZ(), ctx.scaleCount(12, 24), 0.3, 0.5, 0.3, 0.02);
+				BehaviorSupport.sendContained(level, ParticleTypes.WHITE_SMOKE, shape, center, radius, player.getX(), player.getY() + 1.0, player.getZ(), ctx.scaleCount(12, 24), 0.3, 0.5, 0.3, 0.02);
 				continue;
 			}
 
-			level.sendParticles(ParticleTypes.SMOKE, true, false, player.getX(), player.getY() + 1.0, player.getZ(), ctx.scaleCount(12, 24), 0.3, 0.5, 0.3, 0.02);
+			BehaviorSupport.sendContained(level, ParticleTypes.SMOKE, shape, center, radius, player.getX(), player.getY() + 1.0, player.getZ(), ctx.scaleCount(12, 24), 0.3, 0.5, 0.3, 0.02);
 			if (variant == 2) {
 				level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.FIRE_EXTINGUISH, SoundSource.AMBIENT, 0.8F, 1.0F);
-				level.sendParticles(ParticleTypes.LAVA, true, false, player.getX(), player.getY() + 0.5, player.getZ(), 6, 0.3, 0.3, 0.3, 0.0);
+				BehaviorSupport.sendContained(level, ParticleTypes.LAVA, shape, center, radius, player.getX(), player.getY() + 0.5, player.getZ(), 6, 0.3, 0.3, 0.3, 0.0);
 			}
 		}
 	}

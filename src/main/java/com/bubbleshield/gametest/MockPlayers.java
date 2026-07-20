@@ -1,7 +1,9 @@
 package com.bubbleshield.gametest;
 
+import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -18,6 +20,7 @@ import net.minecraft.gametest.framework.GameTestListener;
 import net.minecraft.gametest.framework.GameTestRunner;
 import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.PacketFlow;
+import net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.server.players.PlayerList;
@@ -80,12 +83,50 @@ public final class MockPlayers {
 	}
 
 	/**
+	 * A mock player paired with the {@link EmbeddedChannel} backing its connection.
+	 * Every clientbound packet the server sends this player is recorded in the
+	 * channel's outbound queue, so tests can assert on what was ACTUALLY sent --
+	 * e.g. particle emission positions ({@link #drainParticlePackets()}).
+	 */
+	public record CapturingMockPlayer(ServerPlayer player, EmbeddedChannel channel) {
+		/**
+		 * Drains every packet captured since the previous drain and returns the
+		 * particle packets among them (other packet types -- sounds, entity data,
+		 * chunk data... -- are discarded). Call once to flush setup noise, then
+		 * again after the action under test.
+		 */
+		public List<ClientboundLevelParticlesPacket> drainParticlePackets() {
+			List<ClientboundLevelParticlesPacket> packets = new ArrayList<>();
+			Object message;
+			while ((message = this.channel.readOutbound()) != null) {
+				if (message instanceof ClientboundLevelParticlesPacket particles) {
+					packets.add(particles);
+				}
+			}
+
+			return packets;
+		}
+	}
+
+	/**
 	 * Creates an in-level (PlayerList-registered) creative-mode mock ServerPlayer under
 	 * a unique per-call name ("bsmock0", "bsmock1", ...), placed at the helper's
 	 * structure center, and tracks it for end-of-test sweeping. Drop-in replacement
 	 * for the deprecated {@code helper.makeMockServerPlayerInLevel()}.
 	 */
 	public static ServerPlayer createUniqueMockPlayer(GameTestHelper helper) {
+		return createCapturingMockPlayer(helper, GameType.CREATIVE).player();
+	}
+
+	/**
+	 * Creates an in-level mock ServerPlayer of the given game mode (unique name,
+	 * parked at the structure center, swept at end of test -- exactly like
+	 * {@link #createUniqueMockPlayer}) and returns it together with its packet
+	 * capture channel. A SURVIVAL mock is the right pick when the test needs
+	 * vanilla-player semantics (aura targeting, damage) rather than a creative
+	 * ghost.
+	 */
+	public static CapturingMockPlayer createCapturingMockPlayer(GameTestHelper helper, GameType gameType) {
 		String uniqueName = "bsmock" + Integer.toHexString(NAME_COUNTER.getAndIncrement());
 		// The exact vanilla makeMockServerPlayerInLevel recipe, minus the shared name.
 		CommonListenerCookie cookie = CommonListenerCookie.createInitial(new GameProfile(UUID.randomUUID(), uniqueName), false);
@@ -93,11 +134,11 @@ public final class MockPlayers {
 				helper.getLevel().getServer(), helper.getLevel(), cookie.gameProfile(), cookie.clientInformation()) {
 			@Override
 			public GameType gameMode() {
-				return GameType.CREATIVE;
+				return gameType;
 			}
 		};
 		Connection connection = new Connection(PacketFlow.SERVERBOUND);
-		new EmbeddedChannel(connection);
+		EmbeddedChannel channel = new EmbeddedChannel(connection);
 		helper.getLevel().getServer().getPlayerList().placeNewPlayer(connection, player, cookie);
 
 		// placeNewPlayer spawns at the shared world spawn; park the mock inside its own
@@ -112,7 +153,7 @@ public final class MockPlayers {
 			return new LinkedHashSet<>();
 		}).add(player);
 
-		return player;
+		return new CapturingMockPlayer(player, channel);
 	}
 
 	/**

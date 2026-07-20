@@ -61,7 +61,7 @@ public final class PurgePulse implements InsideEffectBehavior {
 			double ringRadius = radius * 0.5;
 			for (int i = 0; i < points; i++) {
 				double angle = Math.PI * 2.0 * i / points;
-				level.sendParticles(ParticleTypes.GUST, true, false,
+				BehaviorSupport.sendContained(level, ParticleTypes.GUST, shape, center, radius,
 						center.x + Math.cos(angle) * ringRadius, center.y + 0.8, center.z + Math.sin(angle) * ringRadius, 1, 0.1, 0.1, 0.1, 0.0);
 			}
 		}
@@ -87,13 +87,13 @@ public final class PurgePulse implements InsideEffectBehavior {
 			mob.setDeltaMovement(delta);
 			mob.hurtMarked = true;
 			if (variant == 1 || variant == 2) {
-				level.sendParticles(ParticleTypes.GUST, true, false, mob.getX(), mob.getY() + 0.5, mob.getZ(), 1, 0.2, 0.2, 0.2, 0.0);
+				BehaviorSupport.sendContained(level, ParticleTypes.GUST, shape, center, radius, mob.getX(), mob.getY() + 0.5, mob.getZ(), 1, 0.2, 0.2, 0.2, 0.0);
 			} else if (variant == 3) {
-				level.sendParticles(ParticleTypes.SMALL_GUST, true, false, mob.getX(), mob.getY() + 0.5, mob.getZ(), 2, 0.2, 0.2, 0.2, 0.0);
+				BehaviorSupport.sendContained(level, ParticleTypes.SMALL_GUST, shape, center, radius, mob.getX(), mob.getY() + 0.5, mob.getZ(), 2, 0.2, 0.2, 0.2, 0.0);
 			} else if (variant == 4) {
-				level.sendParticles(ParticleTypes.CLOUD, true, false, mob.getX(), mob.getY() + 0.2, mob.getZ(), 4, 0.2, 0.1, 0.2, 0.02);
+				BehaviorSupport.sendContained(level, ParticleTypes.CLOUD, shape, center, radius, mob.getX(), mob.getY() + 0.2, mob.getZ(), 4, 0.2, 0.1, 0.2, 0.02);
 			} else if (variant == 6) {
-				level.sendParticles(ParticleTypes.GUST, true, false, mob.getX(), mob.getY() + 0.5, mob.getZ(), 2, 0.3, 0.3, 0.3, 0.0);
+				BehaviorSupport.sendContained(level, ParticleTypes.GUST, shape, center, radius, mob.getX(), mob.getY() + 0.5, mob.getZ(), 2, 0.3, 0.3, 0.3, 0.0);
 			}
 
 			if (variant == 2) {

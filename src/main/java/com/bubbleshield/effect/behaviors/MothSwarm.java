@@ -53,16 +53,27 @@ public final class MothSwarm implements InsideEffectBehavior {
 		int moths = ctx.scaleCount(variant == 3 ? 24 : 14, budget);
 		for (int lantern = 0; lantern < lanterns; lantern++) {
 			double sign = lantern == 0 ? 1.0 : -1.0;
-			// Lissajous wander keeps the lantern inside the upper hemisphere (dome-safe).
-			double lx = center.x + Math.sin(t * 1.3) * reach * sign;
-			double ly = center.y + radius * (0.35 + 0.25 * Math.sin(t * 0.7));
-			double lz = center.z + Math.sin(t * 1.7 + 1.0) * reach * sign;
+			// Lissajous wander keeps the lantern inside the upper hemisphere (dome-safe),
+			// but when both horizontal sines co-peak the raw path reaches ~1.18r; contain
+			// the lantern so the swarm, marker and glyph stream all stay inside the shell.
+			Vec3 lanternPos = BehaviorSupport.containPoint(center, radius, new Vec3(
+					center.x + Math.sin(t * 1.3) * reach * sign,
+					center.y + radius * (0.35 + 0.25 * Math.sin(t * 0.7)),
+					center.z + Math.sin(t * 1.7 + 1.0) * reach * sign));
+			double lx = lanternPos.x;
+			double ly = lanternPos.y;
+			double lz = lanternPos.z;
 			if (variant == 6) {
 				// Glyphs use the count=0 fly-towards packet form, streaming into the lantern.
+				// The glyph SPAWNS at lantern + offset (FlyTowardsPositionParticle starts at
+				// pos + delta and flies to pos), so the spawn ring is contained too: a
+				// lantern near the wall plus the 2.0 ring reach would start glyphs outside.
 				for (int i = 0; i < moths; i++) {
 					double angle = Math.PI * 2.0 * i / moths;
+					Vec3 spawn = BehaviorSupport.containPoint(shape, center, radius, new Vec3(
+							lx + Math.cos(angle) * 2.0, ly + 0.6 * Math.sin(t + i), lz + Math.sin(angle) * 2.0));
 					level.sendParticles(ParticleTypes.ENCHANT, true, false, lx, ly, lz, 0,
-							Math.cos(angle) * 2.0, 0.6 * Math.sin(t + i), Math.sin(angle) * 2.0, 1.0);
+							spawn.x - lx, spawn.y - ly, spawn.z - lz, 1.0);
 				}
 			} else {
 				level.sendParticles(moth, true, false, lx, ly, lz, moths, cloud, cloud * 0.6, cloud, 0.01);

@@ -15,7 +15,9 @@ import net.minecraft.world.phys.Vec3;
 /**
  * Orbiting "gravity wells": points circling the projector, each surrounded by
  * concentric rings that contract into the well over a four-pulse cycle, reading
- * as suction. All well anchors stay above the center plane (dome-safe).
+ * as suction. All well anchors stay above the center plane (dome-safe), and the
+ * ring points are contained to the shell (an anchor at 0.5r plus a full well
+ * reach used to put ring points at ~1.17r on small shields).
  *
  * <ul>
  * <li>v0: two wells of portal motes</li>
@@ -76,7 +78,7 @@ public final class GravityWells implements InsideEffectBehavior {
 				int points = ctx.scaleCount(Mth.clamp((int) Math.round(Math.PI * 2.0 * ringRadius / 0.7), 4, budgetPerWell), budgetPerWell);
 				for (int i = 0; i < points; i++) {
 					double angle = Math.PI * 2.0 * i / points;
-					level.sendParticles(particle, true, false,
+					BehaviorSupport.sendContained(level, particle, shape, center, radius,
 							wx + Math.cos(angle) * ringRadius, wy + (ring == 0 ? 0.0 : 0.4), wz + Math.sin(angle) * ringRadius, 1, 0.02, 0.02, 0.02, 0.0);
 				}
 			}

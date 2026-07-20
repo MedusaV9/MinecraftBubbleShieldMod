@@ -28,8 +28,6 @@ import net.minecraft.world.phys.Vec3;
  */
 public final class WaxGlow implements InsideEffectBehavior {
 	public static final String ID = "wax_glow";
-	/** Ring points stay within this fraction of the radius (inside the shell). */
-	private static final double MAX_DIST_FRAC = 0.98;
 
 	@Override
 	public void tick(ServerLevel level, Vec3 center, float radius, ShieldShape shape, EffectDefinition def, long gameTime, ContextState ctx) {
@@ -63,7 +61,8 @@ public final class WaxGlow implements InsideEffectBehavior {
 				continue;
 			}
 
-			level.sendParticles(ParticleTypes.GLOW, true, false, player.getX(), player.getY() + 1.0, player.getZ(), ctx.scaleCount(2, 6), 0.3, 0.5, 0.3, 0.0);
+			BehaviorSupport.sendContained(level, ParticleTypes.GLOW, shape, center, radius,
+					player.getX(), player.getY() + 1.0, player.getZ(), ctx.scaleCount(2, 6), 0.3, 0.5, 0.3, 0.0);
 			for (int i = 0; i < points; i++) {
 				double angle = spin + Math.PI * 2.0 * i / points;
 				double x = player.getX() + Math.cos(angle) * orbitRadius;
@@ -78,38 +77,21 @@ public final class WaxGlow implements InsideEffectBehavior {
 				};
 				// A player hugging the wall puts parts of their orbit ring outside the
 				// shell; pull any such point back to 0.98r like the other behaviors.
-				sendContained(level, ringParticle, center, radius, x, y, z);
+				BehaviorSupport.sendContained(level, ringParticle, shape, center, radius, x, y, z, 1, 0.02, 0.02, 0.02, 0.0);
 				if (variant == 1) {
 					// The counter-rotating partner ring uses wax-off sparks.
 					double counterAngle = -angle + Math.PI / points;
-					sendContained(
-							level, ParticleTypes.WAX_OFF, center, radius,
-							player.getX() + Math.cos(counterAngle) * orbitRadius, player.getY() + 0.6, player.getZ() + Math.sin(counterAngle) * orbitRadius);
+					BehaviorSupport.sendContained(level, ParticleTypes.WAX_OFF, shape, center, radius,
+							player.getX() + Math.cos(counterAngle) * orbitRadius, player.getY() + 0.6, player.getZ() + Math.sin(counterAngle) * orbitRadius,
+							1, 0.02, 0.02, 0.02, 0.0);
 				} else if (variant == 4) {
 					// The lower partner ring counter-rotates in glow motes.
 					double counterAngle = -angle + Math.PI / points;
-					sendContained(
-							level, ParticleTypes.GLOW, center, radius,
-							player.getX() + Math.cos(counterAngle) * orbitRadius, player.getY() + 0.5, player.getZ() + Math.sin(counterAngle) * orbitRadius);
+					BehaviorSupport.sendContained(level, ParticleTypes.GLOW, shape, center, radius,
+							player.getX() + Math.cos(counterAngle) * orbitRadius, player.getY() + 0.5, player.getZ() + Math.sin(counterAngle) * orbitRadius,
+							1, 0.02, 0.02, 0.02, 0.0);
 				}
 			}
 		}
-	}
-
-	/** Emits one ring particle, rescaled toward the center onto 0.98r when outside it. */
-	private static void sendContained(ServerLevel level, SimpleParticleType particle, Vec3 center, float radius, double x, double y, double z) {
-		double dx = x - center.x;
-		double dy = y - center.y;
-		double dz = z - center.z;
-		double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-		double maxDist = radius * MAX_DIST_FRAC;
-		if (dist > maxDist) {
-			double scale = maxDist / dist;
-			x = center.x + dx * scale;
-			y = center.y + dy * scale;
-			z = center.z + dz * scale;
-		}
-
-		level.sendParticles(particle, true, false, x, y, z, 1, 0.02, 0.02, 0.02, 0.0);
 	}
 }

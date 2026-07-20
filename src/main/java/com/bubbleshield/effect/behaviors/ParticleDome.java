@@ -13,7 +13,10 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Dust structures hugging the shield surface.
+ * Dust structures hugging the shield surface. The raw ring math sits on the
+ * full radius (with vertical offsets that used to poke slightly past the wall),
+ * so every emission is routed through {@link BehaviorSupport#sendContained} and
+ * lands just inside the shell at 0.98r.
  *
  * <ul>
  * <li>v0: a slowly rotating dust ring at chest height</li>
@@ -37,18 +40,18 @@ public final class ParticleDome implements InsideEffectBehavior {
 		}
 
 		switch (def.behaviorVariant()) {
-			case 1 -> tickCounterRings(level, center, radius, def, gameTime, ctx);
-			case 2 -> tickDomeCap(level, center, radius, def, gameTime, ctx);
-			case 3 -> tickBreathingRing(level, center, radius, def, gameTime, ctx);
-			case 4 -> tickMeridianArc(level, center, radius, def, gameTime, ctx);
-			case 5 -> tickStackedRings(level, center, radius, def, gameTime, ctx);
-			case 6 -> tickPolarCrown(level, center, radius, def, gameTime, ctx);
-			default -> tickSingleRing(level, center, radius, def, gameTime, ctx);
+			case 1 -> tickCounterRings(level, center, radius, shape, def, gameTime, ctx);
+			case 2 -> tickDomeCap(level, center, radius, shape, def, gameTime, ctx);
+			case 3 -> tickBreathingRing(level, center, radius, shape, def, gameTime, ctx);
+			case 4 -> tickMeridianArc(level, center, radius, shape, def, gameTime, ctx);
+			case 5 -> tickStackedRings(level, center, radius, shape, def, gameTime, ctx);
+			case 6 -> tickPolarCrown(level, center, radius, shape, def, gameTime, ctx);
+			default -> tickSingleRing(level, center, radius, shape, def, gameTime, ctx);
 		}
 	}
 
-	/** v0: the original single rotating ring (semantics unchanged from the 10-behavior era). */
-	private static void tickSingleRing(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
+	/** v0: the original single rotating ring (10-behavior-era path, now contained onto 0.98r). */
+	private static void tickSingleRing(ServerLevel level, Vec3 center, float radius, ShieldShape shape, EffectDefinition def, long gameTime, ContextState ctx) {
 		DustParticleOptions primary = new DustParticleOptions(ctx.pickColor(def.argbPrimary(), def.argbSecondary()) & 0xFFFFFF, 1.0F);
 		DustParticleOptions secondary = new DustParticleOptions(ctx.secondaryColor(def.argbSecondary()) & 0xFFFFFF, 0.7F);
 		// Keep the point spacing roughly constant (one point per ~2 blocks of circumference)
@@ -61,12 +64,12 @@ public final class ParticleDome implements InsideEffectBehavior {
 			double z = center.z + Math.sin(angle) * radius;
 			// overrideLimiter=true lifts the 32-block send limit so players anywhere inside
 			// a large bubble still see the ring.
-			level.sendParticles(i % 2 == 0 ? primary : secondary, true, false, x, center.y + 1.0, z, 1, 0.05, 0.05, 0.05, 0.0);
+			BehaviorSupport.sendContained(level, i % 2 == 0 ? primary : secondary, shape, center, radius, x, center.y + 1.0, z, 1, 0.05, 0.05, 0.05, 0.0);
 		}
 	}
 
 	/** v1: two counter-rotating rings; primary dust at chest height, end rod motes above. */
-	private static void tickCounterRings(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
+	private static void tickCounterRings(ServerLevel level, Vec3 center, float radius, ShieldShape shape, EffectDefinition def, long gameTime, ContextState ctx) {
 		DustParticleOptions primary = new DustParticleOptions(ctx.pickColor(def.argbPrimary(), def.argbSecondary()) & 0xFFFFFF, 1.0F);
 		// Each loop pass emits two particles (one per ring), so cap points at half the budget.
 		int points = ctx.scaleCount(Mth.clamp((int) Math.round(Math.PI * radius * def.behaviorStrength()), MIN_POINTS / 2, MAX_POINTS / 2), MAX_POINTS / 2);
@@ -75,15 +78,15 @@ public final class ParticleDome implements InsideEffectBehavior {
 			double angle = Math.PI * 2.0 * i / points;
 			double x1 = center.x + Math.cos(phase + angle) * radius;
 			double z1 = center.z + Math.sin(phase + angle) * radius;
-			level.sendParticles(primary, true, false, x1, center.y + 1.0, z1, 1, 0.05, 0.05, 0.05, 0.0);
+			BehaviorSupport.sendContained(level, primary, shape, center, radius, x1, center.y + 1.0, z1, 1, 0.05, 0.05, 0.05, 0.0);
 			double x2 = center.x + Math.cos(-phase + angle) * radius;
 			double z2 = center.z + Math.sin(-phase + angle) * radius;
-			level.sendParticles(ParticleTypes.END_ROD, true, false, x2, center.y + 2.2, z2, 1, 0.05, 0.05, 0.05, 0.0);
+			BehaviorSupport.sendContained(level, ParticleTypes.END_ROD, shape, center, radius, x2, center.y + 2.2, z2, 1, 0.05, 0.05, 0.05, 0.0);
 		}
 	}
 
 	/** v3: one chest-height transition-dust ring whose radius breathes between 0.45r and 0.95r. */
-	private static void tickBreathingRing(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
+	private static void tickBreathingRing(ServerLevel level, Vec3 center, float radius, ShieldShape shape, EffectDefinition def, long gameTime, ContextState ctx) {
 		DustColorTransitionOptions dust = new DustColorTransitionOptions(
 				ctx.pickColor(def.argbPrimary(), def.argbSecondary()) & 0xFFFFFF, ctx.secondaryColor(def.argbSecondary()) & 0xFFFFFF, 1.2F);
 		double breath = 0.7 + 0.25 * Math.sin(gameTime / 10.0 * 0.5);
@@ -94,12 +97,12 @@ public final class ParticleDome implements InsideEffectBehavior {
 			double angle = phase + Math.PI * 2.0 * i / points;
 			double x = center.x + Math.cos(angle) * ringRadius;
 			double z = center.z + Math.sin(angle) * ringRadius;
-			level.sendParticles(dust, true, false, x, center.y + 1.2, z, 1, 0.05, 0.05, 0.05, 0.0);
+			BehaviorSupport.sendContained(level, dust, shape, center, radius, x, center.y + 1.2, z, 1, 0.05, 0.05, 0.05, 0.0);
 		}
 	}
 
 	/** v4: a rotating pole-to-pole meridian arc of primary dust over a fixed secondary equator ring. */
-	private static void tickMeridianArc(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
+	private static void tickMeridianArc(ServerLevel level, Vec3 center, float radius, ShieldShape shape, EffectDefinition def, long gameTime, ContextState ctx) {
 		DustParticleOptions primary = new DustParticleOptions(ctx.pickColor(def.argbPrimary(), def.argbSecondary()) & 0xFFFFFF, 1.3F);
 		DustParticleOptions secondary = new DustParticleOptions(ctx.secondaryColor(def.argbSecondary()) & 0xFFFFFF, 0.8F);
 		double azimuth = gameTime / 10.0 * 0.4;
@@ -110,18 +113,18 @@ public final class ParticleDome implements InsideEffectBehavior {
 			double latitude = Math.PI * i / arcPoints;
 			double y = center.y + Math.sin(latitude) * shell;
 			double horizontal = Math.cos(latitude) * shell;
-			level.sendParticles(primary, true, false, center.x + Math.cos(azimuth) * horizontal, y, center.z + Math.sin(azimuth) * horizontal, 1, 0.05, 0.05, 0.05, 0.0);
+			BehaviorSupport.sendContained(level, primary, shape, center, radius, center.x + Math.cos(azimuth) * horizontal, y, center.z + Math.sin(azimuth) * horizontal, 1, 0.05, 0.05, 0.05, 0.0);
 		}
 
 		int equatorPoints = ctx.scaleCount(Mth.clamp((int) Math.round(Math.PI * 2.0 * shell / 4.0), 12, MAX_POINTS / 2), MAX_POINTS / 2);
 		for (int i = 0; i < equatorPoints; i++) {
 			double angle = Math.PI * 2.0 * i / equatorPoints;
-			level.sendParticles(secondary, true, false, center.x + Math.cos(angle) * shell, center.y + 0.3, center.z + Math.sin(angle) * shell, 1, 0.05, 0.05, 0.05, 0.0);
+			BehaviorSupport.sendContained(level, secondary, shape, center, radius, center.x + Math.cos(angle) * shell, center.y + 0.3, center.z + Math.sin(angle) * shell, 1, 0.05, 0.05, 0.05, 0.0);
 		}
 	}
 
 	/** v5: three stacked dust rings at rising heights, adjacent rings spinning opposite ways. */
-	private static void tickStackedRings(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
+	private static void tickStackedRings(ServerLevel level, Vec3 center, float radius, ShieldShape shape, EffectDefinition def, long gameTime, ContextState ctx) {
 		double phase = gameTime / 10.0 * 0.3;
 		int rows = 3;
 		for (int row = 0; row < rows; row++) {
@@ -135,13 +138,13 @@ public final class ParticleDome implements InsideEffectBehavior {
 				double angle = phase * direction + Math.PI * 2.0 * i / points;
 				double x = center.x + Math.cos(angle) * ringRadius;
 				double z = center.z + Math.sin(angle) * ringRadius;
-				level.sendParticles(dust, true, false, x, center.y + height, z, 1, 0.05, 0.05, 0.05, 0.0);
+				BehaviorSupport.sendContained(level, dust, shape, center, radius, x, center.y + height, z, 1, 0.05, 0.05, 0.05, 0.0);
 			}
 		}
 	}
 
 	/** v6: a high-latitude crown ring near the pole, alternating end rod motes and dust. */
-	private static void tickPolarCrown(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
+	private static void tickPolarCrown(ServerLevel level, Vec3 center, float radius, ShieldShape shape, EffectDefinition def, long gameTime, ContextState ctx) {
 		DustParticleOptions dust = new DustParticleOptions(ctx.pickColor(def.argbPrimary(), def.argbSecondary()) & 0xFFFFFF, 1.4F);
 		double latitude = Math.toRadians(75.0);
 		double shell = radius * 0.95;
@@ -154,15 +157,15 @@ public final class ParticleDome implements InsideEffectBehavior {
 			double x = center.x + Math.cos(angle) * ringRadius;
 			double z = center.z + Math.sin(angle) * ringRadius;
 			if (i % 2 == 0) {
-				level.sendParticles(ParticleTypes.END_ROD, true, false, x, y, z, 1, 0.03, 0.03, 0.03, 0.0);
+				BehaviorSupport.sendContained(level, ParticleTypes.END_ROD, shape, center, radius, x, y, z, 1, 0.03, 0.03, 0.03, 0.0);
 			} else {
-				level.sendParticles(dust, true, false, x, y, z, 1, 0.05, 0.05, 0.05, 0.0);
+				BehaviorSupport.sendContained(level, dust, shape, center, radius, x, y, z, 1, 0.05, 0.05, 0.05, 0.0);
 			}
 		}
 	}
 
 	/** v2: latitude rings of color-transition dust forming a slowly spinning dome-cap grid. */
-	private static void tickDomeCap(ServerLevel level, Vec3 center, float radius, EffectDefinition def, long gameTime, ContextState ctx) {
+	private static void tickDomeCap(ServerLevel level, Vec3 center, float radius, ShieldShape shape, EffectDefinition def, long gameTime, ContextState ctx) {
 		DustColorTransitionOptions dust = new DustColorTransitionOptions(
 				ctx.pickColor(def.argbPrimary(), def.argbSecondary()) & 0xFFFFFF, ctx.secondaryColor(def.argbSecondary()) & 0xFFFFFF, Mth.clamp(def.behaviorStrength(), 0.8F, 1.5F));
 		double spin = gameTime / 10.0 * 0.15;
@@ -178,7 +181,7 @@ public final class ParticleDome implements InsideEffectBehavior {
 				double angle = spin + Math.PI * 2.0 * i / points;
 				double x = center.x + Math.cos(angle) * ringRadius;
 				double z = center.z + Math.sin(angle) * ringRadius;
-				level.sendParticles(dust, true, false, x, y, z, 1, 0.05, 0.05, 0.05, 0.0);
+				BehaviorSupport.sendContained(level, dust, shape, center, radius, x, y, z, 1, 0.05, 0.05, 0.05, 0.0);
 				sent++;
 			}
 		}

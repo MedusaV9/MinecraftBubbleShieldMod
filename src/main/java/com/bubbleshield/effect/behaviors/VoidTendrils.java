@@ -77,18 +77,10 @@ public final class VoidTendrils implements InsideEffectBehavior {
 				double dy = 0.2 + frac * height;
 				double dz = baseZ - center.z + Math.sin(twist) * helixRadius;
 				// The ring offset plus helix wobble can push tall column tops just past
-				// the shell at small radii; rescale any point beyond 0.98r back inside.
-				double offset = Math.sqrt(dx * dx + dy * dy + dz * dz);
-				double maxDist = radius * 0.98;
-				if (offset > maxDist) {
-					double scale = maxDist / offset;
-					dx *= scale;
-					dy *= scale;
-					dz *= scale;
-				}
-
+				// the shell at small radii; contain any point beyond 0.98r back inside.
 				// Reverse portal motes drift further upward on their own after spawning.
-				level.sendParticles(particle, true, false, center.x + dx, center.y + dy, center.z + dz, 1, 0.02, 0.05, 0.02, 0.0);
+				BehaviorSupport.sendContained(level, particle, shape, center, radius,
+						center.x + dx, center.y + dy, center.z + dz, 1, 0.02, 0.05, 0.02, 0.0);
 			}
 		}
 	}

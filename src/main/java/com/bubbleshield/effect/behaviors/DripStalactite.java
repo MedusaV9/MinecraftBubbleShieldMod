@@ -45,7 +45,10 @@ public final class DripStalactite implements InsideEffectBehavior {
 			// Deterministic pseudo-random anchor per station: drips repeat in place.
 			double hash = station * 2654435761.0 % 1.0e6 / 1.0e6;
 			double angle = Math.PI * 2.0 * station / stations + hash;
-			double dist = variant == 5 ? 0.0 : radius * (0.25 + 0.45 * hash);
+			// Clamp the anchor under the ceiling cap: a hashed dist beyond the (strength-
+			// lowered) ceiling used to zero the hang and drop the "stalactite" to floor
+			// level, below a dome's center plane.
+			double dist = variant == 5 ? 0.0 : Math.min(radius * (0.25 + 0.45 * hash), ceiling * 0.95);
 			double hang = Math.sqrt(Math.max(0.0, ceiling * ceiling - dist * dist));
 			double x = center.x + Math.cos(angle) * dist;
 			double y = center.y + Math.min(hang, ceiling) - 0.3;

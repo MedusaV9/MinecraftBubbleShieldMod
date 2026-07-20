@@ -64,7 +64,7 @@ public final class SlowHostiles implements InsideEffectBehavior {
 			} else if (variant == 4) {
 				mob.addEffect(new MobEffectInstance(MobEffects.GLOWING, DURATION_TICKS, 0));
 			} else if (variant == 5) {
-				level.sendParticles(ParticleTypes.SQUID_INK, true, false, mob.getX(), mob.getY() + mob.getBbHeight(), mob.getZ(), ctx.scaleCount(3, 8), 0.2, 0.3, 0.2, 0.01);
+				BehaviorSupport.sendContained(level, ParticleTypes.SQUID_INK, shape, center, radius, mob.getX(), mob.getY() + mob.getBbHeight(), mob.getZ(), ctx.scaleCount(3, 8), 0.2, 0.3, 0.2, 0.01);
 			}
 		}
 	}

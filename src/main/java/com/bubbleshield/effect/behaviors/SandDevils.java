@@ -56,7 +56,9 @@ public final class SandDevils implements InsideEffectBehavior {
 		double spin = gameTime / 10.0 * 1.1;
 		double coreHeight = radius * (variant == 3 ? 0.7 : variant == 5 ? 0.2 : 0.4) * Mth.clamp(def.behaviorStrength(), 0.8F, 1.3F);
 		int turns = variant == 5 ? 4 : 8;
-		int budget = MAX_POINTS / devils;
+		// v6 also emits its 16-particle ash haze, so its funnels get a smaller budget:
+		// the old flat 128/devils budget let v6 peak at 2*64 + 16 = 144 particles/pulse.
+		int budget = (variant == 6 ? MAX_POINTS - 16 : MAX_POINTS) / devils;
 		int points = ctx.scaleCount(Mth.clamp(turns * 3, 9, budget), budget);
 		for (int devil = 0; devil < devils; devil++) {
 			double orbitAngle = wander + Math.PI * 2.0 * devil / devils;
@@ -66,9 +68,11 @@ public final class SandDevils implements InsideEffectBehavior {
 			for (int i = 0; i < points; i++) {
 				double t = (double) i / points;
 				double swirl = spin + t * Math.PI * 2.0 * turns / 3.0 + devil;
-				// The funnel tapers: wide skirt at the floor, tight tip on top.
+				// The funnel tapers: wide skirt at the floor, tight tip on top. The v3
+				// tall twister's tip (orbit 0.55r + core height up to 0.91r) can top out
+				// past the shell, so contain every funnel point.
 				double funnel = (0.9 - 0.7 * t) * Math.min(radius * 0.18, 1.4);
-				level.sendParticles(particle, true, false,
+				BehaviorSupport.sendContained(level, particle, shape, center, radius,
 						baseX + Math.cos(swirl) * funnel, center.y + 0.1 + coreHeight * t, baseZ + Math.sin(swirl) * funnel,
 						1, 0.03, 0.05, 0.03, 0.0);
 			}

@@ -75,7 +75,10 @@ public final class HeartbeatPulse implements InsideEffectBehavior {
 			int points = ctx.scaleCount(Mth.clamp((int) Math.round(Math.PI * 2.0 * ringRadius / 2.0), MIN_POINTS, MAX_POINTS), MAX_POINTS);
 			for (int i = 0; i < points; i++) {
 				double angle = Math.PI * 2.0 * i / points;
-				level.sendParticles(dust, true, false, center.x + Math.cos(angle) * ringRadius, center.y + 0.2, center.z + Math.sin(angle) * ringRadius, 1, 0.05, 0.05, 0.05, 0.0);
+				// The widest sweep phase sits ON the 0.98r line; the 0.2 lift would
+				// nudge it past the shell without containment.
+				BehaviorSupport.sendContained(level, dust, shape, center, radius,
+						center.x + Math.cos(angle) * ringRadius, center.y + 0.2, center.z + Math.sin(angle) * ringRadius, 1, 0.05, 0.05, 0.05, 0.0);
 			}
 			return;
 		}
@@ -90,7 +93,8 @@ public final class HeartbeatPulse implements InsideEffectBehavior {
 				int points = ctx.scaleCount(Mth.clamp((int) Math.round(Math.PI * 2.0 * ringRadius / 2.5), MIN_POINTS / 2, MAX_POINTS / 2), MAX_POINTS / 2);
 				for (int i = 0; i < points; i++) {
 					double angle = Math.PI * 2.0 * i / points;
-					level.sendParticles(dust, true, false, center.x + Math.cos(angle) * ringRadius, center.y + 0.2, center.z + Math.sin(angle) * ringRadius, 1, 0.05, 0.05, 0.05, 0.0);
+					BehaviorSupport.sendContained(level, dust, shape, center, radius,
+							center.x + Math.cos(angle) * ringRadius, center.y + 0.2, center.z + Math.sin(angle) * ringRadius, 1, 0.05, 0.05, 0.05, 0.0);
 				}
 			}
 			return;
@@ -109,8 +113,10 @@ public final class HeartbeatPulse implements InsideEffectBehavior {
 			double angle = Math.PI * 2.0 * i / points;
 			double x = center.x + Math.cos(angle) * ringRadius;
 			double z = center.z + Math.sin(angle) * ringRadius;
-			// overrideLimiter=true lifts the 32-block send limit for players inside large bubbles.
-			level.sendParticles(dust, true, false, x, center.y + 0.2, z, 1, 0.05, 0.05, 0.05, 0.0);
+			// Contained: the widest phase sits ON the 0.98r line, so the 0.2 lift
+			// would poke it just past the shell. (sendContained also keeps the
+			// overrideLimiter=true send form for players inside large bubbles.)
+			BehaviorSupport.sendContained(level, dust, shape, center, radius, x, center.y + 0.2, z, 1, 0.05, 0.05, 0.05, 0.0);
 		}
 	}
 }
