@@ -3,15 +3,25 @@ package com.bubbleshield.effect.behaviors;
 import com.bubbleshield.effect.InsideEffectBehavior;
 
 /**
- * Registers the 50 built-in {@link InsideEffectBehavior} implementations. Every
- * behavior is used by the 350-effect catalogue exactly 7 times (variants 0..6),
- * an exact 50 x 7 cover enforced by {@link com.bubbleshield.effect.EffectRegistry#validate()}.
+ * Registers the 60 built-in {@link InsideEffectBehavior} implementations: the
+ * 50 catalogue behaviors (each used by the 350-effect catalogue exactly 7
+ * times, variants 0..6 -- an exact 50 x 7 cover enforced by
+ * {@link com.bubbleshield.effect.EffectRegistry#validate()}) plus the 10
+ * ghost behaviors staged for the 420-effect expansion, registered now but
+ * allow-listed as pending in
+ * {@link com.bubbleshield.effect.EffectRegistry#PENDING_BEHAVIORS} until the
+ * new rows land.
  */
 public final class EffectBehaviors {
 	private EffectBehaviors() {
 	}
 
-	/** Idempotent: safe to call more than once (e.g. from tests and mod init). */
+	/**
+	 * Idempotent: safe to call more than once (e.g. from tests and mod init).
+	 * All-or-nothing by construction -- the guard only skips when the registry is
+	 * non-empty, and a single call always registers the full set, so a partial
+	 * registry can never survive this method.
+	 */
 	public static void registerAll() {
 		if (!InsideEffectBehavior.REGISTRY.isEmpty()) {
 			return;
@@ -67,5 +77,18 @@ public final class EffectBehaviors {
 		InsideEffectBehavior.register(TidePools.ID, new TidePools());
 		InsideEffectBehavior.register(EmberSpiral.ID, new EmberSpiral());
 		InsideEffectBehavior.register(CometTails.ID, new CometTails());
+
+		// The 10 ghost behaviors: registered ahead of the 420-effect catalogue but
+		// not yet used by any of the 350 rows (see EffectRegistry.PENDING_BEHAVIORS).
+		InsideEffectBehavior.register(VexWisps.ID, new VexWisps());
+		InsideEffectBehavior.register(SoulProcession.ID, new SoulProcession());
+		InsideEffectBehavior.register(PhantomFlock.ID, new PhantomFlock());
+		InsideEffectBehavior.register(SonicGhosts.ID, new SonicGhosts());
+		InsideEffectBehavior.register(EnderWatchers.ID, new EnderWatchers());
+		InsideEffectBehavior.register(WanderingSpirits.ID, new WanderingSpirits());
+		InsideEffectBehavior.register(GraveyardMist.ID, new GraveyardMist());
+		InsideEffectBehavior.register(SpectralShoal.ID, new SpectralShoal());
+		InsideEffectBehavior.register(WraithOrbs.ID, new WraithOrbs());
+		InsideEffectBehavior.register(SeanceCircle.ID, new SeanceCircle());
 	}
 }

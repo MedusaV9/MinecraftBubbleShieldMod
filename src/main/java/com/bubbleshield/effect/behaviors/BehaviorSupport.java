@@ -196,4 +196,22 @@ public final class BehaviorSupport {
 		Vec3 point = containPoint(shape, center, radius, new Vec3(x, y, z));
 		level.sendParticles(particle, true, false, point.x, point.y, point.z, count, xDist, yDist, zDist, speed);
 	}
+
+	/**
+	 * SplitMix64 finalizer over an arbitrary composite seed. The stateless ghost
+	 * behaviors derive all apparition anchors (dart endpoints, watcher slots,
+	 * walker waypoints...) from this so one shared behavior instance serves every
+	 * shield deterministically, with no fields and no cleanup.
+	 */
+	public static long mix(long seed) {
+		long z = seed + 0x9E3779B97F4A7C15L;
+		z = (z ^ (z >>> 30)) * 0xBF58476D1CE4E5B9L;
+		z = (z ^ (z >>> 27)) * 0x94D049BB133111EBL;
+		return z ^ (z >>> 31);
+	}
+
+	/** A uniform double in {@code [0, 1)} derived from {@link #mix}. */
+	public static double hash01(long seed) {
+		return (mix(seed) >>> 11) * 0x1.0p-53;
+	}
 }

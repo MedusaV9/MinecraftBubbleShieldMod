@@ -62,6 +62,28 @@ public final class EffectRegistry {
 			"posterize", "radialblur", "glitch", "duotone",
 			"kaleido", "huedrift", "dreamblur", "moire");
 
+	/**
+	 * Behaviors registered ahead of the next catalogue expansion but deliberately
+	 * NOT used by any of the 350 rows yet: the 10 ghost/apparition behaviors land
+	 * with the 350 -> 420 catalogue (rows 350..419 will cover each of them with
+	 * variants 0..6 exactly once). {@link #validate()} exempts these ids from the
+	 * "every registered behavior is used" rule and, symmetrically, rejects any
+	 * 350-row that references one of them, so the allowlist cannot rot silently.
+	 * This set is removed in the 420 milestone (the exact-cover rule then applies
+	 * to all 60 behaviors uniformly).
+	 */
+	public static final Set<String> PENDING_BEHAVIORS = Set.of(
+			"vex_wisps",
+			"soul_procession",
+			"phantom_flock",
+			"sonic_ghosts",
+			"ender_watchers",
+			"wandering_spirits",
+			"graveyard_mist",
+			"spectral_shoal",
+			"wraith_orbs",
+			"seance_circle");
+
 	public static final List<EffectDefinition> ALL = buildAll();
 
 	private EffectRegistry() {
@@ -523,7 +545,9 @@ public final class EffectRegistry {
 	 * 0..{@link #CATALOGUE_VARIANTS}-1 exactly once each (50 x 7 = an exact cover
 	 * of the 350 rows); ambientPeriodTicks positive;
 	 * every (ambientSoundId, ambientPitch, ambientPeriodTicks) triple distinct;
-	 * every behavior id registered in {@link InsideEffectBehavior#REGISTRY};
+	 * every behavior id registered in {@link InsideEffectBehavior#REGISTRY} and
+	 * not in {@link #PENDING_BEHAVIORS} (which are registered-but-reserved and,
+	 * inversely, must all resolve in the registry);
 	 * every screenTemplate one of the 20 {@link #SCREEN_TEMPLATES} families; every
 	 * ambientSoundId resolvable in the vanilla sound registry; no surface,
 	 * screenTemplate or behavior id repeated within a 5-effect color family
@@ -575,6 +599,11 @@ public final class EffectRegistry {
 				throw new IllegalStateException("Effect " + def.id() + " references unregistered inside behavior: " + def.insideBehaviorId());
 			}
 
+			if (PENDING_BEHAVIORS.contains(def.insideBehaviorId())) {
+				throw new IllegalStateException("Effect " + def.id() + " uses pending behavior " + def.insideBehaviorId()
+						+ " (reserved for the 420-effect expansion, see PENDING_BEHAVIORS)");
+			}
+
 			if (!SCREEN_TEMPLATES.contains(def.screenTemplate())) {
 				throw new IllegalStateException("Effect " + def.id() + " uses unknown screen template: " + def.screenTemplate());
 			}
@@ -622,8 +651,17 @@ public final class EffectRegistry {
 			}
 		}
 
+		// Pending (420-milestone) behaviors are exempt from the usage rule, but
+		// they must actually be registered -- an allowlist entry with no behavior
+		// behind it would hide a real wiring bug.
+		for (String pending : PENDING_BEHAVIORS) {
+			if (!InsideEffectBehavior.REGISTRY.containsKey(pending)) {
+				throw new IllegalStateException("Pending behavior " + pending + " is allow-listed but not registered");
+			}
+		}
+
 		for (String registered : InsideEffectBehavior.REGISTRY.keySet()) {
-			if (!behaviorVariants.containsKey(registered)) {
+			if (!behaviorVariants.containsKey(registered) && !PENDING_BEHAVIORS.contains(registered)) {
 				throw new IllegalStateException("Registered behavior " + registered + " is not used by the catalogue");
 			}
 		}

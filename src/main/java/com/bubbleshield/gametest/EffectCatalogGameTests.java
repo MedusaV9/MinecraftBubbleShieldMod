@@ -27,6 +27,7 @@ import com.google.gson.JsonParser;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.particles.TrailParticleOption;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket;
@@ -62,7 +63,12 @@ public class EffectCatalogGameTests {
 		EffectRegistry.validate();
 		helper.assertTrue(EffectRegistry.COUNT == 350, "catalogue should contain exactly 350 effects");
 		helper.assertTrue(EffectRegistry.ALL.size() == EffectRegistry.COUNT, "registry should expose exactly " + EffectRegistry.COUNT + " effect definitions");
-		helper.assertTrue(InsideEffectBehavior.REGISTRY.size() == 50, "exactly 50 inside behaviors should be registered");
+		// 50 catalogue behaviors + the 10 pending ghost behaviors staged for the
+		// 420-effect expansion (registered, allow-listed, not yet used by any row).
+		helper.assertTrue(InsideEffectBehavior.REGISTRY.size() == 60, "exactly 60 inside behaviors should be registered, found " + InsideEffectBehavior.REGISTRY.size());
+		helper.assertTrue(EffectRegistry.PENDING_BEHAVIORS.size() == 10, "exactly 10 behaviors should be pending, found " + EffectRegistry.PENDING_BEHAVIORS.size());
+		helper.assertTrue(InsideEffectBehavior.REGISTRY.keySet().containsAll(EffectRegistry.PENDING_BEHAVIORS),
+				"every pending behavior id must be registered");
 
 		// PARAM_CYCLE is FROZEN at the V1 catalogue size: retuning it would silently
 		// change the derived params (and the generated post-effect JSON uniforms) of
@@ -79,15 +85,20 @@ public class EffectCatalogGameTests {
 		assertFrozenRow(helper, 104, 0xFFFFE600, 0xFF3D0099, 0.7066667F, 1.4253333F);
 
 		// Exact-cover usage rule: the 350-row catalogue uses every registered
-		// behavior (each exactly CATALOGUE_VARIANTS = 7 times, per validate()).
+		// non-pending behavior (each exactly CATALOGUE_VARIANTS = 7 times, per
+		// validate()), and none of the pending ones (they are reserved for the
+		// 420 milestone).
 		Set<String> used = new HashSet<>();
 		for (EffectDefinition def : EffectRegistry.ALL) {
 			used.add(def.insideBehaviorId());
 		}
+
+		Set<String> expected = new HashSet<>(InsideEffectBehavior.REGISTRY.keySet());
+		expected.removeAll(EffectRegistry.PENDING_BEHAVIORS);
 		helper.assertTrue(
-				used.equals(InsideEffectBehavior.REGISTRY.keySet()),
-				"the catalogue should use exactly the " + InsideEffectBehavior.REGISTRY.size()
-						+ " registered behaviors, used " + used.size());
+				used.equals(expected),
+				"the catalogue should use exactly the " + expected.size()
+						+ " registered non-pending behaviors, used " + used.size());
 
 		helper.succeed();
 	}
@@ -167,7 +178,10 @@ public class EffectCatalogGameTests {
 	}
 
 	/**
-	 * Runs the full 50-behavior x 7-variant matrix under the given shape and asserts
+	 * Runs the full 60-behavior x 7-variant matrix (every entry of
+	 * {@code InsideEffectBehavior.REGISTRY}, so the 10 pending ghost behaviors are
+	 * ticked and containment-checked too, even before any catalogue row uses them)
+	 * under the given shape and asserts
 	 * containment/deny-list on every particle packet the server sent. The seven game
 	 * times cover every cadence the behaviors use (0 hits all modulo gates; 10..30
 	 * cover the /10-pulse phases; 40/100/200 cover the %20/%30/%40/%60 event beats).
@@ -205,8 +219,17 @@ public class EffectCatalogGameTests {
 							entry.getValue().tick(level, center, radius, shape, def, gameTime, ContextState.NEUTRAL);
 						}
 
-						captured += assertCapturedParticlesContained(helper, capture, shape, center, radius,
+						int cellCaptured = assertCapturedParticlesContained(helper, capture, shape, center, radius,
 								entry.getKey() + "@" + variant + " (radius " + radius + ", strength " + strength + ")");
+						// The pending ghost behaviors are pure particle apparitions: every
+						// variant must visibly emit in every matrix cell, which also proves
+						// the not-yet-catalogued behaviors really ran (no vacuous pass).
+						if (EffectRegistry.PENDING_BEHAVIORS.contains(entry.getKey())) {
+							helper.assertTrue(cellCaptured > 0, "pending ghost behavior " + entry.getKey() + "@" + variant
+									+ " emitted nothing (radius " + radius + ", strength " + strength + ", shape " + shape + ")");
+						}
+
+						captured += cellCaptured;
 					}
 				}
 			}
@@ -235,6 +258,12 @@ public class EffectCatalogGameTests {
 
 			Vec3 pos = new Vec3(packet.getX(), packet.getY(), packet.getZ());
 			assertPointContained(helper, shape, center, maxDist, pos, label + " emission");
+			if (packet.getParticle() instanceof TrailParticleOption trail) {
+				// A TRAIL particle lerps from the packet position to the option's
+				// target over its duration, so the target must be inside too.
+				assertPointContained(helper, shape, center, maxDist, trail.target(), label + " trail target");
+			}
+
 			if (packet.getCount() == 0) {
 				// The count=0 form spawns ONE particle at pos + maxSpeed * dist (the
 				// ENCHANT/NAUTILUS fly-towards particles start at target + offset and
@@ -458,10 +487,11 @@ public class EffectCatalogGameTests {
 
 	/**
 	 * Every axis label used by the effect-picker tooltips resolves to a lang key:
-	 * 24 surface families, 50 inside behaviors, 7 guard
-	 * styles and 6 context profiles. Keys are derived from the live enums/registry
-	 * so the tooltip composition in {@code EffectPickerScreen} and the lang files
-	 * cannot drift apart.
+	 * 24 surface families, 60 registered inside behaviors (incl. the 10 pending
+	 * ghost behaviors, so their labels exist the moment the 420 rows land), 7
+	 * guard styles and 6 context profiles. Keys are derived from the live
+	 * enums/registry so the tooltip composition in {@code EffectPickerScreen} and
+	 * the lang files cannot drift apart.
 	 */
 	@GameTest
 	public void axisLangKeysComplete(GameTestHelper helper) {
@@ -472,7 +502,7 @@ public class EffectCatalogGameTests {
 			helper.assertTrue(enKeys.contains(key), "missing lang key: " + key);
 		}
 
-		helper.assertTrue(InsideEffectBehavior.REGISTRY.size() == 50, "expected 50 registered behaviors");
+		helper.assertTrue(InsideEffectBehavior.REGISTRY.size() == 60, "expected 60 registered behaviors");
 		for (String behaviorId : InsideEffectBehavior.REGISTRY.keySet()) {
 			String key = "behavior.bubbleshield." + behaviorId;
 			helper.assertTrue(enKeys.contains(key), "missing lang key: " + key);
