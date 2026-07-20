@@ -79,9 +79,9 @@ On top of that it enforces the generated-shader invariants:
   4-number value -- std140 wiring is positional, so a JSON/GLSL mismatch would
   silently scramble the uniforms at runtime.
 
-The full scan at COUNT=350 is 351 files under bubble/ (350 fx_*.fsh +
-surface.vsh) + 4 under beam/ + 350 under screenfx/ (sfx_*.fsh) = 705
-compiles, plus 704 vsh<->fsh link checks.
+The full scan at COUNT=420 is 421 files under bubble/ (420 fx_*.fsh +
+surface.vsh) + 4 under beam/ + 420 under screenfx/ (sfx_*.fsh) = 845
+compiles, plus 844 vsh<->fsh link checks.
 
 Exits nonzero when any shader fails to compile or link, any inventory entry is
 missing/extra/misplaced, or any invariant is violated. Usage:

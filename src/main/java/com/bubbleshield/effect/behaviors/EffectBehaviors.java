@@ -3,14 +3,10 @@ package com.bubbleshield.effect.behaviors;
 import com.bubbleshield.effect.InsideEffectBehavior;
 
 /**
- * Registers the 60 built-in {@link InsideEffectBehavior} implementations: the
- * 50 catalogue behaviors (each used by the 350-effect catalogue exactly 7
- * times, variants 0..6 -- an exact 50 x 7 cover enforced by
- * {@link com.bubbleshield.effect.EffectRegistry#validate()}) plus the 10
- * ghost behaviors staged for the 420-effect expansion, registered now but
- * allow-listed as pending in
- * {@link com.bubbleshield.effect.EffectRegistry#PENDING_BEHAVIORS} until the
- * new rows land.
+ * Registers the 60 built-in {@link InsideEffectBehavior} implementations, each
+ * used by the 420-effect catalogue exactly 7 times (variants 0..6 -- an exact
+ * 60 x 7 cover enforced by
+ * {@link com.bubbleshield.effect.EffectRegistry#validate()}).
  */
 public final class EffectBehaviors {
 	private EffectBehaviors() {
@@ -78,8 +74,8 @@ public final class EffectBehaviors {
 		InsideEffectBehavior.register(EmberSpiral.ID, new EmberSpiral());
 		InsideEffectBehavior.register(CometTails.ID, new CometTails());
 
-		// The 10 ghost behaviors: registered ahead of the 420-effect catalogue but
-		// not yet used by any of the 350 rows (see EffectRegistry.PENDING_BEHAVIORS).
+		// The 10 ghost/apparition behaviors, covered by the 420-milestone rows
+		// 350..419 (variants 0..6 each).
 		InsideEffectBehavior.register(VexWisps.ID, new VexWisps());
 		InsideEffectBehavior.register(SoulProcession.ID, new SoulProcession());
 		InsideEffectBehavior.register(PhantomFlock.ID, new PhantomFlock());

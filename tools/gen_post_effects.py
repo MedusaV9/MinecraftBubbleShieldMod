@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Dev tool: generates the 350 shield screen post-effect JSONs.
+"""Dev tool: generates the 420 shield screen post-effect JSONs.
 
 Emits src/main/resources/assets/bubbleshield/post_effect/effect_00.json ...
-effect_349.json (the %02d name format never truncates 3-digit ids, so ids
+effect_419.json (the %02d name format never truncates 3-digit ids, so ids
 0..104 keep their historical file names).
 The assets live in the main (not client) source set so the
 postEffectAssetsExist game test can find them on the dedicated-server classpath;
@@ -65,7 +65,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = REPO_ROOT / "src/main/resources/assets/bubbleshield/post_effect"
 REGISTRY_JAVA = REPO_ROOT / "src/main/java/com/bubbleshield/effect/EffectRegistry.java"
 
-EFFECT_COUNT = 350
+EFFECT_COUNT = 420
 
 # Modulus/denominator of the per-id param_b derivation below. FROZEN at the V1
 # catalogue size (75): retuning it to EFFECT_COUNT would silently change the
@@ -497,6 +497,90 @@ EFFECTS = [
     (0xFFB5E617, 0xFF4717E6, "ripple"),     # 347 Chromatic Crescendo
     (0xFF17E65F, 0xFFC71488, "huedrift"),   # 348 Rainbow Reprise
     (0xFF1785E6, 0xFFE67717, "pixelate"),   # 349 Grand Prismatic
+    # F70 "Spectral Veil" (pale ecto-green x deep spruce)
+    (0xFFB8FFD9, 0xFF1E4D3A, "tint"),       # 350 Ectoplasm Drift
+    (0xFF9FF7C6, 0xFF0F3D2E, "chroma"),     # 351 Poltergeist Waltz
+    (0xFFCCFFE2, 0xFF2A5C40, "bloomglow"),  # 352 Haunted Meadow
+    (0xFF8AE8B8, 0xFF123829, "edgeglow"),   # 353 Ghastly Chorus
+    (0xFFA8FFCF, 0xFF1B4A33, "posterize"),  # 354 Wisplight Vigil
+    # F71 "Soulfire Procession" (soul teal x ember umber)
+    (0xFF33E0D0, 0xFF66341A, "kaleido"),    # 355 Soulfire March
+    (0xFF1FC9C4, 0xFF4D2914, "moire"),      # 356 Lantern Cortege
+    (0xFF55F0E0, 0xFF804020, "vignette"),   # 357 Blue Flame Requiem
+    (0xFF0FB8AD, 0xFF59301C, "desat"),      # 358 Ashen Litany
+    (0xFF47D9D4, 0xFF73391F, "scanlines"),  # 359 Ember Communion
+    # F72 "Phantom Fleet" (phantom grey-blue x storm navy)
+    (0xFF8FA8C9, 0xFF24344D, "posterize"),  # 360 Phantom Armada
+    (0xFF7C99BD, 0xFF1B2940, "duotone"),    # 361 Ghost Ship Wake
+    (0xFFA3B8D6, 0xFF2E4059, "dreamblur"),  # 362 Spectral Sails
+    (0xFF6B8AB0, 0xFF152238, "wobble"),     # 363 Foglight Beacon
+    (0xFF97ACC2, 0xFF1F3147, "pixelate"),   # 364 Derelict Drift
+    # F73 "Echo Chamber" (sonic teal x sculk black)
+    (0xFF1FD9C2, 0xFF0A1E1E, "scanlines"),  # 365 Sonic Apparition
+    (0xFF0DC7B8, 0xFF05292B, "heathaze"),   # 366 Echolocation
+    (0xFF3BE8D0, 0xFF11332E, "glitch"),     # 367 Resonant Haunt
+    (0xFF09B5A6, 0xFF03211F, "huedrift"),   # 368 Sculk Whisperer
+    (0xFF2EDFC9, 0xFF0C2826, "tint"),       # 369 Wailing Frequency
+    # F74 "Ender Gaze" (ender magenta x obsidian violet)
+    (0xFFCC33E6, 0xFF1A0526, "pixelate"),   # 370 Watcher's Stare
+    (0xFFB81FD9, 0xFF120421, "ripple"),     # 371 Endless Regard
+    (0xFFE059F2, 0xFF240933, "frostlens"),  # 372 Violet Scrutiny
+    (0xFFA30DC7, 0xFF0D021A, "radialblur"), # 373 Rift Observer
+    (0xFFD647EB, 0xFF1E0730, "kaleido"),    # 374 Pearlescent Eye
+    # F75 "Will-o'-Wisp" (wisp gold x bog green)
+    (0xFFF7E85C, 0xFF2E4D26, "tint"),       # 375 Wandering Flame
+    (0xFFE8D63B, 0xFF24401E, "chroma"),     # 376 Marsh Beacon
+    (0xFFFFF280, 0xFF3A5C31, "bloomglow"),  # 377 Fool's Lantern
+    (0xFFD9C929, 0xFF1B331A, "edgeglow"),   # 378 Pixie Parade
+    (0xFFEDDE4A, 0xFF2A472A, "posterize"),  # 379 Bog Star
+    # F76 "Graveyard Mist" (mist grey x mossy stone)
+    (0xFFC2CCC7, 0xFF4A5C4E, "kaleido"),    # 380 Tombstone Fog
+    (0xFFAEBAB5, 0xFF3D4F42, "moire"),      # 381 Mourner's Shroud
+    (0xFFD5DED9, 0xFF57695A, "vignette"),   # 382 Lychgate Chill
+    (0xFF9BA8A2, 0xFF334537, "desat"),      # 383 Epitaph Bloom
+    (0xFFC9D6CE, 0xFF415345, "scanlines"),  # 384 Cemetery Lull
+    # F77 "Ghost Reef" (spectral cyan x abyssal blue)
+    (0xFF66F0E8, 0xFF0E2E5C, "posterize"),  # 385 Spectral Shoal
+    (0xFF4DE0DB, 0xFF0A2347, "duotone"),    # 386 Phantom Minnows
+    (0xFF85F7F0, 0xFF16386B, "dreamblur"),  # 387 Drowned Chorus
+    (0xFF33D6CF, 0xFF061B38, "wobble"),     # 388 Abyssal Glimmer
+    (0xFF74EDE3, 0xFF123152, "pixelate"),   # 389 Ghostlight Lagoon
+    # F78 "Wraith Court" (wraith violet x bone ivory)
+    (0xFF8A5CBF, 0xFFE8E0CC, "scanlines"),  # 390 Wraithly Orbit
+    (0xFF7847B0, 0xFFD9D0B8, "heathaze"),   # 391 Bonechill Gala
+    (0xFF9C6ECF, 0xFFF2EBD9, "glitch"),     # 392 Court of Echoes
+    (0xFF66339E, 0xFFCCC2A8, "huedrift"),   # 393 Velvet Wraith
+    (0xFF8F63C4, 0xFFE0D8C2, "tint"),       # 394 Pale Sovereign
+    # F79 "Seance Parlor" (candle amber x midnight violet)
+    (0xFFE8A83D, 0xFF2E1A47, "pixelate"),   # 395 Table Rapping
+    (0xFFD9962B, 0xFF241238, "ripple"),     # 396 Candlewick Circle
+    (0xFFF7BC55, 0xFF3A2557, "frostlens"),  # 397 Ouija Whisper
+    (0xFFC98A1F, 0xFF1B0D2E, "radialblur"), # 398 Medium's Trance
+    (0xFFEDB047, 0xFF332052, "kaleido"),    # 399 Spirit Cabinet
+    # F80 "Poltergeist Playroom" (chaotic pink x slate)
+    (0xFFF773B8, 0xFF3D4452, "tint"),       # 400 Flying Crockery
+    (0xFFE85CA8, 0xFF2E3542, "chroma"),     # 401 Rattled Chandelier
+    (0xFFFF8AC7, 0xFF4A5263, "bloomglow"),  # 402 Slamming Doors
+    (0xFFD94798, 0xFF232937, "edgeglow"),   # 403 Restless Attic
+    (0xFFF080BD, 0xFF424C5C, "posterize"),  # 404 Invisible Prankster
+    # F81 "Banshee Moor" (keening silver x heather violet)
+    (0xFFD9DEE8, 0xFF7A5C99, "kaleido"),    # 405 Keening Wind
+    (0xFFC7CDDB, 0xFF684C8A, "moire"),      # 406 Moorland Wail
+    (0xFFE8ECF2, 0xFF8A6BAD, "vignette"),   # 407 Heather Haunt
+    (0xFFB5BCCF, 0xFF573D78, "desat"),      # 408 Silver Scream
+    (0xFFDEE4ED, 0xFF7D63A1, "scanlines"),  # 409 Twilight Lament
+    # F82 "Revenant Forge" (revenant green x rusted iron)
+    (0xFF7ACC29, 0xFF6B3A24, "posterize"),  # 410 Grudgebearer
+    (0xFF66B81C, 0xFF572E1B, "duotone"),    # 411 Rusted Vengeance
+    (0xFF8FDE3D, 0xFF7D482E, "dreamblur"),  # 412 Grave Iron
+    (0xFF54A312, 0xFF472414, "wobble"),     # 413 Unfinished Business
+    (0xFF85D634, 0xFF74412A, "pixelate"),   # 414 Retribution Ember
+    # F83 "Astral Tide" (astral indigo x moonfoam)
+    (0xFF5C6BE8, 0xFFD9E8F7, "scanlines"),  # 415 Astral Undertow
+    (0xFF4756D9, 0xFFC7DBEF, "heathaze"),   # 416 Moonfoam Crest
+    (0xFF7383F7, 0xFFE8F2FC, "glitch"),     # 417 Etheric Swell
+    (0xFF3945C7, 0xFFB5CCE4, "huedrift"),   # 418 Planar Riptide
+    (0xFF6675ED, 0xFFE0ECF9, "tint"),       # 419 Silver Cord
 ]
 
 # Per-family knob packing (see the module docstring). Each entry maps the

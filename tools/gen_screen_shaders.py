@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Deterministic generator for the per-effect screen post-effect shaders (sfx_000..sfx_349).
+"""Deterministic generator for the per-effect screen post-effect shaders (sfx_000..sfx_419).
 
 Running `python3 tools/gen_screen_shaders.py` (re)writes ALL of
-src/main/resources/assets/bubbleshield/shaders/screenfx/sfx_000.fsh .. sfx_349.fsh
+src/main/resources/assets/bubbleshield/shaders/screenfx/sfx_000.fsh .. sfx_419.fsh
 plus tools/screen_manifest.json AND a byte-identical classpath copy at
 src/main/resources/assets/bubbleshield/screen_manifest.json (the
 screenTemplateMatchesJson gametest cross-checks every EffectRegistry row's screen
@@ -41,7 +41,7 @@ Design (see /tmp/shader_plan.md section 4.2 and AGENTS.md):
   dreamblur + sparkle, moire interference). Each id's family comes from
   EffectRegistry.java (parsed at generation time as ground truth); the
   structural stack (family, variant, motion, overlay) is chosen by
-  deterministic probing so all 350 stacks are pairwise distinct.
+  deterministic probing so all 420 stacks are pairwise distinct.
 
 * Gameplay safety, enforced by the shared composer (not per-module discretion):
   every non-identity scene sample is routed through
@@ -61,7 +61,7 @@ Design (see /tmp/shader_plan.md section 4.2 and AGENTS.md):
   uniforms beyond the three declared blocks/samplers.
 
 Usage:
-    python3 tools/gen_screen_shaders.py                  # all 350 + manifests
+    python3 tools/gen_screen_shaders.py                  # all 420 + manifests
     python3 tools/gen_screen_shaders.py --only 0-15      # subset (same bytes)
     python3 tools/gen_screen_shaders.py --only 0-15 --out /tmp/probe
 """
@@ -79,7 +79,7 @@ REGISTRY_JAVA = REPO_ROOT / "src/main/java/com/bubbleshield/effect/EffectRegistr
 DEFAULT_MANIFEST = REPO_ROOT / "tools/screen_manifest.json"
 CLASSPATH_MANIFEST = REPO_ROOT / "src/main/resources/assets/bubbleshield/screen_manifest.json"
 
-COUNT = 350
+COUNT = 420
 GLOBAL_SEED = 0x5C4EE7F1
 MAX_UV_OFFSET = 0.02  # gameplay-safety bound for any scene-sample displacement
 
@@ -175,7 +175,7 @@ def parse_registry_screen_families() -> dict:
 
 
 def build_assignments() -> list:
-    """Builds the full 350-row assignment table (always computed over ALL ids so
+    """Builds the full COUNT-row assignment table (always computed over ALL ids so
     partial --only runs emit byte-identical files to a full run)."""
     families = parse_registry_screen_families()
     rows = []
@@ -1343,7 +1343,7 @@ def parse_only(spec: str) -> list:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--only", help="comma/range list of effect ids to emit (e.g. '0-15,42'); "
-                                       "default: all 350. Emitted bytes are identical to a full run.")
+                                       "default: all 420. Emitted bytes are identical to a full run.")
     parser.add_argument("--out", help="output directory override (default: the repo screenfx dir); "
                                       "the manifest is then written next to the shaders instead of "
                                       "tools/ + the classpath copy.")

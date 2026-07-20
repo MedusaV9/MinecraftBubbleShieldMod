@@ -94,41 +94,45 @@ Projectiles from non-whitelisted shooters are intercepted at the surface, by typ
 - **Thrown items** (snowballs, potions, **ender pearls** — no teleporting through!) and shulker bullets:
   fizzle out, 2 damage.
 
-## The 350 effects
+## The 420 effects
 
-Every shield has one of **350 selectable effects** (ids 0–349, organized as 70 color families x 5 effects),
+Every shield has one of **420 selectable effects** (ids 0–419, organized as 84 color families x 5 effects),
 chosen in the projector GUI; hovering an effect button shows a tooltip describing its axes. Every effect is
 an individually authored row in a flat catalogue (`EffectRegistry`) that combines **seven axes**:
 
 1. **Palette**: a unique primary/secondary color pair.
 2. **Surface layer** (client): **its own dedicated procedural surface shader**
-   (`assets/bubbleshield/shaders/bubble/fx_000.fsh` … `fx_349.fsh`, one render pipeline per effect).
+   (`assets/bubbleshield/shaders/bubble/fx_000.fsh` … `fx_419.fsh`, one render pipeline per effect).
    Each shader is generated from a library of ShaderToy-/iq-derived techniques (domain-warped FBM,
    exact-border voronoi, voronoise, caustics, curl-flow advection, thin-film iridescence, truchet/hex/tri
-   lattices, kaleidoscopic folds, cosine palettes, silhouette-rim estimation …) composed into at least
-   three distinct depth layers (parallax deep field + signature mid structure + rim/sparkle highlights),
-   grouped into **24** technique families (the `SurfaceTemplate` metadata shown in tooltips).
-3. **Inside layer** (server): one of **50 behaviors** x 7 variants — particle domes/spirals/orbits, regen /
+   lattices, kaleidoscopic folds, cosine palettes, silhouette-rim estimation, Kaliset fractal folds,
+   volumetric transmittance marches, liquid-chrome environment reflections, refractive crystal panes …)
+   composed into at least three distinct depth layers (parallax deep field + signature mid structure +
+   rim/sparkle highlights), grouped into **40** technique families (the `SurfaceTemplate` metadata
+   shown in tooltips).
+3. **Inside layer** (server): one of **60 behaviors** x 7 variants — particle domes/spirals/orbits, regen /
    speed / haste / resistance / night-vision auras, slowness for hostile mobs, ember rain, snowfall, fireflies,
    mist, heartbeat and music pulses, rising souls, falling petals, bubble veils, static fields, meteor bursts,
    spore drift, enchantment streams, fire wards, intruder-freezing frost, purge pulses, leap/tide auras,
    ember guards, lucky charms, echo pulses, prismatic rays, void tendrils, honey drip, waxen glow, storm
    cages, gravity wells, aurora ribbons, sand devils, glass shards, moth swarms, rune orbits, dripping
    stalactites, geyser vents, static orbs, shadow veils, prism beams, pollen haze, tide pools, ember
-   spirals and comet tails.
+   spirals, comet tails, plus the ghost suite: vex wisps, soul processions, phantom flocks, sonic
+   ghosts, ender watchers, wandering spirits, graveyard mist, spectral shoals, wraith orbs and seance
+   circles.
 4. **Guard style**: what happens to intruders expelled at the boundary — nothing, gust pushback, slowness,
    blindness, darkness, a glowing mark, or stinging magic damage.
 5. **Context profile**: how the effect reacts to the world — steady, blooming at night, charged by storms,
    scaling with the crowd inside, frenzying at low shield health, or hue-shifting with health.
 6. **Ambient sound**: a vanilla sound event with per-effect pitch and period, played from the projector.
 7. **Screen layer** (client): **its own dedicated full-screen post-processing shader** applied while you
-   stand inside the bubble (`assets/bubbleshield/shaders/screenfx/sfx_000.fsh` … `sfx_349.fsh`, wired
-   through `assets/bubbleshield/post_effect/effect_00.json` … `effect_349.json`), drawn from **20** screen
+   stand inside the bubble (`assets/bubbleshield/shaders/screenfx/sfx_000.fsh` … `sfx_419.fsh`, wired
+   through `assets/bubbleshield/post_effect/effect_00.json` … `effect_419.json`), drawn from **20** screen
    technique families — tint, wobble, vignette, chroma, pixelate, desat, bloomglow, ripple, scanlines,
    edgeglow, frostlens, heathaze, posterize, radialblur, glitch, duotone, kaleido refraction, hue drift,
    dream blur and moiré interference.
 
-**Uniqueness guarantee** (machine-enforced by `EffectRegistry.validate()` and the gametests): all 350 palette
+**Uniqueness guarantee** (machine-enforced by `EffectRegistry.validate()` and the gametests): all 420 palette
 pairs are pairwise distinct, every behavior is used exactly 7 times covering variants {0 … 6}, no color
 family repeats a surface family, screen family or behavior, no (surface family, screen family) pair appears
 more than 3 times across the whole catalogue, every (sound, pitch, period) triple is unique, and no two
@@ -137,7 +141,7 @@ generated shaders are byte-identical (each has its own structural technique stac
 
 ### Generated shaders: workflow
 
-All 700 per-effect shaders (350 `fx_*.fsh` surface + 350 `sfx_*.fsh` screen) and the 350 post-effect JSONs
+All 840 per-effect shaders (420 `fx_*.fsh` surface + 420 `sfx_*.fsh` screen) and the 420 post-effect JSONs
 are emitted by deterministic, byte-stable generators — **never hand-edit generated `fx_*`/`sfx_*` files or
 `effect_*.json`**; edits there are overwritten by the next regeneration. The workflow is:
 

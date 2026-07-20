@@ -23,7 +23,7 @@ import net.minecraft.client.renderer.rendertype.RenderType;
  * One {@link RenderPipeline} + {@link RenderType} per effect id: pipeline
  * {@code bubbleshield:pipeline/bubble_fx_NNN} with fragment shader
  * {@code bubbleshield:bubble/fx_NNN.fsh} for every entry in {@link EffectRegistry#ALL}
- * ({@link EffectRegistry#COUNT} pipelines — 350 today, grows automatically with COUNT).
+ * ({@link EffectRegistry#COUNT} pipelines — 420 today, grows automatically with COUNT).
  *
  * <p>The snippet is modeled on vanilla's {@code RenderPipelines.END_PORTAL_SNIPPET}
  * (GLOBALS + MATRICES_PROJECTION + FOG bind groups, QUADS), with the sampler layouts

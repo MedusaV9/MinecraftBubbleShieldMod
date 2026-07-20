@@ -12,19 +12,20 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 
 /**
- * The fixed catalogue of the 350 selectable shield effects (ids 0..349), organized as
- * 70 color families x 5 effects, but individually authored: every id is a unique row
+ * The fixed catalogue of the 420 selectable shield effects (ids 0..419), organized as
+ * 84 color families x 5 effects, but individually authored: every id is a unique row
  * in the flat table below (palette pair, surface, behavior@variant, guard style,
  * context profile, ambient sound and screen-fx family all vary per id). Ids 0..104
- * are the frozen V1/V2 catalogue: their rows must stay byte-identical across
- * expansions (their generated post_effect JSON uniform VALUES derive from the frozen
- * {@link #PARAM_CYCLE} formulas; the JSON shape itself follows the current
- * per-effect screen-shader scheme, see tools/gen_post_effects.py).
+ * are the frozen V1/V2 catalogue and ids 105..349 the frozen 350-milestone rows:
+ * all of 0..349 must stay byte-identical across expansions (their generated
+ * post_effect JSON uniform VALUES derive from the frozen {@link #PARAM_CYCLE}
+ * formulas; the JSON shape itself follows the current per-effect screen-shader
+ * scheme, see tools/gen_post_effects.py).
  *
  * <p>Uniqueness is machine-enforced by {@link #validate()} and the gametests.
  */
 public final class EffectRegistry {
-	public static final int COUNT = 350;
+	public static final int COUNT = 420;
 
 	/**
 	 * Modulus/denominator of the per-id paramB/behaviorStrength derivations in
@@ -38,11 +39,12 @@ public final class EffectRegistry {
 	/**
 	 * Number of behavior variants exercised by the catalogue: every registered
 	 * behavior must be used by exactly {@code CATALOGUE_VARIANTS} rows, covering
-	 * variants {@code 0..CATALOGUE_VARIANTS-1} exactly once each. 50 behaviors x
-	 * 7 variants = an exact cover of the 350 rows. Ids 0..104 keep their original
-	 * variants 0..2; the expansion rows (105..349) contribute variants 3..6 of the
-	 * 35 legacy behaviors and all 7 variants of the 15 behaviors added for the
-	 * 350-effect catalogue.
+	 * variants {@code 0..CATALOGUE_VARIANTS-1} exactly once each. 60 behaviors x
+	 * 7 variants = an exact cover of the 420 rows. Ids 0..104 keep their original
+	 * variants 0..2; the 350-milestone rows (105..349) contribute variants 3..6 of
+	 * the 35 legacy behaviors and all 7 variants of the 15 behaviors added for the
+	 * 350-effect catalogue; the 420-milestone rows (350..419) contribute all 7
+	 * variants of the 10 ghost/apparition behaviors.
 	 */
 	public static final int CATALOGUE_VARIANTS = 7;
 
@@ -61,28 +63,6 @@ public final class EffectRegistry {
 			"bloomglow", "ripple", "scanlines", "edgeglow", "frostlens", "heathaze",
 			"posterize", "radialblur", "glitch", "duotone",
 			"kaleido", "huedrift", "dreamblur", "moire");
-
-	/**
-	 * Behaviors registered ahead of the next catalogue expansion but deliberately
-	 * NOT used by any of the 350 rows yet: the 10 ghost/apparition behaviors land
-	 * with the 350 -> 420 catalogue (rows 350..419 will cover each of them with
-	 * variants 0..6 exactly once). {@link #validate()} exempts these ids from the
-	 * "every registered behavior is used" rule and, symmetrically, rejects any
-	 * 350-row that references one of them, so the allowlist cannot rot silently.
-	 * This set is removed in the 420 milestone (the exact-cover rule then applies
-	 * to all 60 behaviors uniformly).
-	 */
-	public static final Set<String> PENDING_BEHAVIORS = Set.of(
-			"vex_wisps",
-			"soul_procession",
-			"phantom_flock",
-			"sonic_ghosts",
-			"ender_watchers",
-			"wandering_spirits",
-			"graveyard_mist",
-			"spectral_shoal",
-			"wraith_orbs",
-			"seance_circle");
 
 	public static final List<EffectDefinition> ALL = buildAll();
 
@@ -511,6 +491,90 @@ public final class EffectRegistry {
 		all.add(row(347, 0xB5E617, 0x4717E6, "truchet", "shadow_veil", 3, GuardStyle.DARK, ContextProfile.HEALTH_HUE, "block.sculk_sensor.clicking", 1.0F, 175, "ripple"));
 		all.add(row(348, 0x17E65F, 0xC71488, "plasma", "tide_aura", 3, GuardStyle.GLOW, ContextProfile.LOW_HEALTH_FRENZY, "block.amethyst_block.chime", 0.7F, 140, "huedrift"));
 		all.add(row(349, 0x1785E6, 0xE67717, "rings", "storm_cage", 6, GuardStyle.NONE, ContextProfile.NONE, "block.vault.ambient", 1.3F, 135, "pixelate"));
+		// F70 "Spectral Veil" (pale ecto-green x deep spruce)
+		all.add(row(350, 0xB8FFD9, 0x1E4D3A, "kaliset", "vex_wisps", 0, GuardStyle.GLOW, ContextProfile.CROWD_SCALE, "particle.soul_escape", 0.6F, 80, "tint"));
+		all.add(row(351, 0x9FF7C6, 0x0F3D2E, "volumecloud", "soul_procession", 0, GuardStyle.GUST, ContextProfile.NIGHT_BLOOM, "ambient.soul_sand_valley.loop", 0.9F, 145, "chroma"));
+		all.add(row(352, 0xCCFFE2, 0x2A5C40, "chrome", "phantom_flock", 0, GuardStyle.NONE, ContextProfile.NONE, "entity.warden.heartbeat", 1.2F, 210, "bloomglow"));
+		all.add(row(353, 0x8AE8B8, 0x123829, "lavaflow", "sonic_ghosts", 0, GuardStyle.STING, ContextProfile.STORM_CHARGED, "block.sculk_sensor.clicking", 0.6F, 100, "edgeglow"));
+		all.add(row(354, 0xA8FFCF, 0x1B4A33, "tendrilnet", "ender_watchers", 0, GuardStyle.BLIND, ContextProfile.LOW_HEALTH_FRENZY, "block.sculk_catalyst.bloom", 0.9F, 165, "posterize"));
+		// F71 "Soulfire Procession" (soul teal x ember umber)
+		all.add(row(355, 0x33E0D0, 0x66341A, "ribbonaurora", "wandering_spirits", 0, GuardStyle.SLOW, ContextProfile.HEALTH_HUE, "block.sculk.spread", 1.2F, 230, "kaleido"));
+		all.add(row(356, 0x1FC9C4, 0x4D2914, "frostfern", "graveyard_mist", 0, GuardStyle.DARK, ContextProfile.CROWD_SCALE, "ambient.cave", 0.6F, 120, "moire"));
+		all.add(row(357, 0x55F0E0, 0x804020, "biolume", "spectral_shoal", 0, GuardStyle.GLOW, ContextProfile.NIGHT_BLOOM, "block.portal.ambient", 0.9F, 185, "vignette"));
+		all.add(row(358, 0x0FB8AD, 0x59301C, "hologrid", "wraith_orbs", 0, GuardStyle.GUST, ContextProfile.NONE, "entity.evoker.cast_spell", 1.2F, 250, "desat"));
+		all.add(row(359, 0x47D9D4, 0x73391F, "portalvoid", "seance_circle", 0, GuardStyle.NONE, ContextProfile.STORM_CHARGED, "entity.elder_guardian.ambient", 0.6F, 140, "scanlines"));
+		// F72 "Phantom Fleet" (phantom grey-blue x storm navy)
+		all.add(row(360, 0x8FA8C9, 0x24344D, "shardtess", "vex_wisps", 1, GuardStyle.STING, ContextProfile.LOW_HEALTH_FRENZY, "block.respawn_anchor.ambient", 0.9F, 205, "posterize"));
+		all.add(row(361, 0x7C99BD, 0x1B2940, "sacredgeo", "soul_procession", 1, GuardStyle.BLIND, ContextProfile.HEALTH_HUE, "ambient.warped_forest.loop", 1.2F, 95, "duotone"));
+		all.add(row(362, 0xA3B8D6, 0x2E4059, "voidtendril", "phantom_flock", 1, GuardStyle.SLOW, ContextProfile.CROWD_SCALE, "block.amethyst_block.chime", 0.6F, 160, "dreamblur"));
+		all.add(row(363, 0x6B8AB0, 0x152238, "crystalrefract", "sonic_ghosts", 1, GuardStyle.DARK, ContextProfile.NIGHT_BLOOM, "entity.glow_squid.ambient", 0.9F, 225, "wobble"));
+		all.add(row(364, 0x97ACC2, 0x1F3147, "kaliset", "ender_watchers", 1, GuardStyle.GLOW, ContextProfile.NONE, "particle.soul_escape", 1.2F, 115, "pixelate"));
+		// F73 "Echo Chamber" (sonic teal x sculk black)
+		all.add(row(365, 0x1FD9C2, 0x0A1E1E, "chrome", "wandering_spirits", 1, GuardStyle.GUST, ContextProfile.STORM_CHARGED, "ambient.soul_sand_valley.loop", 0.6F, 180, "scanlines"));
+		all.add(row(366, 0x0DC7B8, 0x05292B, "lavaflow", "graveyard_mist", 1, GuardStyle.NONE, ContextProfile.LOW_HEALTH_FRENZY, "entity.warden.heartbeat", 0.9F, 245, "heathaze"));
+		all.add(row(367, 0x3BE8D0, 0x11332E, "tendrilnet", "spectral_shoal", 1, GuardStyle.STING, ContextProfile.HEALTH_HUE, "block.sculk_sensor.clicking", 1.2F, 135, "glitch"));
+		all.add(row(368, 0x09B5A6, 0x03211F, "galaxyswirl", "wraith_orbs", 1, GuardStyle.BLIND, ContextProfile.CROWD_SCALE, "block.sculk_catalyst.bloom", 0.6F, 200, "huedrift"));
+		all.add(row(369, 0x2EDFC9, 0x0C2826, "ribbonaurora", "seance_circle", 1, GuardStyle.SLOW, ContextProfile.NIGHT_BLOOM, "block.sculk.spread", 0.9F, 90, "tint"));
+		// F74 "Ender Gaze" (ender magenta x obsidian violet)
+		all.add(row(370, 0xCC33E6, 0x1A0526, "biolume", "vex_wisps", 2, GuardStyle.DARK, ContextProfile.NONE, "ambient.cave", 1.2F, 155, "pixelate"));
+		all.add(row(371, 0xB81FD9, 0x120421, "hologrid", "soul_procession", 2, GuardStyle.GLOW, ContextProfile.STORM_CHARGED, "block.portal.ambient", 0.6F, 220, "ripple"));
+		all.add(row(372, 0xE059F2, 0x240933, "portalvoid", "phantom_flock", 2, GuardStyle.GUST, ContextProfile.LOW_HEALTH_FRENZY, "entity.evoker.cast_spell", 0.9F, 110, "frostlens"));
+		all.add(row(373, 0xA30DC7, 0x0D021A, "emberstorm", "sonic_ghosts", 2, GuardStyle.NONE, ContextProfile.HEALTH_HUE, "entity.elder_guardian.ambient", 1.2F, 175, "radialblur"));
+		all.add(row(374, 0xD647EB, 0x1E0730, "shardtess", "ender_watchers", 2, GuardStyle.STING, ContextProfile.CROWD_SCALE, "block.respawn_anchor.ambient", 0.6F, 240, "kaleido"));
+		// F75 "Will-o'-Wisp" (wisp gold x bog green)
+		all.add(row(375, 0xF7E85C, 0x2E4D26, "voidtendril", "wandering_spirits", 2, GuardStyle.BLIND, ContextProfile.NIGHT_BLOOM, "ambient.warped_forest.loop", 0.9F, 130, "tint"));
+		all.add(row(376, 0xE8D63B, 0x24401E, "crystalrefract", "graveyard_mist", 2, GuardStyle.SLOW, ContextProfile.NONE, "block.amethyst_block.chime", 1.2F, 195, "chroma"));
+		all.add(row(377, 0xFFF280, 0x3A5C31, "kaliset", "spectral_shoal", 2, GuardStyle.DARK, ContextProfile.STORM_CHARGED, "entity.glow_squid.ambient", 0.6F, 85, "bloomglow"));
+		all.add(row(378, 0xD9C929, 0x1B331A, "volumecloud", "wraith_orbs", 2, GuardStyle.GLOW, ContextProfile.LOW_HEALTH_FRENZY, "particle.soul_escape", 0.9F, 150, "edgeglow"));
+		all.add(row(379, 0xEDDE4A, 0x2A472A, "chrome", "seance_circle", 2, GuardStyle.GUST, ContextProfile.HEALTH_HUE, "ambient.soul_sand_valley.loop", 1.2F, 215, "posterize"));
+		// F76 "Graveyard Mist" (mist grey x mossy stone)
+		all.add(row(380, 0xC2CCC7, 0x4A5C4E, "tendrilnet", "vex_wisps", 3, GuardStyle.NONE, ContextProfile.CROWD_SCALE, "entity.warden.heartbeat", 0.6F, 105, "kaleido"));
+		all.add(row(381, 0xAEBAB5, 0x3D4F42, "galaxyswirl", "soul_procession", 3, GuardStyle.STING, ContextProfile.NIGHT_BLOOM, "block.sculk_sensor.clicking", 0.9F, 170, "moire"));
+		all.add(row(382, 0xD5DED9, 0x57695A, "ribbonaurora", "phantom_flock", 3, GuardStyle.BLIND, ContextProfile.NONE, "block.sculk_catalyst.bloom", 1.2F, 235, "vignette"));
+		all.add(row(383, 0x9BA8A2, 0x334537, "frostfern", "sonic_ghosts", 3, GuardStyle.SLOW, ContextProfile.STORM_CHARGED, "block.sculk.spread", 0.6F, 125, "desat"));
+		all.add(row(384, 0xC9D6CE, 0x415345, "biolume", "ender_watchers", 3, GuardStyle.DARK, ContextProfile.LOW_HEALTH_FRENZY, "ambient.cave", 0.9F, 190, "scanlines"));
+		// F77 "Ghost Reef" (spectral cyan x abyssal blue)
+		all.add(row(385, 0x66F0E8, 0x0E2E5C, "portalvoid", "wandering_spirits", 3, GuardStyle.GLOW, ContextProfile.HEALTH_HUE, "block.portal.ambient", 1.2F, 80, "posterize"));
+		all.add(row(386, 0x4DE0DB, 0x0A2347, "emberstorm", "graveyard_mist", 3, GuardStyle.GUST, ContextProfile.CROWD_SCALE, "entity.evoker.cast_spell", 0.6F, 145, "duotone"));
+		all.add(row(387, 0x85F7F0, 0x16386B, "shardtess", "spectral_shoal", 3, GuardStyle.NONE, ContextProfile.NIGHT_BLOOM, "entity.elder_guardian.ambient", 0.9F, 210, "dreamblur"));
+		all.add(row(388, 0x33D6CF, 0x061B38, "sacredgeo", "wraith_orbs", 3, GuardStyle.STING, ContextProfile.NONE, "block.respawn_anchor.ambient", 1.2F, 100, "wobble"));
+		all.add(row(389, 0x74EDE3, 0x123152, "voidtendril", "seance_circle", 3, GuardStyle.BLIND, ContextProfile.STORM_CHARGED, "ambient.warped_forest.loop", 0.6F, 165, "pixelate"));
+		// F78 "Wraith Court" (wraith violet x bone ivory)
+		all.add(row(390, 0x8A5CBF, 0xE8E0CC, "kaliset", "vex_wisps", 4, GuardStyle.SLOW, ContextProfile.LOW_HEALTH_FRENZY, "block.amethyst_block.chime", 0.9F, 230, "scanlines"));
+		all.add(row(391, 0x7847B0, 0xD9D0B8, "volumecloud", "soul_procession", 4, GuardStyle.DARK, ContextProfile.HEALTH_HUE, "entity.glow_squid.ambient", 1.2F, 120, "heathaze"));
+		all.add(row(392, 0x9C6ECF, 0xF2EBD9, "chrome", "phantom_flock", 4, GuardStyle.GLOW, ContextProfile.CROWD_SCALE, "particle.soul_escape", 0.6F, 185, "glitch"));
+		all.add(row(393, 0x66339E, 0xCCC2A8, "lavaflow", "sonic_ghosts", 4, GuardStyle.GUST, ContextProfile.NIGHT_BLOOM, "ambient.soul_sand_valley.loop", 0.9F, 250, "huedrift"));
+		all.add(row(394, 0x8F63C4, 0xE0D8C2, "tendrilnet", "ender_watchers", 4, GuardStyle.NONE, ContextProfile.NONE, "entity.warden.heartbeat", 1.2F, 140, "tint"));
+		// F79 "Seance Parlor" (candle amber x midnight violet)
+		all.add(row(395, 0xE8A83D, 0x2E1A47, "ribbonaurora", "wandering_spirits", 4, GuardStyle.STING, ContextProfile.STORM_CHARGED, "block.sculk_sensor.clicking", 0.6F, 205, "pixelate"));
+		all.add(row(396, 0xD9962B, 0x241238, "frostfern", "graveyard_mist", 4, GuardStyle.BLIND, ContextProfile.LOW_HEALTH_FRENZY, "block.sculk_catalyst.bloom", 0.9F, 95, "ripple"));
+		all.add(row(397, 0xF7BC55, 0x3A2557, "biolume", "spectral_shoal", 4, GuardStyle.SLOW, ContextProfile.HEALTH_HUE, "block.sculk.spread", 1.2F, 160, "frostlens"));
+		all.add(row(398, 0xC98A1F, 0x1B0D2E, "hologrid", "wraith_orbs", 4, GuardStyle.DARK, ContextProfile.CROWD_SCALE, "ambient.cave", 0.6F, 225, "radialblur"));
+		all.add(row(399, 0xEDB047, 0x332052, "portalvoid", "seance_circle", 4, GuardStyle.GLOW, ContextProfile.NIGHT_BLOOM, "block.portal.ambient", 0.9F, 115, "kaleido"));
+		// F80 "Poltergeist Playroom" (chaotic pink x slate)
+		all.add(row(400, 0xF773B8, 0x3D4452, "shardtess", "vex_wisps", 5, GuardStyle.GUST, ContextProfile.NONE, "entity.evoker.cast_spell", 1.2F, 180, "tint"));
+		all.add(row(401, 0xE85CA8, 0x2E3542, "sacredgeo", "soul_procession", 5, GuardStyle.NONE, ContextProfile.STORM_CHARGED, "entity.elder_guardian.ambient", 0.6F, 245, "chroma"));
+		all.add(row(402, 0xFF8AC7, 0x4A5263, "voidtendril", "phantom_flock", 5, GuardStyle.STING, ContextProfile.LOW_HEALTH_FRENZY, "block.respawn_anchor.ambient", 0.9F, 135, "bloomglow"));
+		all.add(row(403, 0xD94798, 0x232937, "crystalrefract", "sonic_ghosts", 5, GuardStyle.BLIND, ContextProfile.HEALTH_HUE, "ambient.warped_forest.loop", 1.2F, 200, "edgeglow"));
+		all.add(row(404, 0xF080BD, 0x424C5C, "kaliset", "ender_watchers", 5, GuardStyle.SLOW, ContextProfile.CROWD_SCALE, "block.amethyst_block.chime", 0.6F, 90, "posterize"));
+		// F81 "Banshee Moor" (keening silver x heather violet)
+		all.add(row(405, 0xD9DEE8, 0x7A5C99, "chrome", "wandering_spirits", 5, GuardStyle.DARK, ContextProfile.NIGHT_BLOOM, "entity.glow_squid.ambient", 0.9F, 155, "kaleido"));
+		all.add(row(406, 0xC7CDDB, 0x684C8A, "lavaflow", "graveyard_mist", 5, GuardStyle.GLOW, ContextProfile.NONE, "particle.soul_escape", 1.2F, 220, "moire"));
+		all.add(row(407, 0xE8ECF2, 0x8A6BAD, "tendrilnet", "spectral_shoal", 5, GuardStyle.GUST, ContextProfile.STORM_CHARGED, "ambient.soul_sand_valley.loop", 0.6F, 120, "vignette"));
+		all.add(row(408, 0xB5BCCF, 0x573D78, "galaxyswirl", "wraith_orbs", 5, GuardStyle.NONE, ContextProfile.LOW_HEALTH_FRENZY, "entity.warden.heartbeat", 0.9F, 175, "desat"));
+		all.add(row(409, 0xDEE4ED, 0x7D63A1, "ribbonaurora", "seance_circle", 5, GuardStyle.STING, ContextProfile.HEALTH_HUE, "block.sculk_sensor.clicking", 1.2F, 240, "scanlines"));
+		// F82 "Revenant Forge" (revenant green x rusted iron)
+		all.add(row(410, 0x7ACC29, 0x6B3A24, "biolume", "vex_wisps", 6, GuardStyle.BLIND, ContextProfile.CROWD_SCALE, "block.sculk_catalyst.bloom", 0.6F, 130, "posterize"));
+		all.add(row(411, 0x66B81C, 0x572E1B, "hologrid", "soul_procession", 6, GuardStyle.SLOW, ContextProfile.NIGHT_BLOOM, "block.sculk.spread", 0.9F, 195, "duotone"));
+		all.add(row(412, 0x8FDE3D, 0x7D482E, "portalvoid", "phantom_flock", 6, GuardStyle.DARK, ContextProfile.NONE, "ambient.cave", 1.2F, 85, "dreamblur"));
+		all.add(row(413, 0x54A312, 0x472414, "emberstorm", "sonic_ghosts", 6, GuardStyle.GLOW, ContextProfile.STORM_CHARGED, "block.portal.ambient", 0.6F, 150, "wobble"));
+		all.add(row(414, 0x85D634, 0x74412A, "shardtess", "ender_watchers", 6, GuardStyle.GUST, ContextProfile.LOW_HEALTH_FRENZY, "entity.evoker.cast_spell", 0.9F, 215, "pixelate"));
+		// F83 "Astral Tide" (astral indigo x moonfoam)
+		all.add(row(415, 0x5C6BE8, 0xD9E8F7, "voidtendril", "wandering_spirits", 6, GuardStyle.NONE, ContextProfile.HEALTH_HUE, "entity.elder_guardian.ambient", 1.2F, 105, "scanlines"));
+		all.add(row(416, 0x4756D9, 0xC7DBEF, "crystalrefract", "graveyard_mist", 6, GuardStyle.STING, ContextProfile.CROWD_SCALE, "block.respawn_anchor.ambient", 0.6F, 170, "heathaze"));
+		all.add(row(417, 0x7383F7, 0xE8F2FC, "kaliset", "spectral_shoal", 6, GuardStyle.BLIND, ContextProfile.NIGHT_BLOOM, "ambient.warped_forest.loop", 0.9F, 235, "glitch"));
+		all.add(row(418, 0x3945C7, 0xB5CCE4, "volumecloud", "wraith_orbs", 6, GuardStyle.SLOW, ContextProfile.NONE, "block.amethyst_block.chime", 1.2F, 125, "huedrift"));
+		all.add(row(419, 0x6675ED, 0xE0ECF9, "chrome", "seance_circle", 6, GuardStyle.DARK, ContextProfile.STORM_CHARGED, "entity.glow_squid.ambient", 0.6F, 190, "tint"));
 
 		return List.copyOf(all);
 	}
@@ -542,20 +606,20 @@ public final class EffectRegistry {
 	 * entries with ids 0..COUNT-1; all palette pairs pairwise distinct; all
 	 * (insideBehaviorId, behaviorVariant) pairs pairwise distinct with every
 	 * registered behavior used by the catalogue and covering variants
-	 * 0..{@link #CATALOGUE_VARIANTS}-1 exactly once each (50 x 7 = an exact cover
-	 * of the 350 rows); ambientPeriodTicks positive;
+	 * 0..{@link #CATALOGUE_VARIANTS}-1 exactly once each (60 x 7 = an exact cover
+	 * of the 420 rows); ambientPeriodTicks positive;
 	 * every (ambientSoundId, ambientPitch, ambientPeriodTicks) triple distinct;
-	 * every behavior id registered in {@link InsideEffectBehavior#REGISTRY} and
-	 * not in {@link #PENDING_BEHAVIORS} (which are registered-but-reserved and,
-	 * inversely, must all resolve in the registry);
+	 * every behavior id registered in {@link InsideEffectBehavior#REGISTRY};
 	 * every screenTemplate one of the 20 {@link #SCREEN_TEMPLATES} families; every
 	 * ambientSoundId resolvable in the vanilla sound registry; no surface,
 	 * screenTemplate or behavior id repeated within a 5-effect color family
 	 * (id / 5); no (surface, screenTemplate) pair used more than 3 times across
-	 * the whole catalogue (the tightest cap the 350-row table satisfies: three
-	 * legacy pairs already sit at 3, and the expansion rows never push any pair
-	 * past it); every {@link #SCREEN_TEMPLATES} entry used by at least one
-	 * effect; and every {@link SurfaceTemplate} value used by at least one effect.
+	 * the whole catalogue (the tightest cap the 420-row table satisfies: three
+	 * legacy pairs (frozen ids 0..104) already sit at 3, and neither the 350- nor
+	 * the 420-milestone expansion rows push any pair past it -- the 420 rows only
+	 * use the 16 new surface families, whose pairs all sit at 1); every
+	 * {@link #SCREEN_TEMPLATES} entry used by at least one effect; and every
+	 * {@link SurfaceTemplate} value used by at least one effect.
 	 */
 	public static void validate() {
 		if (ALL.size() != COUNT) {
@@ -599,11 +663,6 @@ public final class EffectRegistry {
 				throw new IllegalStateException("Effect " + def.id() + " references unregistered inside behavior: " + def.insideBehaviorId());
 			}
 
-			if (PENDING_BEHAVIORS.contains(def.insideBehaviorId())) {
-				throw new IllegalStateException("Effect " + def.id() + " uses pending behavior " + def.insideBehaviorId()
-						+ " (reserved for the 420-effect expansion, see PENDING_BEHAVIORS)");
-			}
-
 			if (!SCREEN_TEMPLATES.contains(def.screenTemplate())) {
 				throw new IllegalStateException("Effect " + def.id() + " uses unknown screen template: " + def.screenTemplate());
 			}
@@ -638,7 +697,7 @@ public final class EffectRegistry {
 		// Derived invariant: every registered behavior id must cover variants
 		// 0..CATALOGUE_VARIANTS-1 exactly once each (the per-row uniqueness check
 		// above already rules out duplicates within a behavior), giving the exact
-		// 50 x 7 = 350 cover.
+		// 60 x 7 = 420 cover.
 		Set<Integer> requiredVariants = new HashSet<>();
 		for (int v = 0; v < CATALOGUE_VARIANTS; v++) {
 			requiredVariants.add(v);
@@ -651,17 +710,8 @@ public final class EffectRegistry {
 			}
 		}
 
-		// Pending (420-milestone) behaviors are exempt from the usage rule, but
-		// they must actually be registered -- an allowlist entry with no behavior
-		// behind it would hide a real wiring bug.
-		for (String pending : PENDING_BEHAVIORS) {
-			if (!InsideEffectBehavior.REGISTRY.containsKey(pending)) {
-				throw new IllegalStateException("Pending behavior " + pending + " is allow-listed but not registered");
-			}
-		}
-
 		for (String registered : InsideEffectBehavior.REGISTRY.keySet()) {
-			if (!behaviorVariants.containsKey(registered) && !PENDING_BEHAVIORS.contains(registered)) {
+			if (!behaviorVariants.containsKey(registered)) {
 				throw new IllegalStateException("Registered behavior " + registered + " is not used by the catalogue");
 			}
 		}

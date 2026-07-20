@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Deterministic generator for the per-effect bubble surface shaders (fx_000..fx_349).
+"""Deterministic generator for the per-effect bubble surface shaders (fx_000..fx_419).
 
 Running `python3 tools/gen_surface_shaders.py` (re)writes ALL of
-src/client/resources/assets/bubbleshield/shaders/bubble/fx_000.fsh .. fx_349.fsh
+src/client/resources/assets/bubbleshield/shaders/bubble/fx_000.fsh .. fx_419.fsh
 plus tools/surface_manifest.json. Regeneration is byte-stable: a fixed global
 seed feeds a self-contained splitmix64 PRNG (no reliance on Python's `random`
 module internals), iteration is in sorted id order, and floats are formatted
@@ -112,18 +112,22 @@ Design (see /tmp/shader_plan.md sections 1, 2, 4.1 and AGENTS.md):
   caustic, thinFilm, accentPalette (iq cosine, baked consts), rimGraze,
   rimLat, sparkle, ringPulse, and the unrolled correlated parallax deep stack.
 
-* 24 MID-layer technique composers keyed by the 24 SurfaceTemplate families:
-  the 16 existing enum names (PLASMA..LIGHTNING) + THINFILM, CAUSTIC,
-  CURLSMOKE, TRUCHET, RIDGED, MOIRE, TRIWEAVE, NEBULA.
+* 40 MID-layer technique composers keyed by the 40 SurfaceTemplate families:
+  the 16 original enum names (PLASMA..LIGHTNING) + THINFILM, CAUSTIC,
+  CURLSMOKE, TRUCHET, RIDGED, MOIRE, TRIWEAVE, NEBULA (350 milestone) +
+  KALISET, VOLUMECLOUD, CHROME, LAVAFLOW, TENDRILNET, GALAXYSWIRL,
+  RIBBONAURORA, FROSTFERN, BIOLUME, HOLOGRID, PORTALVOID, EMBERSTORM,
+  SHARDTESS, SACREDGEO, VOIDTENDRIL, CRYSTALREFRACT (420 milestone).
 
-* Per-id assignment table: ids 0..104 seed their family from the current
+* Per-id assignment table: EVERY id reads its family from the current
   EffectRegistry.java surface column (parsed at generation time as ground
-  truth); ids 105..349 cycle all 24 families per 5-id color block. The
-  accentPalette base color is sourced from the registry's argbPrimary for
-  EVERY id the registry knows (not random), so accents always lean toward the
-  effect's authored palette. Every id gets a distinct (family, warpMode,
-  deepStack, rimStyle, animMode) tuple, guaranteed by deterministic probing
-  and re-asserted here and by tools/validate_shaders.py.
+  truth) -- the registry, not any modulo cycle, decides which family an id
+  renders, so adding families can never reassign existing ids. The
+  accentPalette base color is likewise sourced from the registry's argbPrimary
+  (not random), so accents always lean toward the effect's authored palette.
+  Every id gets a distinct (family, warpMode, deepStack, rimStyle, animMode)
+  tuple, guaranteed by deterministic probing and re-asserted here and by
+  tools/validate_shaders.py.
 
 * Structural depth rule: every file carries the three marker comments
   `// [layer:deep:<mod>]`, `// [layer:mid:<mod>]`, `// [layer:rim:<mod>]`
@@ -141,7 +145,7 @@ Design (see /tmp/shader_plan.md sections 1, 2, 4.1 and AGENTS.md):
   vanilla imports, explicit float literals, every function defined before use.
 
 Usage:
-    python3 tools/gen_surface_shaders.py                  # all 350 + manifest
+    python3 tools/gen_surface_shaders.py                  # all 420 + manifest
     python3 tools/gen_surface_shaders.py --only 0-15      # subset (same bytes)
     python3 tools/gen_surface_shaders.py --only 0-15 --out /tmp/probe
 """
@@ -158,16 +162,21 @@ BUBBLE_DIR = REPO_ROOT / "src/client/resources/assets/bubbleshield/shaders/bubbl
 REGISTRY_JAVA = REPO_ROOT / "src/main/java/com/bubbleshield/effect/EffectRegistry.java"
 DEFAULT_MANIFEST = REPO_ROOT / "tools/surface_manifest.json"
 
-COUNT = 350
+COUNT = 420
 GLOBAL_SEED = 0xB0BB7E5D
 
-# The 16 existing SurfaceTemplate enum names (enum order) + the 8 planned ones.
+# The 40 SurfaceTemplate enum names (enum order): the 16 originals, the 8 added
+# for the 350 milestone and the 16 added for the 420 milestone.
 FAMILIES = [
     "PLASMA", "HEX", "WAVES", "AURORA", "SPARKLE", "RINGS", "VORONOI", "ARCS",
     "SCALES", "STARFIELD", "VORTEX", "INTERFERENCE", "KALEIDO", "CIRCUIT",
     "PETALS", "LIGHTNING",
     "THINFILM", "CAUSTIC", "CURLSMOKE", "TRUCHET", "RIDGED", "MOIRE",
     "TRIWEAVE", "NEBULA",
+    "KALISET", "VOLUMECLOUD", "CHROME", "LAVAFLOW", "TENDRILNET",
+    "GALAXYSWIRL", "RIBBONAURORA", "FROSTFERN", "BIOLUME", "HOLOGRID",
+    "PORTALVOID", "EMBERSTORM", "SHARDTESS", "SACREDGEO", "VOIDTENDRIL",
+    "CRYSTALREFRACT",
 ]
 
 WARPS = ["none", "warp1", "warp2", "curl"]
@@ -182,9 +191,13 @@ FLOURISHES = ["swirl", "glint", "echo", "shimmer"]
 # seam (for non-periodic fields) and the pole pinch, and lets the pattern
 # genuinely rotate in 3D. Lattice/polar/directional families (AURORA's
 # curtain drape included) keep their proven seam-safe 2D domains; every
-# family's DEEP volume goes 3D regardless.
+# family's DEEP volume goes 3D regardless. Of the 420-milestone families,
+# the volumetric/field techniques (KALISET's fractal fold, VOLUMECLOUD's
+# transmittance march, CHROME's gradient normals, VOIDTENDRIL's anisotropic
+# ridges) live on the sphere direction too.
 FAMILIES_3D_MID = frozenset({
     "PLASMA", "ARCS", "LIGHTNING", "CURLSMOKE", "RIDGED", "NEBULA",
+    "KALISET", "VOLUMECLOUD", "CHROME", "VOIDTENDRIL",
 })
 
 MASK64 = (1 << 64) - 1
@@ -269,13 +282,13 @@ def quant_fract_speed(k: float) -> float:
 def parse_registry() -> dict:
     """Parses EffectRegistry.java rows: id -> (surfaceName, rgbPrimary, rgbSecondary).
 
-    Accepts any dense catalogue of at least the 105 V1 rows: ids 0..104 seed
-    their family/palette from the registry (frozen), while ids >= 105 get their
-    family computed by build_assignments and only cross-checked against the
-    registry (the milestone-D expansion rows were authored FROM this
-    generator's manifest, so a mismatch means the two have drifted). Palettes
-    are taken from the registry for EVERY id present in it, so the baked
-    accentPalette always leans toward the effect's authored primary color.
+    The registry is the GROUND TRUTH for every id's surface family: requiring
+    the full dense 0..COUNT-1 table here (and reading the family from it in
+    build_assignments) means adding new families can never reassign an
+    existing id -- the old modulo cycle for ids >= 105 silently re-dealt EVERY
+    expansion id whenever len(FAMILIES) changed. Palettes are taken from the
+    registry for every id too, so the baked accentPalette always leans toward
+    the effect's authored primary color.
     """
     text = REGISTRY_JAVA.read_text(encoding="utf-8")
     pattern = re.compile(
@@ -283,35 +296,27 @@ def parse_registry() -> dict:
     rows = {}
     for m in pattern.finditer(text):
         rows[int(m.group(1))] = (m.group(4).upper(), int(m.group(2), 16), int(m.group(3), 16))
-    if len(rows) < 105 or sorted(rows) != list(range(len(rows))):
-        sys.exit(f"EffectRegistry.java parse failed: found {len(rows)} rows, expected dense ids 0..N-1 with N >= 105")
+    if sorted(rows) != list(range(COUNT)):
+        sys.exit(f"EffectRegistry.java parse failed: found {len(rows)} rows, expected dense ids 0..{COUNT - 1}")
     return rows
 
 
 def build_assignments() -> list:
-    """Builds the full 350-row assignment table (always computed over ALL ids so
-    partial --only runs emit byte-identical files to a full run)."""
+    """Builds the full COUNT-row assignment table (always computed over ALL ids
+    so partial --only runs emit byte-identical files to a full run)."""
     registry = parse_registry()
     rows = []
     used = set()
     for effect_id in range(COUNT):
-        # Palette: sourced from the registry for every id it has (the baked
+        # Family AND palette come straight from the registry row: the surface
+        # column is authored there (ground truth for every id), and the baked
         # accentPalette must lean toward the effect's AUTHORED primary color,
-        # not a random hue). Only ids the registry does not know yet fall back
-        # to seeded draws (bootstrap case, before the registry was expanded).
-        prim = registry[effect_id][1] if effect_id in registry else None
-        if effect_id < 105:
-            family = registry[effect_id][0]
-        else:
-            block = effect_id // 5
-            slot = effect_id % 5
-            family = FAMILIES[(5 * (block + slot)) % len(FAMILIES)]
-            # Drift guard: the milestone-D registry rows were authored from this
-            # generator's manifest, so the registry (when it already has this id)
-            # must agree with the computed family.
-            if effect_id in registry and registry[effect_id][0] != family:
-                sys.exit(f"id {effect_id}: EffectRegistry surface family {registry[effect_id][0]} "
-                         f"!= generator family {family} (registry and generator have drifted)")
+        # not a random hue.
+        family = registry[effect_id][0]
+        prim = registry[effect_id][1]
+        if family not in FAMILIES:
+            sys.exit(f"id {effect_id}: EffectRegistry surface family {family} "
+                     f"has no MID composer in this generator (FAMILIES is out of date)")
         rng = Rng(mix_seed(effect_id, 1))
         w0 = rng.randint(0, 3)
         d0 = rng.randint(0, 3)
@@ -1152,6 +1157,280 @@ def mid_composer(family: str, c: dict):
             f"float star = step(0.92, cellHash(scell, {star_px})) * (0.5 + 0.5 * sin(time * {qsc(3.0)} + cellHash(scell + 5.0, {star_px}) * 20.0));",
             "float mid = clamp(cloud + star * 0.8, 0.0, 1.3);",
         ], [])
+    if family == "KALISET":
+        # 3D: the classic Kaliset fractal fold p = |p|/dot(p,p) - c iterated on
+        # the rotating sphere direction; the per-iteration orbit-length deltas
+        # accumulate into star-nest filaments (a genuine escape-orbit fractal,
+        # unlike any of the noise/lattice families). The dot() is floored so
+        # the fold can never blow up near the origin.
+        return ([], [
+            f"vec3 kp = mdir * {F(u(40, 0.8, 1.4))};",
+            f"vec3 kc = vec3({F(u(41, 0.45, 0.75))}, {F(u(42, 0.55, 0.85))}, {F(u(43, 0.35, 0.65))});",
+            "float kacc = 0.0;",
+            "float kprev = 0.0;",
+            "for (int i = 0; i < 5; i++) {",
+            "    kp = abs(kp) / max(dot(kp, kp), 0.18) - kc;",
+            "    float km = length(kp);",
+            "    kacc += abs(km - kprev);",
+            "    kprev = km;",
+            "}",
+            f"float nest = pow(clamp(kacc * {F(u(44, 0.16, 0.26))} - {F(u(45, 0.08, 0.20))}, 0.0, 1.0), {F(u(46, 1.5, 2.8))});",
+            f"float mid = nest * (0.72 + 0.28 * sin(time * {qs(47, 0.4, 0.9)} + kacc * {F(u(48, 1.5, 3.0))}));",
+        ], [])
+    if family == "VOLUMECLOUD":
+        # 3D: a 4-step front-to-back transmittance march INTO the shell along
+        # a baked pseudo view ray -- every step samples the same fbm3 density
+        # deeper and finer, light accumulates under the REMAINING transmittance
+        # (real volumetric compositing, not another warped-noise recolor).
+        return (["fbm3"], [
+            f"vec3 marchDir = normalize(vec3({F(u(40, -0.8, 0.8))}, {F(u(41, 0.35, 0.9))}, {F(u(42, -0.8, 0.8))}));",
+            "float trans = 1.0;",
+            "float lightAcc = 0.0;",
+            "for (int i = 0; i < 4; i++) {",
+            "    float fi = float(i);",
+            f"    float dens = clamp(fbm3(mdir * (1.0 + fi * {F(u(43, 0.22, 0.40))}) + marchDir * (fi * {F(u(44, 0.28, 0.55))})) * {F(u(45, 1.6, 2.4))} - {F(u(46, 0.55, 0.85))}, 0.0, 1.0);",
+            "    lightAcc += trans * dens * (1.0 - fi * 0.16);",
+            f"    trans *= 1.0 - dens * {F(u(47, 0.45, 0.65))};",
+            "}",
+            f"float mid = clamp(lightAcc * {F(u(48, 0.9, 1.3))} + (1.0 - trans) * {F(u(49, 0.20, 0.35))}, 0.0, 1.25);",
+        ], [])
+    if family == "CHROME":
+        eps = F(u(40, 0.10, 0.18))
+        # 3D: liquid metal -- a pseudo-normal from central-difference fbm3
+        # gradients (biased by sdir so normalize() can never see a zero
+        # vector) reflects TWO baked environment stripe fields; the mirror
+        # banding slides across the surface as the domain rotates (day-safe).
+        return (["fbm3"], [
+            "float chromeBase = fbm3(mdir);",
+            f"float chromeX = fbm3(mdir + vec3({eps}, 0.0, 0.0));",
+            f"float chromeY = fbm3(mdir + vec3(0.0, {eps}, 0.0));",
+            f"float chromeZ = fbm3(mdir + vec3(0.0, 0.0, {eps}));",
+            f"vec3 chromeN = normalize(vec3(chromeX - chromeBase, chromeY - chromeBase, chromeZ - chromeBase) * {F(u(41, 2.0, 4.0))} + sdir);",
+            f"float env1 = 0.5 + 0.5 * sin(dot(chromeN, vec3({F(u(42, -0.9, 0.9))}, {F(u(43, 0.4, 1.0))}, {F(u(44, -0.9, 0.9))})) * {F(u(45, 5.0, 9.0))} + time * {qs(46, 0.3, 0.7)});",
+            f"float env2 = 0.5 + 0.5 * sin(dot(chromeN, vec3({F(u(47, 0.4, 1.0))}, {F(u(48, -0.9, 0.9))}, {F(u(49, -0.9, 0.9))})) * {F(u(55, 3.0, 6.0))});",
+            f"float mid = pow(clamp(max(env1, env2 * 0.85), 0.0, 1.0), {F(u(56, 2.2, 4.0))});",
+        ], [])
+    if family == "LAVAFLOW":
+        qdown = F6(quant_drift(u(40, 0.10, 0.22), float(syp)))
+        # 2D: crusted lava -- a slow molten current (day-quantized v drift on
+        # the wrapping lattice) shows through the gaps of a darker crust
+        # coverage field, with white-hot veins where the crust cracks
+        # (turbulence ridges) and a soft molten throb.
+        return (["fbm2"], [
+            f"vec2 lavaUV = wuv + vec2(0.0, time * {qdown});",
+            "float molten = fbm2(lavaUV, midPer);",
+            f"float crust = smoothstep({F(u(41, 0.35, 0.45))}, {F(u(42, 0.62, 0.75))}, fbm2(lavaUV * 2.0 + vec2(9.1, 3.7), midPer * 2.0));",
+            f"float vein = pow(clamp(1.0 - abs(2.0 * fbm2(lavaUV + vec2(4.3, 7.9), midPer) - 1.0), 0.0, 1.0), {F(u(43, 6.0, 11.0))});",
+            f"float throb = 0.8 + 0.2 * sin(time * {qs(44, 0.4, 0.9)} + molten * {F(u(45, 2.0, 4.0))});",
+            f"float mid = clamp(molten * (1.0 - crust * {F(u(46, 0.55, 0.75))}) * throb + vein * {F(u(47, 0.6, 1.0))} * (1.0 - crust * 0.5), 0.0, 1.3);",
+        ], [])
+    if family == "TENDRILNET":
+        qwig = F6(quant_drift(u(41, 0.06, 0.12), NOWRAP_PERIOD))
+        # 2D polar: plasma-globe arcs -- four angular filaments anchored at
+        # the bubble's forward point wander (quantized sin) and wiggle (noise
+        # of the already-periodic polar radius, so no lattice wrap is needed);
+        # each is a thin pow() line with its own flicker. abs(sin(dAng/2))
+        # stays continuous across the atan branch cut.
+        return (["fbm2", "safeAtan", "invsmooth"], [
+            "float du = baseUV.x - 0.5;",
+            "float tang = safeAtan(baseUV.y - 0.5, sin(du * 6.2831853) * 0.5);",
+            "float trad = length(vec2(sin(du * 3.1415927), baseUV.y - 0.5)) * 2.0;",
+            "float net = 0.0;",
+            "for (int i = 0; i < 4; i++) {",
+            "    float fi = float(i);",
+            f"    float fa = fi * 1.5707963 + {F(u(42, 0.5, 1.2))} * sin(time * {qs(43, 0.10, 0.24)} + fi * 1.9);",
+            f"    float wig = (fbm2(vec2(trad * {F(u(40, 2.5, 5.0))} + fi * 7.31, time * {qwig}), vec2({F(NOWRAP_PERIOD)}, {F(NOWRAP_PERIOD)})) - 0.5) * {F(u(44, 0.5, 1.1))} * trad;",
+            "    float dAng = abs(sin((tang - fa) * 0.5 + wig));",
+            f"    float fil = pow(clamp(1.0 - dAng * {F(u(45, 2.2, 3.4))}, 0.0, 1.0), {F(u(46, 6.0, 11.0))});",
+            f"    net += fil * smoothstep(0.06, 0.25, trad) * (0.55 + 0.45 * sin(time * {qs(47, 1.5, 3.2)} + fi * 2.3));",
+            "}",
+            f"float core = invsmooth(0.02, {F(u(48, 0.15, 0.30))}, trad);",
+            "float mid = clamp(net + core * 0.8, 0.0, 1.3);",
+        ], [])
+    if family == "GALAXYSWIRL":
+        arm_n = 2 + int(u(40, 0.0, 2.999))  # integer arm count: seam-safe
+        # 2D polar: logarithmic spiral arms (angle + twist * log r -- a true
+        # log-spiral, unlike VORTEX's latitude twist bands) around a hot core,
+        # with voronoise star dust riding the arms. The arm phase turns at a
+        # quantized speed so the daily wrap lands on a whole turn.
+        return (["safeAtan", "invsmooth", "voronoise"], [
+            "float du = baseUV.x - 0.5;",
+            "float gang = safeAtan(baseUV.y - 0.5, sin(du * 6.2831853) * 0.5);",
+            "float grad = length(vec2(sin(du * 3.1415927), baseUV.y - 0.5)) * 2.0;",
+            f"float arm = 0.5 + 0.5 * cos(gang * {F(float(arm_n))} + log(max(grad, 0.05)) * {F(u(41, 2.5, 5.0))} - time * {qs(42, 0.15, 0.40)});",
+            f"float arms = pow(clamp(arm, 0.0, 1.0), {F(u(43, 2.5, 5.0))}) * smoothstep(0.08, 0.45, grad) * invsmooth(0.55, 1.15, grad);",
+            f"float core = invsmooth(0.02, {F(u(44, 0.18, 0.34))}, grad);",
+            f"float dust = voronoise(wuv, midPer, {F(u(45, 0.7, 1.0))}, {F(u(46, 0.15, 0.5))});",
+            f"float mid = clamp(arms * {F(u(47, 0.8, 1.1))} + core + dust * {F(u(48, 0.15, 0.30))} * arms, 0.0, 1.3);",
+        ], [])
+    if family == "RIBBONAURORA":
+        m1 = 1 + int(u(40, 0.0, 1.999))  # integer curtain harmonics
+        # 2D: folded ribbons -- the v DISTANCE to two wandering integer-
+        # harmonic curves cuts sharp-edged bands (a curve-distance technique,
+        # unlike AURORA's fbm curtain rays); the fold brightens where the
+        # curve's slope is steepest, like a ribbon catching the light.
+        return (["fbm2", "invsmooth"], [
+            f"float curve1 = 0.5 + {F(u(41, 0.10, 0.20))} * sin(baseUV.x * 6.2831853 * {F(float(m1))} + time * {qs(42, 0.25, 0.55)}) + {F(u(43, 0.05, 0.12))} * sin(baseUV.x * 6.2831853 * {F(float(m1 * 3))} - time * {qs(44, 0.15, 0.35)});",
+            f"float slope1 = cos(baseUV.x * 6.2831853 * {F(float(m1))} + time * {qs(42, 0.25, 0.55)});",
+            f"float band1 = invsmooth(0.005, {F(u(45, 0.05, 0.10))}, abs(baseUV.y - curve1));",
+            f"float curve2 = 0.5 + {F(u(46, 0.12, 0.22))} * sin(baseUV.x * 6.2831853 * {F(float(m1 + 1))} - time * {qs(47, 0.20, 0.45)} + 2.1) + {F(u(49, -0.10, 0.10))};",
+            f"float band2 = invsmooth(0.005, {F(u(48, 0.04, 0.08))}, abs(baseUV.y - curve2));",
+            "float foldGlow = 0.6 + 0.4 * slope1 * slope1;",
+            f"float shimmer = fbm2(wuv, midPer) * {F(u(55, 0.15, 0.30))};",
+            "float mid = clamp(band1 * foldGlow + band2 * 0.7 + shimmer, 0.0, 1.25);",
+        ], [])
+    if family == "FROSTFERN":
+        aniso = 2 + int(u(40, 0.0, 1.999))  # integer x stretch keeps the wrap
+        # 2D: dendritic frost -- anisotropically stretched ridge noise at two
+        # nested scales MULTIPLIES into feathery fern veins (the product only
+        # survives where both ridge sets align) that grow and retreat with a
+        # slow breath; frost dust sparkles on the fronds.
+        return (["fbm2", "sparkle"], [
+            f"vec2 fernUV = vec2(wuv.x * {F(float(aniso))}, wuv.y * {F(u(41, 0.35, 0.6))});",
+            f"float vein1 = 1.0 - abs(2.0 * fbm2(fernUV, vec2(midPer.x * {F(float(aniso))}, midPer.y)) - 1.0);",
+            f"float vein2 = 1.0 - abs(2.0 * fbm2(fernUV * 2.0 + vec2(5.3, 8.1), vec2(midPer.x * {F(float(2 * aniso))}, midPer.y * 2.0)) - 1.0);",
+            f"float fern = pow(clamp(vein1 * vein2, 0.0, 1.0), {F(u(42, 2.5, 4.5))});",
+            f"float growth = 0.62 + 0.38 * sin(time * {qs(43, 0.10, 0.25)} + baseUV.y * {F(u(44, 2.0, 4.0))});",
+            "float dust = sparkle(wuv * 2.0 + 13.7, time, midPer.x * 2.0);",
+            f"float mid = clamp(fern * growth * {F(u(45, 1.0, 1.3))} + dust * {F(u(46, 0.25, 0.45))} * fern, 0.0, 1.25);",
+        ], [])
+    if family == "BIOLUME":
+        # 2D: bioluminescent plankton -- voronoi glow blobs pulse as a
+        # travelling wavefront (whole-turn longitude phase: seam-aligned)
+        # sweeps through the colony, each cell answering at its own hash
+        # phase, over a faint hazy background.
+        return (["voro2", "invsmooth", "fbm2"], [
+            f"vec3 bio = voro2(wuv, midPer, time * {qs(40, 0.15, 0.35)});",
+            f"float blob = invsmooth(0.05, {F(u(41, 0.45, 0.70))}, bio.y);",
+            f"float wavePhase = baseUV.x * 6.2831853 + baseUV.y * {F(u(42, 2.0, 5.0))} - time * {qs(43, 0.5, 1.1)};",
+            f"float waveGlow = pow(0.5 + 0.5 * sin(wavePhase + bio.z * 6.2831853), {F(u(44, 2.0, 4.0))});",
+            f"float haze = fbm2(wuv + vec2(3.1, 6.7), midPer) * {F(u(45, 0.12, 0.25))};",
+            f"float mid = clamp(blob * ({F(u(46, 0.25, 0.40))} + {F(u(47, 0.60, 0.85))} * waveGlow) + haze, 0.0, 1.2);",
+        ], [])
+    if family == "HOLOGRID":
+        lon_n = 8 + 2 * int(u(40, 0.0, 3.999))  # integer graticule counts
+        lat_n = 6 + 2 * int(u(41, 0.0, 2.999))
+        # 2D: holographic graticule -- glowing integer-harmonic longitude and
+        # latitude lines, a v-sweeping scan band (integer cycles per day) and
+        # data glints at the intersections, under a hash flicker gate.
+        return (["invsmooth", "cellHash", "hash11"], [
+            f"float lonLine = pow(abs(sin(baseUV.x * 3.1415927 * {F(float(lon_n))})), {F(u(42, 14.0, 26.0))});",
+            f"float latLine = pow(abs(sin(baseUV.y * 3.1415927 * {F(float(lat_n))})), {F(u(43, 14.0, 26.0))});",
+            f"float scanPos = fract(time * {F6(quant_fract_speed(u(44, 0.04, 0.10)))});",
+            f"float scan = invsmooth(0.0, {F(u(45, 0.10, 0.20))}, abs(baseUV.y - scanPos));",
+            f"float glint = step(0.55, cellHash(floor(vec2(baseUV.x * {F(float(lon_n))}, baseUV.y * {F(float(lat_n))})), {F(float(lon_n))})) * lonLine * latLine;",
+            f"float holoFlicker = 0.82 + 0.18 * step(0.35, hash11(floor(time * {F(u(46, 6.0, 11.0))})));",
+            f"float mid = clamp((lonLine + latLine) * {F(u(47, 0.40, 0.60))} * holoFlicker + scan * {F(u(48, 0.35, 0.55))} + glint * 2.2, 0.0, 1.25);",
+        ], [])
+    if family == "PORTALVOID":
+        suck_n = 3 + int(u(42, 0.0, 2.999))  # integer streak symmetry
+        # 2D polar: a collapsing portal -- rings fall INWARD (their phase
+        # velocity opposes the radius), angular streaks spiral into a dark
+        # occluded core, and a hot accretion band throbs at a fixed radius.
+        # The dark core SUPPRESSES the pattern (low mid = dark + thin there).
+        return (["safeAtan", "invsmooth"], [
+            "float du = baseUV.x - 0.5;",
+            "float pang = safeAtan(baseUV.y - 0.5, sin(du * 6.2831853) * 0.5);",
+            "float prad = length(vec2(sin(du * 3.1415927), baseUV.y - 0.5)) * 2.0;",
+            f"float infall = 0.5 + 0.5 * sin(prad * {F(u(40, 12.0, 22.0))} + time * {qs(41, 0.8, 1.6)});",
+            f"float suck = pow(clamp(0.5 + 0.5 * sin(pang * {F(float(suck_n))} + prad * {F(u(43, 4.0, 8.0))} + time * {qs(44, 0.4, 0.9)}), 0.0, 1.0), {F(u(45, 3.0, 6.0))});",
+            f"float voidCore = invsmooth({F(u(46, 0.12, 0.22))}, {F(u(47, 0.30, 0.45))}, prad);",
+            f"float accretion = invsmooth(0.0, {F(u(49, 0.04, 0.08))}, abs(prad - {F(u(48, 0.30, 0.48))}));",
+            f"float mid = clamp((infall * 0.45 + suck * 0.65) * (1.0 - voidCore) * smoothstep(0.10, 0.55, prad) + accretion * (0.8 + 0.2 * sin(time * {qsc(2.0)})), 0.0, 1.3);",
+        ], [])
+    if family == "EMBERSTORM":
+        qup = F6(quant_drift(u(40, 0.15, 0.30), float(syp)))
+        # 2D: a storm of rising embers -- three parallax cell layers advect
+        # UPWARD (the day-quantized v drift shifts whole cells at the wrap,
+        # so the per-cell embers re-roll there like any hash flicker), each
+        # ember an elongated streak with per-cell heat flicker, over a faint
+        # heat-shimmer background on the wrapping lattice.
+        return (["cellHash", "invsmooth", "fbm2"], [
+            "float embers = 0.0;",
+            "for (int i = 0; i < 3; i++) {",
+            "    float fi = float(i);",
+            "    // integer per-layer scale keeps each ember lattice seam-aligned",
+            "    float layerPx = midPer.x * (fi + 1.0);",
+            f"    vec2 eu = vec2(wuv.x * (fi + 1.0), wuv.y * (fi + 1.0) - time * {qup} * (fi + 1.0)) + vec2(fi * 13.7, fi * 5.3);",
+            "    vec2 ecell = floor(eu);",
+            "    vec2 ef = fract(eu) - 0.5;",
+            "    float eh = cellHash(ecell + vec2(fi * 31.0, 0.0), layerPx);",
+            "    vec2 eoff = vec2(cellHash(ecell + 7.1, layerPx), cellHash(ecell + 19.3, layerPx)) - 0.5;",
+            "    vec2 ed = ef - eoff * 0.5;",
+            f"    float streak = invsmooth(0.01, {F(u(41, 0.05, 0.09))}, abs(ed.x)) * invsmooth(0.04, {F(u(42, 0.22, 0.38))}, abs(ed.y));",
+            "    float heat = 0.5 + 0.5 * sin(time * (3.0 + 4.0 * eh) + eh * 47.0);",
+            f"    embers += step({F(u(43, 0.55, 0.72))}, eh) * streak * (0.4 + 0.6 * heat) * (1.0 - fi * 0.22);",
+            "}",
+            f"float shimmer = fbm2(wuv + vec2(0.0, -time * {qup}), midPer) * {F(u(44, 0.15, 0.28))};",
+            "float mid = clamp(embers + shimmer, 0.0, 1.3);",
+        ], [])
+    if family == "SHARDTESS":
+        facet_lvl = 3 + int(u(42, 0.0, 1.999))
+        # 2D: stained-glass tessellation -- STATIC nested voronoi shards (big
+        # panes cut by finer fractures), POSTERIZED per-pane brightness (flat
+        # facets, not VORONOI's cell glow), bright leadwork borders and a
+        # glint that lights whole panes as its phase sweeps their hashes.
+        return (["voro2", "invsmooth"], [
+            "vec3 pane = voro2(wuv, midPer, 0.0);",
+            "vec3 crack = voro2(wuv * 2.0 + vec2(17.3, 8.9), midPer * 2.0, 0.0);",
+            f"float lead = invsmooth(0.004, {F(u(40, 0.045, 0.075))}, pane.x) + invsmooth(0.003, {F(u(41, 0.025, 0.045))}, crack.x) * 0.55;",
+            f"float facet = floor(pane.z * {F(float(facet_lvl))} + 0.5) / {F(float(facet_lvl))};",
+            f"float glintPhase = 0.5 + 0.5 * sin(time * {qs(43, 0.5, 1.0)} + pane.z * 6.2831853);",
+            f"float paneGlint = pow(glintPhase, {F(u(44, 5.0, 9.0))});",
+            f"float mid = clamp(lead * (0.55 + 0.45 * glintPhase) + facet * {F(u(45, 0.28, 0.45))} + paneGlint * {F(u(46, 0.5, 0.8))} * (1.0 - clamp(lead, 0.0, 1.0)), 0.0, 1.3);",
+        ], [])
+    if family == "SACREDGEO":
+        spoke_n = 3 + int(u(40, 0.0, 2.999))  # integer mandala symmetry
+        # 2D: sacred geometry -- a flower-of-life ring lattice (thin circles
+        # on a brick-offset grid at two interleaved radii, so neighbors
+        # overlap) under a slowly turning spoked mandala with integer
+        # symmetry and a fixed halo ring; all constructions are seam-safe.
+        return (["invsmooth", "safeAtan"], [
+            "vec2 gg = wuv;",
+            "gg.x += 0.5 * step(1.0, mod(floor(gg.y), 2.0));",
+            "vec2 gf = fract(gg) - 0.5;",
+            f"float ring1 = invsmooth(0.0, {F(u(41, 0.025, 0.045))}, abs(length(gf) - {F(u(42, 0.44, 0.52))}));",
+            "vec2 gf2 = fract(gg + vec2(0.5, 0.5)) - 0.5;",
+            f"float ring2 = invsmooth(0.0, {F(u(43, 0.02, 0.04))}, abs(length(gf2) - {F(u(44, 0.30, 0.40))}));",
+            "float du = baseUV.x - 0.5;",
+            f"float sang = safeAtan(baseUV.y - 0.5, sin(du * 6.2831853) * 0.5) + time * {qs(45, 0.06, 0.15)};",
+            "float srad = length(vec2(sin(du * 3.1415927), baseUV.y - 0.5)) * 2.0;",
+            f"float spokes = pow(abs(cos(sang * {F(float(spoke_n))})), {F(u(46, 8.0, 16.0))}) * invsmooth(0.15, 0.9, srad);",
+            f"float halo = invsmooth(0.0, {F(u(47, 0.05, 0.09))}, abs(srad - {F(u(48, 0.55, 0.75))}));",
+            f"float mid = clamp((ring1 + ring2 * 0.7) * {F(u(49, 0.55, 0.75))} + spokes * 0.6 + halo * 0.5, 0.0, 1.25);",
+        ], [])
+    if family == "VOIDTENDRIL":
+        # 3D: void tendrils -- ridged fbm3 on an anisotropically SQUASHED
+        # sphere direction gives long meridional filaments that creep in from
+        # both poles behind a breathing latitude mask; the space between
+        # tendrils stays murky-dim rather than empty.
+        return (["fbm3"], [
+            f"vec3 tdir = vec3(mdir.x, mdir.y * {F(u(40, 0.28, 0.45))}, mdir.z);",
+            f"float tnoise = fbm3(tdir + vec3(0.0, {F(u(41, 0.15, 0.35))} * sin(time * {qs(42, 0.08, 0.18)}), 0.0));",
+            f"float tendril = pow(clamp(1.0 - abs(2.0 * tnoise - 1.0), 0.0, 1.0), {F(u(43, 4.0, 8.0))});",
+            "float lat = abs(baseUV.y * 2.0 - 1.0);",
+            f"float reach = smoothstep({F(u(44, 0.05, 0.20))}, {F(u(45, 0.75, 0.95))}, lat + {F(u(46, 0.10, 0.22))} * sin(time * {qs(47, 0.10, 0.22)}));",
+            f"float murk = fbm3(mdir * 0.6 + vec3(7.7, 2.2, 5.5)) * {F(u(48, 0.12, 0.24))};",
+            f"float mid = clamp(tendril * reach * {F(u(49, 0.9, 1.2))} + murk, 0.0, 1.2);",
+        ], [])
+    if family == "CRYSTALREFRACT":
+        harm = 3 + int(u(40, 0.0, 3.999))  # integer backdrop harmonic
+        cfw = F(u(55, 0.22, 0.35))
+        # 2D: refractive crystal panes -- each STATIC voronoi facet offsets
+        # the sampling of an integer-harmonic backdrop grating by its own
+        # hash (the refraction JUMPS at pane borders, which is the look),
+        # with thin-film dispersion on the panes and dark border grooves.
+        return (["voro2", "hash22", "invsmooth", "thinFilm"], [
+            "vec3 cry = voro2(wuv, midPer, 0.0);",
+            f"vec2 refr = (hash22(vec2(cry.z * 91.7, cry.z * 33.1)) - 0.5) * {F(u(41, 0.35, 0.65))};",
+            f"float back = 0.5 + 0.5 * sin((baseUV.x + refr.x) * 6.2831853 * {F(float(harm))} + (baseUV.y + refr.y) * {F(u(42, 3.0, 7.0))} + time * {qs(43, 0.3, 0.7)});",
+            f"float paneLit = pow(clamp(back, 0.0, 1.0), {F(u(44, 2.0, 3.5))});",
+            f"float groove = invsmooth(0.004, {F(u(45, 0.05, 0.09))}, cry.x);",
+            f"vec3 crystalFilm = thinFilm(cry.z * {F(u(46, 1.5, 3.0))} + paneLit * {F(u(47, 0.6, 1.2))});",
+            f"float mid = clamp(paneLit * {F(u(48, 0.75, 1.0))} + groove * {F(u(49, 0.35, 0.55))}, 0.0, 1.2);",
+        ], [
+            f"rgb = mix(rgb, rgb * (0.6 + 0.85 * crystalFilm), {cfw});",
+        ])
     raise KeyError(family)
 
 
@@ -1166,6 +1445,12 @@ MID_SCALE_RANGES = {
     "LIGHTNING": (3.0, 6.0), "THINFILM": (2.5, 5.0), "CAUSTIC": (4.0, 7.5),
     "CURLSMOKE": (3.0, 6.0), "TRUCHET": (6.0, 11.0), "RIDGED": (3.5, 6.5),
     "MOIRE": (3.0, 6.0), "TRIWEAVE": (6.0, 11.0), "NEBULA": (3.0, 5.5),
+    "KALISET": (3.0, 6.0), "VOLUMECLOUD": (2.5, 5.0), "CHROME": (3.0, 6.0),
+    "LAVAFLOW": (4.0, 7.0), "TENDRILNET": (4.0, 8.0), "GALAXYSWIRL": (3.0, 6.0),
+    "RIBBONAURORA": (5.0, 9.0), "FROSTFERN": (6.0, 10.0), "BIOLUME": (6.0, 10.0),
+    "HOLOGRID": (7.0, 12.0), "PORTALVOID": (3.0, 6.0), "EMBERSTORM": (8.0, 14.0),
+    "SHARDTESS": (6.0, 10.0), "SACREDGEO": (5.0, 9.0), "VOIDTENDRIL": (3.0, 6.0),
+    "CRYSTALREFRACT": (6.0, 10.0),
 }
 
 
@@ -1658,7 +1943,7 @@ def parse_only(spec: str) -> list:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--only", help="comma/range list of effect ids to emit (e.g. '0-15,42'); "
-                                       "default: all 350. Emitted bytes are identical to a full run.")
+                                       "default: all 420. Emitted bytes are identical to a full run.")
     parser.add_argument("--out", help="output directory override (default: the repo bubble shader dir); "
                                       "the manifest is then written next to the shaders instead of tools/.")
     args = parser.parse_args()

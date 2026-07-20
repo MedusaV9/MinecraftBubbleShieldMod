@@ -166,7 +166,7 @@ public class WorldIntegrationGameTests {
 					"list (page 1) should print 10 effects, got " + firstPage);
 			// COUNT-derived: the trailing page holds whatever the first LIST_PAGE_COUNT-1
 			// full pages leave over (a full LIST_PAGE_SIZE when COUNT divides evenly,
-			// e.g. 10 at the 350-effect catalogue -- NOT "COUNT % LIST_PAGE_SIZE" = 0).
+			// e.g. 10 at the 420-effect catalogue -- NOT "COUNT % LIST_PAGE_SIZE" = 0).
 			int expectedLastPageSize = EffectRegistry.COUNT - (BubbleShieldCommand.LIST_PAGE_COUNT - 1) * BubbleShieldCommand.LIST_PAGE_SIZE;
 			int lastPage = dispatcher.execute("bubbleshield list " + BubbleShieldCommand.LIST_PAGE_COUNT, player.createCommandSourceStack());
 			helper.assertTrue(lastPage == expectedLastPageSize,
