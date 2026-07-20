@@ -52,6 +52,14 @@ void main() {
     float seam = smoothstep(0.4356, 0.5, abs(fract(baseLuma * levels) - 0.5));
     vec3 outColor = mix(quantized, quantized * Primary.rgb, ParamsB.z) + Primary.rgb * seam * 0.1479 * animAmp;
 
+    // Richness pass (v3): a bounded soft-contrast curve plus a vibrance
+    // lift deepen the effect's read (anti-washout). Both are bounded and
+    // hue-preserving, and the luma floor below still guarantees the world
+    // stays readable.
+    vec3 curved = clamp(outColor, 0.0, 1.0);
+    outColor = mix(outColor, curved * curved * (3.0 - 2.0 * curved), 0.1954);
+    outColor = clamp(mix(vec3(luma(outColor)), outColor, 1.1083), 0.0, 1.5);
+
     // Gameplay-safety floor: never crush the world below ParamsB.w (~0.35x),
     // and always output an opaque frame.
     outColor = max(outColor, base * ParamsB.w);

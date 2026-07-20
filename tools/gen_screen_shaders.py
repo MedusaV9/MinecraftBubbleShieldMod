@@ -49,6 +49,12 @@ Design (see /tmp/shader_plan.md section 4.2 and AGENTS.md):
   floored at `base * ParamsB.w` (never crush the world below ~0.35x); output is
   opaque (`fragColor = vec4(outColor, 1.0)`).
 
+* Richness pass (v3): every file ends its composition with a bounded
+  soft-contrast curve plus a vibrance (saturation) lift BEFORE the luma
+  floor -- richer, deeper effect colors without touching the
+  gameplay-visibility guarantees (both passes are hue-preserving and the
+  floor still applies last).
+
 * Compile safety: conservative GLSL 330 subset only -- const-bounded for loops
   (blur/streak <= 12 taps, 3x3 kernels), no while, no switch, no arrays of
   structs, explicit float literals, every function defined before use, no
@@ -1280,6 +1286,14 @@ def emit_shader(asg: dict) -> str:
         lines.append("")
         for ln in ov_lines:
             lines.append("    " + ln)
+    lines.append("")
+    lines.append("    // Richness pass (v3): a bounded soft-contrast curve plus a vibrance")
+    lines.append("    // lift deepen the effect's read (anti-washout). Both are bounded and")
+    lines.append("    // hue-preserving, and the luma floor below still guarantees the world")
+    lines.append("    // stays readable.")
+    lines.append("    vec3 curved = clamp(outColor, 0.0, 1.0);")
+    lines.append(f"    outColor = mix(outColor, curved * curved * (3.0 - 2.0 * curved), {F(u(90, 0.10, 0.22))});")
+    lines.append(f"    outColor = clamp(mix(vec3(luma(outColor)), outColor, {F(u(91, 1.06, 1.22))}), 0.0, 1.5);")
     lines.append("")
     lines.append("    // Gameplay-safety floor: never crush the world below ParamsB.w (~0.35x),")
     lines.append("    // and always output an opaque frame.")

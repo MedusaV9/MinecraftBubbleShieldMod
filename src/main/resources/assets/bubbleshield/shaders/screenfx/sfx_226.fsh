@@ -71,6 +71,14 @@ void main() {
     float oRim = smoothstep(0.4720, 1.0, centerDist);
     outColor += Primary.rgb * oRim * oBreath * 0.1586;
 
+    // Richness pass (v3): a bounded soft-contrast curve plus a vibrance
+    // lift deepen the effect's read (anti-washout). Both are bounded and
+    // hue-preserving, and the luma floor below still guarantees the world
+    // stays readable.
+    vec3 curved = clamp(outColor, 0.0, 1.0);
+    outColor = mix(outColor, curved * curved * (3.0 - 2.0 * curved), 0.1549);
+    outColor = clamp(mix(vec3(luma(outColor)), outColor, 1.0791), 0.0, 1.5);
+
     // Gameplay-safety floor: never crush the world below ParamsB.w (~0.35x),
     // and always output an opaque frame.
     outColor = max(outColor, base * ParamsB.w);

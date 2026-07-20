@@ -53,17 +53,56 @@ Design (see /tmp/shader_plan.md sections 1, 2, 4.1 and AGENTS.md):
   flicker terms (per-cell twinkle phases, strobe gates, grain reseeds) simply
   re-roll at the wrap, which is indistinguishable from their normal behavior.
 
-* Real depth: the DEEP layer is a stack of 2..4 CORRELATED parallax taps of
-  ONE deep field (the V1 taps were decorrelated by huge per-tap offsets, so
-  the "parallax" was nominal). Each tap shifts along the silhouette slope
-  (rimDir, from screen-space derivatives of the camera-distance varying --
-  seam-safe by construction) and drifts slightly faster than the tap before
-  it, with front-to-back exponential weights, so the sub-layers slide over
-  each other and read as genuine volume. The rim estimator normalizes
-  fwidth(sphericalVertexDistance) by the distance itself so the rim width is
-  roughly view-consistent, and every rim style gets a subtle bounded
-  thin-film RGB dispersion multiplied into the palette-driven rgb
-  (recolor-safe).
+* Real depth (v3): the DEEP layer is 3..4 CORRELATED parallax PLANES of ONE
+  deep field sampled on the 3D sphere direction. Each plane obeys the real
+  parallax law -- farther planes show finer features (per-plane scale
+  1 + i*g), move slower (strictly decreasing integer turns/day rotation
+  speeds), shift along the silhouette slope (rimDir, from screen-space
+  derivatives of the camera-distance varying -- seam-safe by construction),
+  and recede toward the palette's dark stop (aerial-perspective per-plane
+  tint accumulated into a vec3). The deep volume is then composited UNDER
+  the MID signature (rgb = mix(deepCol, structure, midWeight)) instead of
+  being a scalar folded into `pattern`, while a scalar copy still feeds the
+  alpha path. The rim estimator normalizes fwidth(sphericalVertexDistance)
+  by the distance itself (view-consistent width) and is split into TWO
+  bands: a wide soft inner glow plus a thin hot line at the very edge, with
+  a bounded two-band thin-film RGB dispersion multiplied into the
+  palette-driven rgb (recolor-safe).
+
+* 3D sphere-direction domain (v3): `sdir` is reconstructed from texCoord0
+  (u -> longitude angle, v -> latitude angle), so any field sampled on it is
+  periodic across the u = 0/1 seam AND uniform at the poles by construction
+  -- no lattice wrap needed. hash31/hash33/vnoise3/fbm3/voro3/caustic3
+  sample this domain. The whole DEEP volume lives there, as does the MID
+  layer of the unstructured-noise families (FAMILIES_3D_MID: PLASMA, ARCS,
+  LIGHTNING, CURLSMOKE, RIDGED, NEBULA), which also gain TRUE 3D rotation:
+  rotA() spins the domain around a baked unit axis at an integer number of
+  turns per day (day-wrap safe; linear lattice drift is NOT day-safe on an
+  unwrapped 3D lattice, so 3D animation uses rotation + quantized sin sway
+  only). Lattice/polar families keep their proven seam-safe 2D domains.
+
+* Rich color (v3): the flat multiplicative composite (vertexColor.rgb *
+  (b0 + b1 * pattern)) washed out to grey. Every shader now grades the
+  pattern through a runtime 3-stop gradient derived from vertexColor.rgb:
+  deepStop = base*base*dk (darker AND more saturated, stays in-hue),
+  hotStop = screen-blend toward white of a hue-rotated base (baked angle
+  within +-40 deg; Rodrigues rotation around the grey axis computed at
+  runtime from vertexColor -- recolor-safe by construction), two-smoothstep
+  3-stop mapping with a baked split point, then a luma-mix saturation lift
+  (baked 1.05..1.35) and an additive hotStop highlight on the brightest
+  pattern areas. Low-pattern areas fall to the dark stop + low alpha
+  (darker/transparent, never pale grey). The gradient lookup is offset by
+  rim * rk so silhouettes shift toward the hot stop (chromatic rim). The
+  owner /color override replaces vertexColor wholesale, so the whole
+  gradient re-derives from it: recolor safety is preserved. Every file
+  carries the `// [palette:gradient3]` marker.
+
+* Stronger presence (v3): final alpha = vertexColor.a * min(aBase + aPresence
+  * smoothstep(0.02, 0.30, pattern) + aGain * pattern, aMax) -- a floor of
+  ~0.28..0.45 wherever pattern is present rising toward ~0.85 on bright
+  features, so an active bubble reads as a solid-but-translucent membrane.
+  The vertexColor.a dissolve near whitelisted players still always wins,
+  and discard stays at < 0.01.
 
 * Helper snippet bank (inlined per file, ONLY the helpers a shader uses):
   invsmooth/safeAtan/hash11/hash21/hash22/cellHash, vnoise (quintic fade,
@@ -137,6 +176,16 @@ RIMS = ["graze", "lat", "graze_film", "graze_sparkle"]
 ANIMS = ["scroll", "rotate", "pulse", "flicker"]
 FBM_MODES = ["standard", "ridged", "turb"]
 FLOURISHES = ["swirl", "glint", "echo", "shimmer"]
+
+# Families whose MID signature is unstructured noise: their primary field is
+# sampled on the 3D sphere direction (fbm3), which kills both the longitude
+# seam (for non-periodic fields) and the pole pinch, and lets the pattern
+# genuinely rotate in 3D. Lattice/polar/directional families (AURORA's
+# curtain drape included) keep their proven seam-safe 2D domains; every
+# family's DEEP volume goes 3D regardless.
+FAMILIES_3D_MID = frozenset({
+    "PLASMA", "ARCS", "LIGHTNING", "CURLSMOKE", "RIDGED", "NEBULA",
+})
 
 MASK64 = (1 << 64) - 1
 
@@ -304,16 +353,22 @@ def build_assignments() -> list:
 HELPER_DEPS = {
     "invsmooth": [],
     "safeAtan": [],
+    "rotA": [],
     "hash11": [],
     "hash21": [],
     "hash22": [],
+    "hash31": [],
+    "hash33": [],
     "cellHash": ["hash21"],
     "vnoise": ["hash21"],
+    "vnoise3": ["hash31"],
     "fbm2": ["vnoise"],
+    "fbm3": ["vnoise3"],
     "warp1": ["fbm2"],
     "warp2": ["fbm2", "warp1"],
     "curl2": ["vnoise"],
     "voro2": ["hash22", "hash21"],
+    "voro3": ["hash33"],
     "voronoise": ["hash22", "hash21"],
     "hexDist": [],
     "hexCoords": ["hexDist"],
@@ -322,8 +377,12 @@ HELPER_DEPS = {
     "polarFold": ["safeAtan"],
     "spiralWarp": ["safeAtan"],
     "caustic": ["vnoise"],
+    "caustic3": ["vnoise3"],
     "thinFilm": [],
     "accentPalette": [],
+    "gradient3": [],
+    "satLift": [],
+    "hueSpin": [],
     "rimGraze": [],
     "rimLat": ["invsmooth"],
     "sparkle": ["cellHash", "invsmooth"],
@@ -332,11 +391,12 @@ HELPER_DEPS = {
 }
 
 CANONICAL_ORDER = [
-    "invsmooth", "safeAtan", "hash11", "hash21", "hash22", "cellHash",
-    "vnoise", "fbm2", "warp1", "warp2", "curl2", "voro2", "voronoise",
-    "hexDist", "hexCoords", "triGrid", "truchet", "polarFold", "spiralWarp",
-    "caustic", "thinFilm", "accentPalette", "rimGraze", "rimLat", "sparkle",
-    "ringPulse", "deepField",
+    "invsmooth", "safeAtan", "rotA", "hash11", "hash21", "hash22", "hash31",
+    "hash33", "cellHash", "vnoise", "vnoise3", "fbm2", "fbm3", "warp1",
+    "warp2", "curl2", "voro2", "voro3", "voronoise", "hexDist", "hexCoords",
+    "triGrid", "truchet", "polarFold", "spiralWarp", "caustic", "caustic3",
+    "thinFilm", "accentPalette", "gradient3", "satLift", "hueSpin",
+    "rimGraze", "rimLat", "sparkle", "ringPulse", "deepField",
 ]
 
 
@@ -355,6 +415,22 @@ def helper_source(name: str, c: dict) -> str:
             "// two-argument atan is undefined at the exact origin; guard it\n"
             "float safeAtan(float y, float x) {\n"
             "    return (abs(x) < 1e-6 && abs(y) < 1e-6) ? 0.0 : atan(y, x);\n"
+            "}")
+    if name == "rotA":
+        return (
+            "// Rodrigues rotation matrix around a baked unit axis. Driven with an\n"
+            "// angle that completes an INTEGER number of turns per day, the daily\n"
+            "// time wrap 1200 -> 0 lands exactly on a full turn -- the catalogue's\n"
+            "// first true (non-shear) rotation animation, only legal on the 3D\n"
+            "// sphere-direction domain (a 2D UV rotation would break the u wrap).\n"
+            "mat3 rotA(vec3 axis, float a) {\n"
+            "    float s = sin(a);\n"
+            "    float c = cos(a);\n"
+            "    float oc = 1.0 - c;\n"
+            "    return mat3(\n"
+            "        oc * axis.x * axis.x + c, oc * axis.x * axis.y + axis.z * s, oc * axis.z * axis.x - axis.y * s,\n"
+            "        oc * axis.x * axis.y - axis.z * s, oc * axis.y * axis.y + c, oc * axis.y * axis.z + axis.x * s,\n"
+            "        oc * axis.z * axis.x + axis.y * s, oc * axis.y * axis.z - axis.x * s, oc * axis.z * axis.z + c);\n"
             "}")
     if name == "hash11":
         return (
@@ -378,6 +454,22 @@ def helper_source(name: str, c: dict) -> str:
             "    p3 += dot(p3, p3.yzx + 33.33);\n"
             "    return fract((p3.xx + p3.yz) * p3.zy);\n"
             "}")
+    if name == "hash31":
+        return (
+            "// Hoskins-style 3D->1D hash; small multiplier keeps fp32 precision\n"
+            "// alive over the whole sphere-direction domain\n"
+            "float hash31(vec3 p3) {\n"
+            "    p3 = fract(p3 * 0.1031);\n"
+            "    p3 += dot(p3, p3.zyx + 31.32);\n"
+            "    return fract((p3.x + p3.y) * p3.z);\n"
+            "}")
+    if name == "hash33":
+        return (
+            "vec3 hash33(vec3 p3) {\n"
+            "    p3 = fract(p3 * vec3(0.1031, 0.1030, 0.0973));\n"
+            "    p3 += dot(p3, p3.yxz + 33.33);\n"
+            "    return fract((p3.xxy + p3.yxx) * p3.zyx);\n"
+            "}")
     if name == "cellHash":
         return (
             "// lattice-cell hash that tiles across the longitude seam: the cell's\n"
@@ -399,6 +491,26 @@ def helper_source(name: str, c: dict) -> str:
             "    float d = hash21(mod(i + vec2(1.0, 1.0), per));\n"
             "    return mix(mix(a, b, u.x), mix(cc, d, u.x), u.y);\n"
             "}")
+    if name == "vnoise3":
+        return (
+            "// 3D value noise (quintic fade). Sampled on the sphere direction the\n"
+            "// domain is periodic across the u seam AND uniform at the poles by\n"
+            "// construction, so unlike the 2D lattice it needs NO wrap period.\n"
+            "float vnoise3(vec3 p) {\n"
+            "    vec3 i = floor(p);\n"
+            "    vec3 f = fract(p);\n"
+            "    vec3 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);\n"
+            "    float n000 = hash31(i);\n"
+            "    float n100 = hash31(i + vec3(1.0, 0.0, 0.0));\n"
+            "    float n010 = hash31(i + vec3(0.0, 1.0, 0.0));\n"
+            "    float n110 = hash31(i + vec3(1.0, 1.0, 0.0));\n"
+            "    float n001 = hash31(i + vec3(0.0, 0.0, 1.0));\n"
+            "    float n101 = hash31(i + vec3(1.0, 0.0, 1.0));\n"
+            "    float n011 = hash31(i + vec3(0.0, 1.0, 1.0));\n"
+            "    float n111 = hash31(i + vec3(1.0, 1.0, 1.0));\n"
+            "    return mix(mix(mix(n000, n100, u.x), mix(n010, n110, u.x), u.y),\n"
+            "        mix(mix(n001, n101, u.x), mix(n011, n111, u.x), u.y), u.z);\n"
+            "}")
     if name == "fbm2":
         mode = c["fbmMode"]
         if mode == "standard":
@@ -418,6 +530,28 @@ def helper_source(name: str, c: dict) -> str:
             f"        {tap}\n"
             f"        p = vec2(p.x * 2.0, p.y * {c['lac']}) + vec2(17.7, 9.2);\n"
             f"        per = vec2(per.x * 2.0, per.y * {c['lac']});\n"
+            "        amplitude *= 0.5;\n"
+            "    }\n"
+            "    return value;\n"
+            "}")
+    if name == "fbm3":
+        mode = c["fbmMode"]
+        if mode == "standard":
+            tap3 = "value += amplitude * vnoise3(p);"
+        elif mode == "ridged":
+            tap3 = "value += amplitude * (1.0 - abs(2.0 * vnoise3(p) - 1.0));"
+        else:  # turb
+            tap3 = "value += amplitude * abs(2.0 * vnoise3(p) - 1.0);"
+        return (
+            f"// 3D fractal noise, {mode} mode, {c['oct3']} octaves (budget: <= 4 --\n"
+            "// each octave costs 8 hashes). No wrap bookkeeping: the sphere-\n"
+            "// direction domain is seam- and pole-free by construction.\n"
+            "float fbm3(vec3 p) {\n"
+            "    float value = 0.0;\n"
+            "    float amplitude = 0.5;\n"
+            f"    for (int i = 0; i < {c['oct3']}; i++) {{\n"
+            f"        {tap3}\n"
+            "        p = p * 2.0 + vec3(11.7, 5.3, 7.1);\n"
             "        amplitude *= 0.5;\n"
             "    }\n"
             "    return value;\n"
@@ -487,6 +621,32 @@ def helper_source(name: str, c: dict) -> str:
             "        }\n"
             "    }\n"
             "    return vec3(mbd, sqrt(md), hash21(mod(n + mg, per)));\n"
+            "}")
+    if name == "voro3":
+        return (
+            "// 3D voronoi F1 + cell hash on the sphere-direction domain (seam- and\n"
+            "// pole-free, so no lattice wrap); 27 cells, const-bounded\n"
+            "vec2 voro3(vec3 p, float t) {\n"
+            "    vec3 n = floor(p);\n"
+            "    vec3 f = fract(p);\n"
+            "    float md = 8.0;\n"
+            "    float mh = 0.0;\n"
+            "    for (int k = -1; k <= 1; k++) {\n"
+            "        for (int j = -1; j <= 1; j++) {\n"
+            "            for (int i = -1; i <= 1; i++) {\n"
+            "                vec3 g = vec3(float(i), float(j), float(k));\n"
+            "                vec3 oh = hash33(n + g);\n"
+            f"                vec3 o = 0.5 + {c['voroJit']} * sin(t + 6.2831853 * oh);\n"
+            "                vec3 r = g + o - f;\n"
+            "                float d = dot(r, r);\n"
+            "                if (d < md) {\n"
+            "                    md = d;\n"
+            "                    mh = oh.x;\n"
+            "                }\n"
+            "            }\n"
+            "        }\n"
+            "    }\n"
+            "    return vec2(sqrt(md), mh);\n"
             "}")
     if name == "voronoise":
         return (
@@ -596,6 +756,23 @@ def helper_source(name: str, c: dict) -> str:
             "    acc = acc / 3.0;\n"
             "    return clamp(exp(acc * 3.0 - 1.9) - 0.35, 0.0, 1.4);\n"
             "}")
+    if name == "caustic3":
+        return (
+            "// iterated caustic on the 3D sphere direction: noise-displaced\n"
+            "// resampling + exp sharpen, seam- and pole-free by construction.\n"
+            "// Motion comes from the caller rotating the domain (day-safe).\n"
+            "float caustic3(vec3 p, float t) {\n"
+            "    vec3 k = p;\n"
+            "    float acc = 0.0;\n"
+            "    for (int i = 0; i < 3; i++) {\n"
+            "        float fi = float(i);\n"
+            "        float w = vnoise3(k + vec3(fi * 3.7, fi * 1.3, fi * 2.1));\n"
+            "        k += 0.35 * vec3(cos(w * 6.2831853), sin(w * 6.2831853), cos(w * 4.1887902 + 1.7));\n"
+            "        acc += w;\n"
+            "    }\n"
+            "    acc = acc / 3.0;\n"
+            "    return clamp(exp(acc * 3.0 - 1.9) - 0.35, 0.0, 1.4);\n"
+            "}")
     if name == "thinFilm":
         return (
             "// soap-film interference: per-RGB cosine over a pseudo optical path length\n"
@@ -611,6 +788,35 @@ def helper_source(name: str, c: dict) -> str:
             "vec3 accentPalette(float t) {\n"
             f"    return vec3(0.5) + vec3(0.5) * cos(6.2831853 * (vec3({F(cx)}, {F(cy)}, {F(cz)}) * t\n"
             f"        + vec3({F(dx)}, {F(dy)}, {F(dz)})));\n"
+            "}")
+    if name == "gradient3":
+        return (
+            "// 3-stop shadow/body/highlight grade (two smoothstep segments): every\n"
+            "// stop is derived from vertexColor.rgb at RUNTIME, so the owner /color\n"
+            "// override recolors shadow, body and highlight together (recolor-safe\n"
+            "// by construction).\n"
+            "vec3 gradient3(vec3 deepStop, vec3 body, vec3 hotStop, float x) {\n"
+            f"    vec3 g = mix(deepStop, body, smoothstep(0.0, {c['gSplit']}, x));\n"
+            f"    return mix(g, hotStop, smoothstep({c['gSplit']}, 1.0, x));\n"
+            "}")
+    if name == "satLift":
+        return (
+            "// saturation lift: mixes AWAY from luma (s > 1), deepening the chroma\n"
+            "// without changing the hue -- the anti-washout pass\n"
+            "vec3 satLift(vec3 col, float s) {\n"
+            "    float l = dot(col, vec3(0.299, 0.587, 0.114));\n"
+            "    return clamp(mix(vec3(l), col, s), 0.0, 1.0);\n"
+            "}")
+    if name == "hueSpin":
+        return (
+            "// Rodrigues rotation of the color vector around the grey axis; nudges\n"
+            "// the highlight stop's hue away from the body color. The input is\n"
+            "// always derived from vertexColor.rgb at runtime, so recolor-safe.\n"
+            "vec3 hueSpin(vec3 col, float a) {\n"
+            "    const vec3 k = vec3(0.57735027);\n"
+            "    float ca = cos(a);\n"
+            "    float sa = sin(a);\n"
+            "    return col * ca + cross(k, col) * sa + k * dot(k, col) * (1.0 - ca);\n"
             "}")
     if name == "rimGraze":
         return (
@@ -662,34 +868,34 @@ def helper_source(name: str, c: dict) -> str:
             "}")
     if name == "deepField":
         recipe = c["deep"]
-        per = f"vec2({F(float(c['deepPX']))}, {F(float(c['deepPY']))})"
         if recipe == "fbm":
-            body = f"    return fbm2(p, {per});"
-            note = "warped-fbm volume"
+            body = "    return fbm3(p);"
+            note = "3D fbm volume"
         elif recipe == "ridge":
             body = (
-                f"    float n = fbm2(p, {per});\n"
+                "    float n = fbm3(p);\n"
                 f"    return pow(1.0 - abs(2.0 * n - 1.0), {c['dRidgePow']});")
-            note = "ridged crest volume"
+            note = "3D ridged crest volume"
         elif recipe == "caustic":
-            body = f"    return caustic(p, vec2(0.0, 0.0), {per});"
-            note = "refracted caustic volume"
+            body = "    return caustic3(p, t);"
+            note = "3D refracted caustic volume"
         else:  # voro
             body = (
-                f"    vec3 v = voro2(p, {per}, t * {c['dSpeed']});\n"
-                "    return invsmooth(0.15, 0.95, v.y);")
-            note = "smooth-voronoi blob volume"
+                f"    vec2 v = voro3(p, t * {c['dSpeed']});\n"
+                "    return invsmooth(0.15, 0.95, v.x);")
+            note = "3D voronoi blob volume"
         return (
-            f"// DEEP-layer field ({note}), sampled by the correlated parallax taps\n"
-            "float deepField(vec2 p, float t) {\n"
+            f"// DEEP-layer field ({note}), sampled on the 3D sphere direction by\n"
+            "// the correlated parallax planes -- seam- and pole-free\n"
+            "float deepField(vec3 p, float t) {\n"
             f"{body}\n"
             "}")
     raise KeyError(name)
 
 
 def deep_field_deps(recipe: str) -> list:
-    return {"fbm": ["fbm2"], "ridge": ["fbm2"], "caustic": ["caustic"],
-            "voro": ["voro2", "invsmooth"]}[recipe]
+    return {"fbm": ["fbm3"], "ridge": ["fbm3"], "caustic": ["caustic3"],
+            "voro": ["voro3", "invsmooth"]}[recipe]
 
 
 # ---------------------------------------------------------------------------
@@ -709,8 +915,11 @@ def mid_composer(family: str, c: dict):
     syp = c["syp"]
     px = c["PX"]
     if family == "PLASMA":
-        return (["fbm2"], [
-            f"float pn = fbm2(wuv + vec2(fbm2(wuv + vec2(time * {qpx(40, 0.08, 0.18)}, 0.0), midPer), fbm2(wuv - vec2(0.0, time * {qpy(41, 0.07, 0.16)}), midPer)), midPer);",
+        # 3D: warped fbm on the rotating sphere direction (seam- + pole-free);
+        # time enters only via the day-safe mdir rotation and quantized sin.
+        return (["fbm3"], [
+            f"vec3 pw = mdir + {F(u(40, 0.6, 1.2))} * (vec3(fbm3(mdir + vec3(7.31, 1.77, 3.91)), fbm3(mdir + vec3(2.11, 8.43, 5.67)), fbm3(mdir + vec3(4.87, 3.29, 9.13))) - 0.5);",
+            "float pn = fbm3(pw);",
             f"float mid = 0.5 + 0.5 * sin(6.2831853 * pn * {F(u(42, 1.2, 2.4))} + time * {qs(43, 0.5, 1.1)});",
             f"mid = pow(clamp(mid, 0.0, 1.0), {F(u(44, 1.4, 2.6))});",
         ], [])
@@ -763,10 +972,14 @@ def mid_composer(family: str, c: dict):
             f"float mid = border * (0.7 + 0.3 * cellGlow) + {F(u(43, 0.20, 0.40))} * invsmooth(0.2, 0.9, v.y) * cellGlow;",
         ], [])
     if family == "ARCS":
-        return (["fbm2"], [
-            f"float ridge = 1.0 - abs(2.0 * fbm2(wuv + vec2(0.0, time * {qpy(40, 0.25, 0.55)}), midPer) - 1.0);",
+        # 3D: ridged fbm arcs crawl on the rotating sphere direction; the
+        # sway is a quantized sin (linear drift is NOT day-safe on the
+        # unwrapped 3D lattice).
+        return (["fbm3"], [
+            f"vec3 aw3 = mdir + vec3(0.0, {F(u(40, 0.25, 0.55))} * sin(time * {qs(46, 0.10, 0.25)}), 0.0);",
+            "float ridge = 1.0 - abs(2.0 * fbm3(aw3) - 1.0);",
             f"float bolt = pow(clamp(ridge, 0.0, 1.0), {F(u(41, 7.0, 13.0))});",
-            f"float flash = 0.6 + 0.4 * sin(time * {qs(42, 2.0, 4.5)} + fbm2(wuv + vec2(43.1, 17.3), midPer) * 9.0);",
+            f"float flash = 0.6 + 0.4 * sin(time * {qs(42, 2.0, 4.5)} + fbm3(mdir + vec3(4.1, 1.3, 7.9)) * 9.0);",
             "float mid = bolt * flash;",
         ], [])
     if family == "SCALES":
@@ -854,8 +1067,11 @@ def mid_composer(family: str, c: dict):
             "float mid = clamp(bloom * (0.6 + 0.4 * veins) + fbm2(wuv, midPer) * 0.15, 0.0, 1.2);",
         ], [])
     if family == "LIGHTNING":
-        return (["fbm2", "hash11"], [
-            f"float n = fbm2(wuv + vec2(0.0, time * {qpy(40, 0.35, 0.7)}), midPer);",
+        # 3D: bolts live on the rotating sphere direction with a quantized
+        # sin sway (day-safe); the strobe gate reseeds at the wrap as before.
+        return (["fbm3", "hash11"], [
+            f"vec3 lw3 = mdir + vec3(0.0, {F(u(46, 0.30, 0.60))} * sin(time * {qs(47, 0.15, 0.35)}), 0.0);",
+            "float n = fbm3(lw3);",
             f"float bolt = pow(clamp(1.0 - abs(2.0 * n - 1.0) * {F(u(41, 1.1, 1.5))}, 0.0, 1.0), {F(u(42, 9.0, 15.0))});",
             f"float gate = step({F(u(43, 0.35, 0.55))}, hash11(floor(time * {F(u(44, 3.0, 6.0))})));",
             f"float strobe = 0.35 + 0.65 * gate * (0.5 + 0.5 * sin(time * {qsc(40.0)}));",
@@ -881,9 +1097,12 @@ def mid_composer(family: str, c: dict):
             f"float mid = clamp(c1 * {F(u(41, 0.6, 0.9))} + c2 * {F(u(42, 0.3, 0.55))}, 0.0, 1.4);",
         ], [])
     if family == "CURLSMOKE":
-        return (["curl2", "fbm2"], [
-            f"vec2 adv = wuv + {F(u(40, 0.10, 0.24))} * curl2(wuv + vec2(0.0, time * {qpy(41, 0.04, 0.08)}), midPer);",
-            f"float smoke = fbm2(adv + vec2(time * {qpx(42, 0.03, 0.07)}, -time * {qpy(43, 0.06, 0.12)}), midPer);",
+        # 3D: pseudo-curl advection (vector of three fbm3 fields) on the
+        # rotating sphere direction; the swirl motion comes from the day-safe
+        # mdir rotation plus a quantized sin sway.
+        return (["fbm3"], [
+            f"vec3 adv = mdir + {F(u(40, 0.35, 0.75))} * (vec3(fbm3(mdir + vec3(1.7, 9.2, 4.1)), fbm3(mdir + vec3(8.3, 2.8, 6.9)), fbm3(mdir + vec3(3.4, 5.1, 0.8))) - 0.5);",
+            f"float smoke = fbm3(adv + vec3({F(u(42, 0.20, 0.50))} * sin(time * {qs(43, 0.08, 0.20)}), 0.0, 0.0));",
             f"float wisp = pow(clamp(smoke * 1.5 - 0.25, 0.0, 1.0), {F(u(44, 1.4, 2.6))});",
             "float mid = wisp;",
         ], [])
@@ -896,8 +1115,9 @@ def mid_composer(family: str, c: dict):
             "float mid = clamp(t1 * (0.6 + 0.4 * flow) + t2, 0.0, 1.2);",
         ], [])
     if family == "RIDGED":
-        return (["fbm2"], [
-            f"float rn = fbm2(wuv + vec2(time * {qpx(40, 0.05, 0.12)}, time * {qpy(41, 0.03, 0.08)}), midPer);",
+        # 3D: ridged crests on the rotating sphere direction (day-safe sway).
+        return (["fbm3"], [
+            f"float rn = fbm3(mdir + vec3(0.0, 0.0, {F(u(40, 0.20, 0.50))} * sin(time * {qs(41, 0.10, 0.25)})));",
             f"float crest = pow(clamp(1.0 - abs(2.0 * rn - 1.0), 0.0, 1.0), {F(u(42, 2.2, 4.5))});",
             f"float strata = 0.5 + 0.5 * sin(crest * {F(u(43, 6.0, 12.0))} + time * {qsc(0.8)});",
             "float mid = clamp(crest * (0.7 + 0.3 * strata), 0.0, 1.2);",
@@ -922,9 +1142,11 @@ def mid_composer(family: str, c: dict):
     if family == "NEBULA":
         s2i = 5 + int(u(43, 0.0, 4.999))  # integer star-lattice scale
         star_px = F(float(sx * s2i))
-        return (["fbm2", "cellHash"], [
-            f"float neb = fbm2(wuv + {F(u(40, 0.5, 1.1))} * vec2(fbm2(wuv + vec2(time * {qpx(45, 0.02, 0.05)}, 0.0), midPer), fbm2(wuv - vec2(0.0, time * {qpy(46, 0.02, 0.04)}), midPer)), midPer);",
-            f"float lanes = 1.0 - pow(clamp(1.0 - abs(2.0 * fbm2(wuv * 2.0 + vec2(4.2, 1.1), midPer * 2.0) - 1.0), 0.0, 1.0), 3.0) * {F(u(41, 0.35, 0.6))};",
+        # 3D: cloud + dust lanes ride the rotating sphere direction; the star
+        # twinkle layer stays on the (already seam-aligned) 2D cell lattice.
+        return (["fbm3", "cellHash"], [
+            f"float neb = fbm3(mdir + {F(u(40, 0.5, 1.1))} * (vec3(fbm3(mdir + vec3(3.1, 7.7, 1.9)), fbm3(mdir + vec3(9.2, 4.4, 6.3)), fbm3(mdir + vec3(5.8, 2.6, 8.1))) - 0.5));",
+            f"float lanes = 1.0 - pow(clamp(1.0 - abs(2.0 * fbm3(mdir * 2.0 + vec3(4.2, 1.1, 7.6)) - 1.0), 0.0, 1.0), 3.0) * {F(u(41, 0.35, 0.6))};",
             f"float cloud = pow(clamp(neb * 1.4 - 0.2, 0.0, 1.0), {F(u(42, 1.3, 2.2))}) * lanes;",
             f"vec2 scell = floor(wuv * {F(float(s2i))});",
             f"float star = step(0.92, cellHash(scell, {star_px})) * (0.5 + 0.5 * sin(time * {qsc(3.0)} + cellHash(scell + 5.0, {star_px}) * 20.0));",
@@ -948,11 +1170,19 @@ MID_SCALE_RANGES = {
 
 
 def emit_shader(asg: dict) -> str:
-    """Emits one standalone .fsh for the given assignment row."""
+    """Emits one standalone .fsh for the given assignment row.
+
+    Draw-index reservations (the PRNG stream is 128 unit draws; the first 96
+    keep their v2 meanings so regenerated files stay maximally diff-stable):
+      0..39   shared helper knobs, 40..49 family knobs, 50..59 rim knobs,
+      60..61 flourish, 62..83 composite/deep v2 knobs (some now unused but
+      still drawn for stream stability), 84..95 gradient3/alpha knobs,
+      96..127 v3 depth/3D-domain knobs.
+    """
     effect_id = asg["id"]
     family = asg["family"]
     rng = Rng(asg["seed"])
-    draws = [rng.unit() for _ in range(96)]
+    draws = [rng.unit() for _ in range(128)]
 
     def u(i, lo, hi):
         return lo + (hi - lo) * draws[i]
@@ -989,22 +1219,23 @@ def emit_shader(asg: dict) -> str:
     c["rpSpeed"] = F6(quant_fract_speed(u(25, 0.10, 0.24)))
     c["dRidgePow"] = F(u(29, 1.6, 3.0))
     c["dSpeed"] = F6(quant_sin_speed(u(28, 0.3, 0.7)))
+    c["oct3"] = min(4, c["octaves"])  # fbm3 budget: 8 hashes per octave
+    c["gSplit"] = F(u(87, 0.40, 0.60))  # gradient3 shadow/highlight split
 
-    taps = 2 + int(u(30, 0.0, 2.999))  # 2..4 correlated parallax depth taps
+    taps = 3 + int(u(30, 0.0, 1.999))  # 3..4 correlated parallax depth planes
     mid_scale = u(31, *MID_SCALE_RANGES[family])
     flourish = FLOURISHES[int(u(33, 0.0, 3.999))]
+    use3d_mid = family in FAMILIES_3D_MID
 
     # Integer lattice periods: sx cells per u wrap for the MID domain (the y
     # period gets a +2 margin so pulse breathing and warp offsets never expose
     # a repeat), and a small integer scale for the DEEP domain.
     sx = max(2, round(mid_scale))
     syp = sx + 2
-    deep_sx = max(1, round(u(32, 1.2, 2.6)))
-    c["sx"] = sx
+    _deep_sx = max(1, round(u(32, 1.2, 2.6)))  # v2 deep lattice: superseded
+    c["sx"] = sx                               # by the 3D sphere-dir domain
     c["syp"] = syp
     c["PX"] = F(float(sx))
-    c["deepPX"] = deep_sx
-    c["deepPY"] = deep_sx + 1
 
     def qs(i, lo, hi):
         return F6(quant_sin_speed(u(i, lo, hi)))
@@ -1033,6 +1264,10 @@ def emit_shader(asg: dict) -> str:
     needs.add("invsmooth")      # emitted into every shader (portability rule)
     needs.add("cellHash")       # micro grain
     needs.add("accentPalette")  # bounded accent in the composite
+    needs.add("rotA")           # day-safe 3D rotation of the deep volume
+    needs.add("gradient3")      # 3-stop runtime palette grade
+    needs.add("satLift")        # anti-washout saturation lift
+    needs.add("hueSpin")        # hue-nudged highlight stop
     needs.add("deepField")
     needs.update(deep_field_deps(asg["deep"]))
 
@@ -1147,37 +1382,94 @@ def emit_shader(asg: dict) -> str:
     rw = F(u(64, 0.50, 0.90))
     ap0 = F(u(65, 0.0, 1.0))
     ap1 = F(u(66, 0.30, 0.70))
-    b0 = F(u(67, 0.35, 0.55))
-    b1 = F(u(68, 0.55, 0.95))
+    _b0 = u(67, 0.35, 0.55)   # v2 composite knobs: drawn for stream stability
+    _b1 = u(68, 0.55, 0.95)   # (indices 67/68/70/71 are no longer emitted)
     aw = F(u(69, 0.15, 0.45))
-    a0 = F(u(70, 0.10, 0.25))
-    a1 = F(u(71, 0.60, 0.85))
+    _a0 = u(70, 0.10, 0.25)
+    _a1 = u(71, 0.60, 0.85)
     gk = F(u(72, 0.04, 0.10))
     grain_scale = 24 + int(u(73, 0.0, 40.999))  # integer: seam-aligned grain
     d_fall = u(75, 0.55, 0.95)
     d_pow = F(u(76, 1.0, 1.8))
     d_step = u(77, 0.03, 0.08)
-    base_ddx = u(78, -0.05, 0.05)
-    base_ddy = u(79, -0.05, 0.05)
+    _ddx = u(78, -0.05, 0.05)  # v2 lattice drifts: drawn for stream stability
+    _ddy = u(79, -0.05, 0.05)  # (3D-domain animation is rotation-only)
 
-    # Correlated parallax taps: same field, same scale, per-tap rim shift and
-    # a slightly faster day-quantized drift per tap (differential motion).
+    # gradient3 palette + presence-alpha knobs (indices 84..95).
+    dk = F(u(84, 0.55, 0.85))          # dark-stop depth (base*base*dk)
+    hk = F(u(85, 0.55, 0.85))          # hot-stop screen-blend strength
+    hue_ang = F(u(86, -0.6981, 0.6981))  # highlight hue nudge, +-40 deg
+    sat = F(u(88, 1.08, 1.35))         # saturation lift
+    hlw = F(u(89, 0.15, 0.35))         # additive hot highlight weight
+    pk = F(u(90, 0.70, 0.95))          # pattern -> gradient position scale
+    rk = F(u(91, 0.12, 0.30))          # chromatic rim gradient offset
+    a_base = F(u(92, 0.04, 0.08))      # alpha where no pattern (dark, thin)
+    a_floor = F(u(93, 0.24, 0.37))     # presence floor: solid membrane read
+    a_gain = F(u(94, 0.32, 0.50))      # alpha rise on bright features
+    a_max = F(u(95, 0.78, 0.86))       # translucency ceiling
+
+    # v3 3D-depth knobs (indices 96..127).
+    def unit3(i0):
+        v = (u(i0, -1.0, 1.0), u(i0 + 1, -1.0, 1.0), u(i0 + 2, -1.0, 1.0))
+        n = math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
+        if n < 0.25:  # nearly-zero draw: fall back to a fixed oblique axis
+            return (0.4851, 0.7276, 0.4851)
+        return (v[0] / n, v[1] / n, v[2] / n)
+
+    spin_axis = unit3(96)
+    plane_g = u(99, 0.30, 0.60)        # per-plane perspective scale growth
+    deep_s0 = u(100, 1.6, 3.0)         # front-plane domain scale
+    base_turns = max(taps + 2, round(u(101, 0.05, 0.16) * DAY_SECONDS / TWO_PI))
+    aer = u(102, 0.55, 0.90)           # aerial-perspective tint reach
+    par1 = unit3(103)
+    par2 = unit3(106)
+    mwc = F(u(110, 0.85, 1.15))        # mid coverage over the deep volume
+    rwc = F(u(111, 0.40, 0.70))        # rim coverage over the deep volume
+    mid3_scale = F(mid_scale * u(112, 0.18, 0.30))
+    mid3_speed = F6(quant_sin_speed(u(113, 0.02, 0.06)))
+    d_bright = u(116, 0.95, 1.30)      # deep volume brightness
+    line_l0 = u(117, 0.045, 0.075)     # thin hot rim line band
+    line_l1 = line_l0 + u(118, 0.020, 0.040)
+    line_w = F(u(119, 0.50, 0.90))     # hot line lift into rim
+    line_disp_w = F(u(120, 0.18, 0.32))  # hot-line dispersion mix (bounded)
+    line_disp_f = F(u(121, 0.5, 1.2))
+    line_disp_p = F(u(122, 0.0, 1.0))
+
+    # Correlated multi-plane parallax (v3): ONE deep field sampled at `taps`
+    # depth planes on the 3D sphere direction. Real parallax law per plane:
+    # farther planes show finer features (scale * (1 + i*g)), rotate slower
+    # (strictly decreasing integer turns/day), shift along the silhouette
+    # slope (rimDir), and recede toward the dark stop (aerial perspective),
+    # with front-to-back exponential weights.
     tap_lines = []
     norm = 0.0
+    prev_turns = None
     for i in range(taps):
         w = math.exp(-i * d_fall)
         norm += w
-        ddx = quant_drift(base_ddx * (1.0 + 0.55 * i), float(deep_sx))
-        ddy = quant_drift(base_ddy * (1.0 + 0.55 * i), float(deep_sx + 1))
-        drift = f"vec2({F6(ddx)}, {F6(ddy)}) * time"
+        turns = max(1, round(base_turns / (1.0 + i * plane_g)))
+        if prev_turns is not None and turns >= prev_turns:
+            turns = max(1, prev_turns - 1)  # strictly slower with depth
+        prev_turns = turns
+        speed = F6(turns * TWO_PI / DAY_SECONDS)
+        scale = F(deep_s0 * (1.0 + i * plane_g))
+        tint = F(aer * i / (taps - 1.0))
+        sample = f"deepField(rotA(spinAxis, time * {speed}) * (sdir * {scale})"
+        if i > 0:
+            sample += f" + par * {F(i * d_step)}"
+        sample += ", time)"
         if i == 0:
-            tap_lines.append(f"float deep = deepField(duvBase + {drift}, time);")
+            tap_lines.append(f"float dp = {sample};")
+            tap_lines.append(f"vec3 deepCol = {F(w)} * dp * baseCol;")
+            tap_lines.append(f"float deepPat = {F(w)} * dp;")
         else:
-            tap_lines.append(
-                f"deep += {F(w)} * deepField(duvBase + rimDir * {F(i * d_step)} + {drift}, time);")
-    tap_lines.append(f"deep = pow(clamp(deep * {F(1.0 / norm)}, 0.0, 1.0), {d_pow});")
+            tap_lines.append(f"dp = {sample};")
+            tap_lines.append(f"deepCol += {F(w)} * dp * mix(baseCol, deepStop, {tint});")
+            tap_lines.append(f"deepPat += {F(w)} * dp;")
+    tap_lines.append(f"deepCol *= {F(d_bright / norm)};")
+    tap_lines.append(f"deepPat = pow(clamp(deepPat * {F(1.0 / norm)}, 0.0, 1.0), {d_pow});")
 
-    deep_marker = f"parallax_{asg['deep']}_x{taps}"
+    deep_marker = f"parallax3d_{asg['deep']}_x{taps}"
     mid_marker = f"{family.lower()}_{warp}_{anim}"
 
     lines = []
@@ -1212,21 +1504,43 @@ def emit_shader(asg: dict) -> str:
     lines.append("    // periodic-domain sampling below, NOT from this fract().")
     lines.append("    vec2 baseUV = fract(texCoord0);")
     lines.append(f"    vec2 midPer = vec2({F(float(sx))}, {F(float(syp))});")
+    lines.append("    // 3D sphere direction reconstructed from the UV (u -> longitude,")
+    lines.append("    // v -> latitude): any field sampled on it is periodic across the")
+    lines.append("    // u = 0/1 seam AND uniform at the poles by construction.")
+    lines.append("    vec3 sdir = vec3(sin(3.1415927 * baseUV.y) * cos(6.2831853 * baseUV.x),")
+    lines.append("        cos(3.1415927 * baseUV.y),")
+    lines.append("        sin(3.1415927 * baseUV.y) * sin(6.2831853 * baseUV.x));")
+    lines.append("")
+    lines.append("    // [palette:gradient3]")
+    lines.append("    // Runtime 3-stop palette derived from vertexColor.rgb: the dark stop")
+    lines.append("    // darkens AND saturates (base*base stays in-hue instead of greying),")
+    lines.append("    // the hot stop screen-blends a hue-nudged base toward white. The")
+    lines.append("    // owner /color override replaces vertexColor wholesale, so the whole")
+    lines.append("    // ramp re-derives from it -- recolor-safe by construction.")
+    lines.append("    vec3 baseCol = vertexColor.rgb;")
+    lines.append(f"    vec3 deepStop = baseCol * baseCol * {dk};")
+    lines.append(f"    vec3 spun = clamp(hueSpin(baseCol, {hue_ang}), 0.0, 1.0);")
+    lines.append(f"    vec3 hotStop = clamp(1.0 - (1.0 - spun) * (1.0 - spun) * {hk}, 0.0, 1.0);")
     lines.append("")
     lines.append(f"    // [layer:deep:{deep_marker}]")
-    lines.append("    // Interior volume: correlated parallax taps of ONE deep field. Each")
-    lines.append("    // tap shifts along the silhouette slope (rimDir is screen-space, so")
-    lines.append("    // it is seam-safe) and drifts a little faster than the tap before it,")
-    lines.append("    // with front-to-back weights -- the sub-layers slide over each other")
-    lines.append("    // and read as genuine volume behind the membrane.")
+    lines.append("    // Interior volume: correlated parallax PLANES of ONE deep field on")
+    lines.append("    // the 3D sphere direction. Farther planes show finer features, spin")
+    lines.append("    // slower (integer turns/day: the daily wrap lands on a full turn),")
+    lines.append("    // slide along the silhouette slope (rimDir is screen-space, so it is")
+    lines.append("    // seam-safe) and recede toward the dark stop (aerial perspective).")
     lines.append("    vec2 rimDirRaw = vec2(dFdx(sphericalVertexDistance), dFdy(sphericalVertexDistance));")
     lines.append("    vec2 rimDir = rimDirRaw / (length(rimDirRaw) + 0.0001);")
-    lines.append(f"    vec2 duvBase = vec2(baseUV.x * {F(float(deep_sx))}, baseUV.y * {F(float(deep_sx))});")
+    lines.append(f"    vec3 spinAxis = vec3({F(spin_axis[0])}, {F(spin_axis[1])}, {F(spin_axis[2])});")
+    lines.append(f"    vec3 par = rimDir.x * vec3({F(par1[0])}, {F(par1[1])}, {F(par1[2])}) + rimDir.y * vec3({F(par2[0])}, {F(par2[1])}, {F(par2[2])});")
     for ln in tap_lines:
         lines.append("    " + ln)
     lines.append("")
     lines.append(f"    // [layer:mid:{mid_marker}]")
     lines.append("    // Signature structure of this effect, domain-warped and animated.")
+    if use3d_mid:
+        lines.append("    // This family's signature field also lives on the sphere direction")
+        lines.append("    // (seam- and pole-free) and TRULY rotates, day-safely.")
+        lines.append(f"    vec3 mdir = rotA(spinAxis, time * {mid3_speed}) * (sdir * {mid3_scale});")
     for ln in anim_lines:
         lines.append("    " + ln)
     for ln in warp_lines:
@@ -1235,31 +1549,53 @@ def emit_shader(asg: dict) -> str:
         lines.append("    " + ln)
     lines.append("")
     lines.append(f"    // [layer:rim:{rim}]")
-    lines.append("    // Silhouette / band lift so the membrane reads as a curved shell.")
+    lines.append("    // Silhouette / band lift so the membrane reads as a curved shell:")
+    lines.append("    // a wide soft inner glow (style-specific) plus a thin hot line at")
+    lines.append("    // the very edge. The slope is normalized by the camera distance so")
+    lines.append("    // the rim width stays view-consistent near and far.")
+    lines.append("    float rimSlope = fwidth(sphericalVertexDistance) / max(sphericalVertexDistance, 1.0);")
+    lines.append(f"    float rimLine = smoothstep({F(line_l0)}, {F(line_l1)}, rimSlope);")
     for ln in rim_lines:
         lines.append("    " + ln)
+    lines.append(f"    rim = clamp(rim + {line_w} * rimLine, 0.0, 1.4);")
     lines.append("")
     lines.append("    // Flourish accent + micro grain keep large areas alive up close.")
     for ln in flourish_lines:
         lines.append("    " + ln)
     lines.append(f"    float grain = {gk} * (cellHash(floor(wuv * {F(float(grain_scale))}) + vec2(floor(time * 6.0), 0.0), {F(float(sx * grain_scale))}) - 0.5);")
     lines.append("")
-    lines.append("    // Recolor-safe composite: vertexColor.rgb stays the dominant chroma,")
-    lines.append("    // and the final alpha is vertexColor.a * clamp(a0 + a1 * pattern, 0, 1)")
-    lines.append("    // -- the vertexColor.a dissolve near whitelisted players always wins.")
-    lines.append(f"    float pattern = clamp({dw} * deep + {mw} * mid + {rw} * rim + flourish + grain, 0.0, 1.5);")
+    lines.append("    // Recolor-safe composite v3: the whole pattern is graded through the")
+    lines.append("    // vertexColor-derived 3-stop ramp (low pattern falls to the DARK stop")
+    lines.append("    // and low alpha -- never pale grey), the deep volume sits BEHIND the")
+    lines.append("    // signature structure, and the gradient position leans toward the hot")
+    lines.append("    // stop at the rim (chromatic rim). The vertexColor.a dissolve near")
+    lines.append("    // whitelisted players always wins the final alpha.")
+    lines.append(f"    float pattern = clamp({dw} * deepPat + {mw} * mid + {rw} * rim + flourish + grain, 0.0, 1.5);")
+    lines.append(f"    float gpos = clamp(pattern * {pk} + rim * {rk}, 0.0, 1.0);")
+    lines.append("    vec3 rgb = gradient3(deepStop, baseCol, hotStop, gpos);")
+    lines.append(f"    float midCover = clamp({mwc} * mid + {rwc} * rim, 0.0, 1.0);")
+    lines.append("    rgb = mix(deepCol, rgb, midCover);")
+    lines.append(f"    rgb = satLift(rgb, {sat});")
+    lines.append(f"    rgb += hotStop * {hlw} * smoothstep(0.72, 1.0, pattern);")
     lines.append(f"    vec3 accent = accentPalette({ap0} + pattern * {ap1});")
-    lines.append(f"    vec3 rgb = vertexColor.rgb * ({b0} + {b1} * pattern);")
     lines.append(f"    rgb = mix(rgb, rgb * (0.55 + 0.9 * accent), {aw});")
     for ln in post_lines + rim_post:
         lines.append("    " + ln)
-    lines.append("    // Thin-film RGB dispersion hugging the rim: bounded, and multiplied")
-    lines.append("    // into the palette-driven rgb so the owner recolor override stays")
-    lines.append("    // authoritative on every rim style.")
+    lines.append("    // Two-band chromatic dispersion on the rim (thin-film-like), biased")
+    lines.append("    // to vertexColor.rgb: band 1 multiplies the wide glow into the")
+    lines.append("    // palette-driven rgb, band 2 pulls the thin hot line toward the (also")
+    lines.append("    // vertexColor-derived) hot stop. Both bounded -- the owner recolor")
+    lines.append("    // override stays authoritative on every rim style.")
     lines.append(f"    vec3 rimDisp = 0.5 + 0.5 * cos(vec3(1.0, 0.8065, 0.6452) * (rim * {F(u(80, 0.6, 1.2))} + baseUV.y * {F(u(81, 0.3, 0.8))} + {F(u(82, 0.0, 1.0))}) * 6.2831853);")
     lines.append(f"    rgb = mix(rgb, rgb * (0.72 + 0.56 * rimDisp), clamp(rim, 0.0, 1.0) * {F(u(83, 0.10, 0.22))});")
-    lines.append(f"    float alpha = vertexColor.a * clamp({a0} + {a1} * pattern, 0.0, 1.0);")
-    lines.append("    vec4 color = vec4(rgb, alpha);")
+    lines.append(f"    vec3 lineDisp = 0.5 + 0.5 * cos(vec3(0.6452, 0.8065, 1.0) * (rimLine * {line_disp_f} + baseUV.y * 0.31 + {line_disp_p}) * 6.2831853);")
+    lines.append(f"    rgb = mix(rgb, hotStop * (0.62 + 0.50 * lineDisp), clamp(rimLine, 0.0, 1.0) * {line_disp_w});")
+    lines.append("    // Presence alpha: a solid-but-translucent membrane floor wherever the")
+    lines.append("    // pattern is present, rising toward the ceiling on bright features;")
+    lines.append("    // pattern-free areas stay dark AND thin (anti-washout).")
+    lines.append(f"    float presence = smoothstep(0.02, 0.30, pattern);")
+    lines.append(f"    float alpha = vertexColor.a * min({a_base} + {a_floor} * presence + {a_gain} * pattern, {a_max});")
+    lines.append("    vec4 color = vec4(clamp(rgb, 0.0, 1.0), alpha);")
     lines.append("    if (color.a < 0.01) {")
     lines.append("        discard;")
     lines.append("    }")
@@ -1269,14 +1605,14 @@ def emit_shader(asg: dict) -> str:
 
     source = "\n".join(lines) + "\n"
     n = source.count("\n")
-    if not 110 <= n <= 300:
-        sys.exit(f"fx_{effect_id:03d}: emitted {n} lines, outside the 110..300 sanity bounds")
+    if not 110 <= n <= 380:
+        sys.exit(f"fx_{effect_id:03d}: emitted {n} lines, outside the 110..380 sanity bounds")
     return source
 
 
 def manifest_entry(asg: dict, source: str) -> dict:
     rng = Rng(asg["seed"])
-    draws = [rng.unit() for _ in range(96)]
+    draws = [rng.unit() for _ in range(128)]
 
     def u(i, lo, hi):
         return lo + (hi - lo) * draws[i]
@@ -1288,10 +1624,12 @@ def manifest_entry(asg: dict, source: str) -> dict:
         "deep": asg["deep"],
         "rim": asg["rim"],
         "anim": asg["anim"],
-        "taps": 2 + int(u(30, 0.0, 2.999)),
+        "taps": 3 + int(u(30, 0.0, 1.999)),
         "fbmMode": FBM_MODES[int(u(1, 0.0, 2.999))],
         "octaves": 3 + int(u(0, 0.0, 3.999)),
         "flourish": FLOURISHES[int(u(33, 0.0, 3.999))],
+        "paletteMode": "gradient3",
+        "mid3d": asg["family"] in FAMILIES_3D_MID,
         "seed": f"{asg['seed']:016x}",
         "lines": source.count("\n"),
     }

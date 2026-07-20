@@ -63,6 +63,14 @@ void main() {
     float grainFrame = mod(floor(anim * 5.7861), 256.0);
     outColor += (hash21(floor(texCoord * safeInSize) + vec2(grainFrame, 0.0)) - 0.5) * 0.0242;
 
+    // Richness pass (v3): a bounded soft-contrast curve plus a vibrance
+    // lift deepen the effect's read (anti-washout). Both are bounded and
+    // hue-preserving, and the luma floor below still guarantees the world
+    // stays readable.
+    vec3 curved = clamp(outColor, 0.0, 1.0);
+    outColor = mix(outColor, curved * curved * (3.0 - 2.0 * curved), 0.1843);
+    outColor = clamp(mix(vec3(luma(outColor)), outColor, 1.1676), 0.0, 1.5);
+
     // Gameplay-safety floor: never crush the world below ParamsB.w (~0.35x),
     // and always output an opaque frame.
     outColor = max(outColor, base * ParamsB.w);

@@ -79,6 +79,14 @@ void main() {
     float twinkle = smoothstep(0.7548, 1.0, sin(anim * 2.5411 + tw * 6.2831) * 0.5 + 0.5) * step(0.9726, tw);
     vec3 outColor = dream + Primary.rgb * twinkle * 0.3264 * animAmp;
 
+    // Richness pass (v3): a bounded soft-contrast curve plus a vibrance
+    // lift deepen the effect's read (anti-washout). Both are bounded and
+    // hue-preserving, and the luma floor below still guarantees the world
+    // stays readable.
+    vec3 curved = clamp(outColor, 0.0, 1.0);
+    outColor = mix(outColor, curved * curved * (3.0 - 2.0 * curved), 0.1973);
+    outColor = clamp(mix(vec3(luma(outColor)), outColor, 1.1741), 0.0, 1.5);
+
     // Gameplay-safety floor: never crush the world below ParamsB.w (~0.35x),
     // and always output an opaque frame.
     outColor = max(outColor, base * ParamsB.w);

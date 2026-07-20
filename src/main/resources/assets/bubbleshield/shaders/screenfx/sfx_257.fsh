@@ -51,6 +51,14 @@ void main() {
     float band = smoothstep(0.6079, 0.9453, abs(texCoord.y - 0.5) * 2.0);
     vec3 outColor = mix(base, mix(Primary.rgb, Secondary.rgb, texCoord.y), band * clamp(strength, 0.0, 1.0));
 
+    // Richness pass (v3): a bounded soft-contrast curve plus a vibrance
+    // lift deepen the effect's read (anti-washout). Both are bounded and
+    // hue-preserving, and the luma floor below still guarantees the world
+    // stays readable.
+    vec3 curved = clamp(outColor, 0.0, 1.0);
+    outColor = mix(outColor, curved * curved * (3.0 - 2.0 * curved), 0.1538);
+    outColor = clamp(mix(vec3(luma(outColor)), outColor, 1.2180), 0.0, 1.5);
+
     // Gameplay-safety floor: never crush the world below ParamsB.w (~0.35x),
     // and always output an opaque frame.
     outColor = max(outColor, base * ParamsB.w);
