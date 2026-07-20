@@ -79,7 +79,7 @@ vec3 thinFilm(float thickness) {
 // iq cosine palette, baked per effect; used ONLY for bounded accents
 vec3 accentPalette(float t) {
     return vec3(0.5) + vec3(0.5) * cos(6.2831853 * (vec3(0.7697, 0.5868, 0.5985) * t
-        + vec3(0.5618, 0.1513, 0.7344)));
+        + vec3(0.2940, 0.3604, 0.5011)));
 }
 
 // latitude band rim: pole caps plus a soft equator belt

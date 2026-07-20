@@ -96,7 +96,7 @@ vec3 triGrid(vec2 p, float px) {
 // iq cosine palette, baked per effect; used ONLY for bounded accents
 vec3 accentPalette(float t) {
     return vec3(0.5) + vec3(0.5) * cos(6.2831853 * (vec3(0.5534, 0.9070, 0.4624) * t
-        + vec3(0.4105, 0.7647, 0.7712)));
+        + vec3(0.2609, 0.5757, 0.6254)));
 }
 
 // silhouette estimator: the camera-distance varying changes fastest per

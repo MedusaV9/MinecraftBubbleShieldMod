@@ -109,7 +109,7 @@ float caustic(vec2 p, vec2 drift, vec2 per) {
 // iq cosine palette, baked per effect; used ONLY for bounded accents
 vec3 accentPalette(float t) {
     return vec3(0.5) + vec3(0.5) * cos(6.2831853 * (vec3(0.8612, 0.9260, 0.5678) * t
-        + vec3(0.5352, 0.2445, 0.5244)));
+        + vec3(0.9153, 0.5731, 0.3733)));
 }
 
 // latitude band rim: pole caps plus a soft equator belt

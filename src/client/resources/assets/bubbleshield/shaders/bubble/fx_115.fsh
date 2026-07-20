@@ -134,7 +134,7 @@ float truchet(vec2 p, float width, float px) {
 // iq cosine palette, baked per effect; used ONLY for bounded accents
 vec3 accentPalette(float t) {
     return vec3(0.5) + vec3(0.5) * cos(6.2831853 * (vec3(0.9506, 0.9944, 0.6271) * t
-        + vec3(0.5526, 0.8220, 0.6090)));
+        + vec3(0.3026, 0.3985, 0.3541)));
 }
 
 // silhouette estimator: the camera-distance varying changes fastest per

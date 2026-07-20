@@ -81,7 +81,7 @@ vec2 spiralWarp(vec2 uv, float t) {
 // iq cosine palette, baked per effect; used ONLY for bounded accents
 vec3 accentPalette(float t) {
     return vec3(0.5) + vec3(0.5) * cos(6.2831853 * (vec3(1.0411, 0.7945, 1.0876) * t
-        + vec3(0.4853, 0.3336, 0.1300)));
+        + vec3(0.6133, 0.4266, 0.5838)));
 }
 
 // silhouette estimator: the camera-distance varying changes fastest per

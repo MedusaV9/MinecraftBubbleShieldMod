@@ -614,17 +614,39 @@ def build_effect(effect_id: int) -> dict:
 
 
 def assert_registry_in_sync() -> None:
-    """The EFFECTS mirror table must match EffectRegistry.java's screen families."""
+    """The Python mirror must match EffectRegistry.java: COUNT, PARAM_CYCLE and,
+    per id, the palette pair (argbPrimary/argbSecondary) AND the screen family.
+    Any drift means the generated JSON uniforms would silently diverge from
+    what the mod renders, so this fails hard."""
     text = REGISTRY_JAVA.read_text()
-    pattern = re.compile(r'row\((\d+),[^\n]*"([a-z_]+)"\)\);')
-    rows = {int(m.group(1)): m.group(2) for m in pattern.finditer(text)}
+
+    count_match = re.search(r"^\s*public static final int COUNT = (\d+);", text, re.MULTILINE)
+    if not count_match or int(count_match.group(1)) != EFFECT_COUNT:
+        sys.exit(f"EffectRegistry.COUNT is {count_match.group(1) if count_match else 'unparseable'}, "
+                 f"this script says {EFFECT_COUNT} -- keep in lockstep")
+
+    cycle_match = re.search(r"^\s*public static final int PARAM_CYCLE = (\d+);", text, re.MULTILINE)
+    if not cycle_match or int(cycle_match.group(1)) != PARAM_CYCLE:
+        sys.exit(f"EffectRegistry.PARAM_CYCLE is {cycle_match.group(1) if cycle_match else 'unparseable'}, "
+                 f"this script says {PARAM_CYCLE} -- keep in lockstep")
+
+    # row(id, 0xRRGGBB, 0xRRGGBB, ..., "screenFamily")); -- the registry packs the
+    # RGB literals to opaque ARGB (0xFF000000 | rgb), same as the EFFECTS table.
+    pattern = re.compile(r'row\((\d+),\s*0x([0-9A-Fa-f]{6}),\s*0x([0-9A-Fa-f]{6}),[^\n]*"([a-z_]+)"\)\);')
+    rows = {int(m.group(1)): (0xFF000000 | int(m.group(2), 16), 0xFF000000 | int(m.group(3), 16), m.group(4))
+            for m in pattern.finditer(text)}
     if sorted(rows) != list(range(EFFECT_COUNT)):
         sys.exit(f"EffectRegistry.java parse failed: found {len(rows)} rows, expected ids 0..{EFFECT_COUNT - 1}")
     for effect_id in range(EFFECT_COUNT):
-        mirrored = EFFECTS[effect_id][2]
-        if rows[effect_id] != mirrored:
-            sys.exit(f"EFFECTS table drift at id {effect_id}: registry says '{rows[effect_id]}', "
-                     f"this script says '{mirrored}' -- update the table")
+        primary, secondary, family = rows[effect_id]
+        mirrored_primary, mirrored_secondary, mirrored_family = EFFECTS[effect_id]
+        if family != mirrored_family:
+            sys.exit(f"EFFECTS table drift at id {effect_id}: registry says '{family}', "
+                     f"this script says '{mirrored_family}' -- update the table")
+        if (primary, secondary) != (mirrored_primary, mirrored_secondary):
+            sys.exit(f"EFFECTS palette drift at id {effect_id}: registry says "
+                     f"(0x{primary:08X}, 0x{secondary:08X}), this script says "
+                     f"(0x{mirrored_primary:08X}, 0x{mirrored_secondary:08X}) -- update the table")
 
 
 def main() -> None:

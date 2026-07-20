@@ -87,7 +87,7 @@ float truchet(vec2 p, float width, float px) {
 // iq cosine palette, baked per effect; used ONLY for bounded accents
 vec3 accentPalette(float t) {
     return vec3(0.5) + vec3(0.5) * cos(6.2831853 * (vec3(1.2232, 1.0787, 0.9343) * t
-        + vec3(0.7561, 0.3736, 0.5405)));
+        + vec3(0.5060, 0.3902, 0.6133)));
 }
 
 // latitude band rim: pole caps plus a soft equator belt

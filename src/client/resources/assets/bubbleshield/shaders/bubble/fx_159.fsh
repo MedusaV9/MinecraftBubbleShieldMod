@@ -66,7 +66,7 @@ float fbm2(vec2 p, vec2 per) {
 // iq cosine palette, baked per effect; used ONLY for bounded accents
 vec3 accentPalette(float t) {
     return vec3(0.5) + vec3(0.5) * cos(6.2831853 * (vec3(0.4354, 1.2351, 0.6906) * t
-        + vec3(0.3485, 0.5882, 0.4051)));
+        + vec3(0.2614, 0.5429, 0.2763)));
 }
 
 // silhouette estimator: the camera-distance varying changes fastest per

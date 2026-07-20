@@ -140,7 +140,7 @@ vec3 voro2(vec2 p, vec2 per, float t) {
 // iq cosine palette, baked per effect; used ONLY for bounded accents
 vec3 accentPalette(float t) {
     return vec3(0.5) + vec3(0.5) * cos(6.2831853 * (vec3(0.8314, 0.7541, 0.7627) * t
-        + vec3(0.3606, 0.4038, 0.2172)));
+        + vec3(0.2132, 0.3388, 0.4380)));
 }
 
 // latitude band rim: pole caps plus a soft equator belt

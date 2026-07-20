@@ -76,7 +76,7 @@ vec2 curl2(vec2 p, vec2 per) {
 // iq cosine palette, baked per effect; used ONLY for bounded accents
 vec3 accentPalette(float t) {
     return vec3(0.5) + vec3(0.5) * cos(6.2831853 * (vec3(0.5125, 0.6435, 0.5341) * t
-        + vec3(0.5638, 0.5173, 0.1608)));
+        + vec3(0.1872, 0.3457, 0.1671)));
 }
 
 // silhouette estimator: the camera-distance varying changes fastest per

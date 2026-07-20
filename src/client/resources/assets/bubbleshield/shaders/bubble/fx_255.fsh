@@ -102,7 +102,7 @@ vec3 thinFilm(float thickness) {
 // iq cosine palette, baked per effect; used ONLY for bounded accents
 vec3 accentPalette(float t) {
     return vec3(0.5) + vec3(0.5) * cos(6.2831853 * (vec3(0.7094, 1.2747, 1.1561) * t
-        + vec3(0.2532, 0.3813, 0.6927)));
+        + vec3(0.1197, 0.5144, 0.3791)));
 }
 
 // silhouette estimator: the camera-distance varying changes fastest per

@@ -73,7 +73,7 @@ float fbm2(vec2 p, vec2 per) {
 // iq cosine palette, baked per effect; used ONLY for bounded accents
 vec3 accentPalette(float t) {
     return vec3(0.5) + vec3(0.5) * cos(6.2831853 * (vec3(1.2300, 1.0670, 0.9710) * t
-        + vec3(0.6409, 0.9220, 0.7177)));
+        + vec3(0.5269, 0.8204, 0.7753)));
 }
 
 // latitude band rim: pole caps plus a soft equator belt

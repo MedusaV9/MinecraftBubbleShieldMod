@@ -1312,12 +1312,17 @@ def parse_only(spec: str) -> list:
         part = part.strip()
         if "-" in part:
             lo, hi = part.split("-", 1)
-            ids.update(range(int(lo), int(hi) + 1))
+            lo, hi = int(lo), int(hi)
+            if lo > hi:
+                sys.exit(f"--only range '{part}' is reversed (expected lo-hi with lo <= hi)")
+            ids.update(range(lo, hi + 1))
         else:
             ids.add(int(part))
     bad = [i for i in ids if not 0 <= i < COUNT]
     if bad:
         sys.exit(f"--only ids out of range 0..{COUNT - 1}: {sorted(bad)}")
+    if not ids:
+        sys.exit("--only selected no ids")
     return sorted(ids)
 
 
@@ -1330,18 +1335,23 @@ def main() -> None:
                                       "tools/ + the classpath copy.")
     args = parser.parse_args()
 
-    ids = parse_only(args.only) if args.only else list(range(COUNT))
+    ids = set(parse_only(args.only)) if args.only else set(range(COUNT))
     out_dir = Path(args.out) if args.out else SCREENFX_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
 
     assignments = build_assignments()  # always the full table: bytes never depend on --only
+    # The manifest is ALWAYS the full COUNT-entry table -- only the FILE writes
+    # are restricted by --only. (Writing a subset manifest used to clobber the
+    # committed full manifest AND its classpath copy on partial runs, which
+    # then failed validation and the screenTemplateMatchesJson gametest.)
     manifest = {}
+    written = 0
     for asg in assignments:
-        if asg["id"] not in ids:
-            continue
         source = emit_shader(asg)
-        (out_dir / f"sfx_{asg['id']:03d}.fsh").write_text(source)
         manifest[str(asg["id"])] = manifest_entry(asg, source)
+        if asg["id"] in ids:
+            (out_dir / f"sfx_{asg['id']:03d}.fsh").write_text(source)
+            written += 1
 
     manifest_text = json.dumps(manifest, indent=2, sort_keys=True) + "\n"
     if args.out:
@@ -1353,12 +1363,13 @@ def main() -> None:
         manifest_paths = [DEFAULT_MANIFEST, CLASSPATH_MANIFEST]
 
     line_counts = [e["lines"] for e in manifest.values()]
-    print(f"wrote {len(manifest)} shaders to {out_dir}")
+    print(f"wrote {written} shaders to {out_dir}")
     for p in manifest_paths:
-        print(f"manifest: {p}")
+        print(f"manifest: {p} ({len(manifest)} entries, always the full table)")
     print(f"line counts: min {min(line_counts)}, max {max(line_counts)}")
     if args.only:
-        print(f"NOTE: partial run ({args.only}); rerun without --only for the full 350-file set.")
+        print(f"NOTE: partial run ({args.only}); only {written} files were (re)written, "
+              f"but the manifest still covers all {COUNT} ids.")
 
 
 if __name__ == "__main__":

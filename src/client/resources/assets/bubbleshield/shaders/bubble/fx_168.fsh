@@ -138,7 +138,7 @@ vec2 polarFold(vec2 uv, float t) {
 // iq cosine palette, baked per effect; used ONLY for bounded accents
 vec3 accentPalette(float t) {
     return vec3(0.5) + vec3(0.5) * cos(6.2831853 * (vec3(1.1165, 0.6058, 1.2816) * t
-        + vec3(0.8678, 0.3455, 0.3536)));
+        + vec3(0.9104, 0.2453, 0.7456)));
 }
 
 // silhouette estimator: the camera-distance varying changes fastest per

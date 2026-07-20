@@ -122,7 +122,7 @@ float voronoise(vec2 p, vec2 per, float u, float v) {
 // iq cosine palette, baked per effect; used ONLY for bounded accents
 vec3 accentPalette(float t) {
     return vec3(0.5) + vec3(0.5) * cos(6.2831853 * (vec3(1.1782, 1.0183, 1.1537) * t
-        + vec3(0.1660, 0.4923, 0.4850)));
+        + vec3(0.4230, 0.2877, 0.4608)));
 }
 
 // silhouette estimator: the camera-distance varying changes fastest per

@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 
 import com.bubbleshield.block.BubbleShieldBlockEntity;
+import com.bubbleshield.effect.EffectRegistry;
 import com.bubbleshield.net.ShieldPayloads;
 import com.bubbleshield.registry.ModBlocks;
 import com.bubbleshield.shield.ShieldState;
@@ -27,9 +28,10 @@ import net.minecraft.world.level.storage.TagValueOutput;
  * {@code loadAdditional} must sanitize/validate on the way in. Covers the custom
  * name cap (a &gt;32-char name would throw an EncoderException in ShieldSyncS2C's
  * {@code stringUtf8(32)} codec on every broadcast, breaking sync for the whole
- * level) and the legacy pre-"powered" save re-seed (an absent key must not count
- * as an observed-false level, or a steady redstone source next to the projector
- * would be misread as a rising edge on the first neighbor update).
+ * level), the effect_id range clamp, and the legacy pre-"powered" save re-seed
+ * (an absent key must not count as an observed-false level, or a steady redstone
+ * source next to the projector would be misread as a rising edge on the first
+ * neighbor update).
  */
 public class NbtHardeningGameTests {
 	/**
@@ -105,6 +107,50 @@ public class NbtHardeningGameTests {
 		}
 
 		helper.assertTrue(threw, "encoding an unsanitized 40-char name must throw; load sanitization exists to prevent exactly this");
+		helper.succeed();
+	}
+
+	/**
+	 * An out-of-range effect_id edited into the NBT is clamped to
+	 * [0, EffectRegistry.COUNT - 1] on load (mirroring the custom_name/
+	 * color_override hardening): EffectRegistry.get() clamps on read, but a raw
+	 * out-of-range id would bias ShieldLogic.cycleEffect's re-roll and feed
+	 * unclamped values into the advancement criteria.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT)
+	public void outOfRangeEffectIdClampedOnLoad(GameTestHelper helper) {
+		var registries = helper.getLevel().registryAccess();
+
+		ShieldState original = new ShieldState();
+		TagValueOutput output = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, registries);
+		original.save(output);
+		CompoundTag tag = output.buildResult();
+
+		tag.putInt("effect_id", EffectRegistry.COUNT + 9649);
+		ShieldState tooHigh = new ShieldState();
+		tooHigh.load(TagValueInput.create(ProblemReporter.DISCARDING, registries, tag));
+		helper.assertTrue(
+				tooHigh.effectId == EffectRegistry.COUNT - 1,
+				"an above-range effect_id must clamp to COUNT - 1, got " + tooHigh.effectId);
+
+		tag.putInt("effect_id", -5);
+		ShieldState negative = new ShieldState();
+		negative.load(TagValueInput.create(ProblemReporter.DISCARDING, registries, tag));
+		helper.assertTrue(negative.effectId == 0, "a negative effect_id must clamp to 0, got " + negative.effectId);
+
+		// In-range ids load unchanged (both range edges).
+		tag.putInt("effect_id", EffectRegistry.COUNT - 1);
+		ShieldState maxValid = new ShieldState();
+		maxValid.load(TagValueInput.create(ProblemReporter.DISCARDING, registries, tag));
+		helper.assertTrue(
+				maxValid.effectId == EffectRegistry.COUNT - 1,
+				"the max valid effect_id must load unchanged, got " + maxValid.effectId);
+
+		tag.putInt("effect_id", 42);
+		ShieldState valid = new ShieldState();
+		valid.load(TagValueInput.create(ProblemReporter.DISCARDING, registries, tag));
+		helper.assertTrue(valid.effectId == 42, "a valid effect_id must load unchanged, got " + valid.effectId);
+
 		helper.succeed();
 	}
 

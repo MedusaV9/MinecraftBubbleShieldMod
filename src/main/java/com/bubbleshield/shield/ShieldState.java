@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import com.bubbleshield.effect.EffectRegistry;
 import com.mojang.serialization.Codec;
 
 import net.minecraft.core.UUIDUtil;
@@ -138,7 +139,11 @@ public class ShieldState {
 
 	public void load(ValueInput input) {
 		this.active = input.getBooleanOr("active", false);
-		this.effectId = input.getIntOr("effect_id", 0);
+		// Clamp out-of-range effect ids edited into the NBT (same hardening spirit
+		// as custom_name/color_override below): EffectRegistry.get() clamps on
+		// read, but a raw out-of-range id would bias ShieldLogic.cycleEffect's
+		// re-roll and feed unclamped values into the advancement criteria.
+		this.effectId = Math.clamp(input.getIntOr("effect_id", 0), 0, EffectRegistry.COUNT - 1);
 		this.shape = ShieldShape.byOrdinal(input.getIntOr("shape", 0));
 		this.mode = ShieldMode.byOrdinal(input.getIntOr("mode", 0));
 		this.cycleEffect = input.getBooleanOr("cycle_effect", false);

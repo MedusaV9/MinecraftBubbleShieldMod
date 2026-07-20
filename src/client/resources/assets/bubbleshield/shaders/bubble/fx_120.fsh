@@ -79,7 +79,7 @@ vec2 warp1(vec2 p, vec2 per, float t) {
 // iq cosine palette, baked per effect; used ONLY for bounded accents
 vec3 accentPalette(float t) {
     return vec3(0.5) + vec3(0.5) * cos(6.2831853 * (vec3(1.2207, 1.1474, 0.6131) * t
-        + vec3(0.5877, 0.6382, 0.5967)));
+        + vec3(0.2134, 0.8287, 0.7208)));
 }
 
 // silhouette estimator: the camera-distance varying changes fastest per

@@ -99,7 +99,7 @@ vec2 polarFold(vec2 uv, float t) {
 // iq cosine palette, baked per effect; used ONLY for bounded accents
 vec3 accentPalette(float t) {
     return vec3(0.5) + vec3(0.5) * cos(6.2831853 * (vec3(1.1718, 0.8805, 0.9416) * t
-        + vec3(0.3507, 0.6812, 0.7519)));
+        + vec3(0.6762, 0.7335, 0.7860)));
 }
 
 // latitude band rim: pole caps plus a soft equator belt

@@ -104,7 +104,7 @@ vec4 hexCoords(vec2 uv) {
 // iq cosine palette, baked per effect; used ONLY for bounded accents
 vec3 accentPalette(float t) {
     return vec3(0.5) + vec3(0.5) * cos(6.2831853 * (vec3(0.7526, 0.8151, 1.1588) * t
-        + vec3(0.8019, 0.3252, 0.6696)));
+        + vec3(0.8507, 0.5093, 0.7611)));
 }
 
 // latitude band rim: pole caps plus a soft equator belt

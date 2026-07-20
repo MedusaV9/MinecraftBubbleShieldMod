@@ -79,10 +79,12 @@ Design (see /tmp/shader_plan.md sections 1, 2, 4.1 and AGENTS.md):
 
 * Per-id assignment table: ids 0..104 seed their family from the current
   EffectRegistry.java surface column (parsed at generation time as ground
-  truth); ids 105..349 cycle all 24 families per 5-id color block. Every id
-  gets a distinct (family, warpMode, deepStack, rimStyle, animMode) tuple,
-  guaranteed by deterministic probing and re-asserted here and by
-  tools/validate_shaders.py.
+  truth); ids 105..349 cycle all 24 families per 5-id color block. The
+  accentPalette base color is sourced from the registry's argbPrimary for
+  EVERY id the registry knows (not random), so accents always lean toward the
+  effect's authored palette. Every id gets a distinct (family, warpMode,
+  deepStack, rimStyle, animMode) tuple, guaranteed by deterministic probing
+  and re-asserted here and by tools/validate_shaders.py.
 
 * Structural depth rule: every file carries the three marker comments
   `// [layer:deep:<mod>]`, `// [layer:mid:<mod>]`, `// [layer:rim:<mod>]`
@@ -219,10 +221,12 @@ def parse_registry() -> dict:
     """Parses EffectRegistry.java rows: id -> (surfaceName, rgbPrimary, rgbSecondary).
 
     Accepts any dense catalogue of at least the 105 V1 rows: ids 0..104 seed
-    their family/palette from the registry (frozen), while ids >= 105 are
-    computed by build_assignments and only cross-checked against the registry
-    (the milestone-D expansion rows were authored FROM this generator's
-    manifest, so a mismatch means the two have drifted).
+    their family/palette from the registry (frozen), while ids >= 105 get their
+    family computed by build_assignments and only cross-checked against the
+    registry (the milestone-D expansion rows were authored FROM this
+    generator's manifest, so a mismatch means the two have drifted). Palettes
+    are taken from the registry for EVERY id present in it, so the baked
+    accentPalette always leans toward the effect's authored primary color.
     """
     text = REGISTRY_JAVA.read_text(encoding="utf-8")
     pattern = re.compile(
@@ -242,14 +246,17 @@ def build_assignments() -> list:
     rows = []
     used = set()
     for effect_id in range(COUNT):
+        # Palette: sourced from the registry for every id it has (the baked
+        # accentPalette must lean toward the effect's AUTHORED primary color,
+        # not a random hue). Only ids the registry does not know yet fall back
+        # to seeded draws (bootstrap case, before the registry was expanded).
+        prim = registry[effect_id][1] if effect_id in registry else None
         if effect_id < 105:
             family = registry[effect_id][0]
-            prim = registry[effect_id][1]
         else:
             block = effect_id // 5
             slot = effect_id % 5
             family = FAMILIES[(5 * (block + slot)) % len(FAMILIES)]
-            prim = None
             # Drift guard: the milestone-D registry rows were authored from this
             # generator's manifest, so the registry (when it already has this id)
             # must agree with the computed family.
@@ -1296,12 +1303,17 @@ def parse_only(spec: str) -> list:
         part = part.strip()
         if "-" in part:
             lo, hi = part.split("-", 1)
-            ids.update(range(int(lo), int(hi) + 1))
+            lo, hi = int(lo), int(hi)
+            if lo > hi:
+                sys.exit(f"--only range '{part}' is reversed (expected lo-hi with lo <= hi)")
+            ids.update(range(lo, hi + 1))
         else:
             ids.add(int(part))
     bad = [i for i in ids if not 0 <= i < COUNT]
     if bad:
         sys.exit(f"--only ids out of range 0..{COUNT - 1}: {sorted(bad)}")
+    if not ids:
+        sys.exit("--only selected no ids")
     return sorted(ids)
 
 
@@ -1313,28 +1325,33 @@ def main() -> None:
                                       "the manifest is then written next to the shaders instead of tools/.")
     args = parser.parse_args()
 
-    ids = parse_only(args.only) if args.only else list(range(COUNT))
+    ids = set(parse_only(args.only)) if args.only else set(range(COUNT))
     out_dir = Path(args.out) if args.out else BUBBLE_DIR
     manifest_path = (out_dir / "surface_manifest.json") if args.out else DEFAULT_MANIFEST
     out_dir.mkdir(parents=True, exist_ok=True)
 
     assignments = build_assignments()  # always the full table: bytes never depend on --only
+    # The manifest is ALWAYS the full COUNT-entry table -- only the FILE writes
+    # are restricted by --only. (Writing a subset manifest used to clobber the
+    # committed full manifest on partial runs, which then failed validation.)
     manifest = {}
+    written = 0
     for asg in assignments:
-        if asg["id"] not in ids:
-            continue
         source = emit_shader(asg)
-        (out_dir / f"fx_{asg['id']:03d}.fsh").write_text(source, encoding="utf-8", newline="\n")
         manifest[str(asg["id"])] = manifest_entry(asg, source)
+        if asg["id"] in ids:
+            (out_dir / f"fx_{asg['id']:03d}.fsh").write_text(source, encoding="utf-8", newline="\n")
+            written += 1
 
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n",
                              encoding="utf-8", newline="\n")
     line_counts = [e["lines"] for e in manifest.values()]
-    print(f"wrote {len(manifest)} shaders to {out_dir}")
-    print(f"manifest: {manifest_path}")
+    print(f"wrote {written} shaders to {out_dir}")
+    print(f"manifest: {manifest_path} ({len(manifest)} entries, always the full table)")
     print(f"line counts: min {min(line_counts)}, max {max(line_counts)}")
     if args.only:
-        print(f"NOTE: partial run ({args.only}); rerun without --only for the full 350-file set.")
+        print(f"NOTE: partial run ({args.only}); only {written} files were (re)written, "
+              f"but the manifest still covers all {COUNT} ids.")
 
 
 if __name__ == "__main__":

@@ -89,7 +89,7 @@ float caustic(vec2 p, vec2 drift, vec2 per) {
 // iq cosine palette, baked per effect; used ONLY for bounded accents
 vec3 accentPalette(float t) {
     return vec3(0.5) + vec3(0.5) * cos(6.2831853 * (vec3(0.9765, 0.6632, 0.5340) * t
-        + vec3(0.7552, 0.5530, 0.2131)));
+        + vec3(0.7682, 0.6224, 0.6639)));
 }
 
 // silhouette estimator: the camera-distance varying changes fastest per

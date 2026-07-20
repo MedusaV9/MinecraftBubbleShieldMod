@@ -33,7 +33,9 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * Machine-enforcement of the 350-effect catalogue invariants: registry validity,
- * the uniqueness matrix, EN/DE lang parity and the screen-fx JSON cross-check.
+ * frozen-row golden values (PARAM_CYCLE + spot-checked V1/V2 rows), the uniqueness
+ * matrix, EN/DE lang parity incl. pairwise-distinct effect display names, and the
+ * screen-fx JSON cross-check.
  */
 public class EffectCatalogGameTests {
 	@GameTest
@@ -42,6 +44,20 @@ public class EffectCatalogGameTests {
 		helper.assertTrue(EffectRegistry.COUNT == 350, "catalogue should contain exactly 350 effects");
 		helper.assertTrue(EffectRegistry.ALL.size() == EffectRegistry.COUNT, "registry should expose exactly " + EffectRegistry.COUNT + " effect definitions");
 		helper.assertTrue(InsideEffectBehavior.REGISTRY.size() == 50, "exactly 50 inside behaviors should be registered");
+
+		// PARAM_CYCLE is FROZEN at the V1 catalogue size: retuning it would silently
+		// change the derived params (and the generated post-effect JSON uniforms) of
+		// ids 0..74, which must stay stable across catalogue expansions.
+		helper.assertTrue(EffectRegistry.PARAM_CYCLE == 75, "PARAM_CYCLE must stay frozen at 75, found " + EffectRegistry.PARAM_CYCLE);
+
+		// Golden freeze spot-checks: the core row fields of the frozen V1/V2 ids
+		// 0..104 must never change (spot-asserted at the range edges). The float
+		// literals are the exact float32 results of the frozen derivations
+		// paramB = 0.4 + ((id * 37) % 75) / 75 and
+		// behaviorStrength = 0.8 + 0.7 * ((id * 23) % 75) / 75.
+		assertFrozenRow(helper, 0, 0xFF66FFAA, 0xFF1E9E6E, 0.4F, 0.8F);
+		assertFrozenRow(helper, 74, 0xFFCFD8DC, 0xFF4E342E, 0.9066666F, 1.2853334F);
+		assertFrozenRow(helper, 104, 0xFFFFE600, 0xFF3D0099, 0.7066667F, 1.4253333F);
 
 		// Exact-cover usage rule: the 350-row catalogue uses every registered
 		// behavior (each exactly CATALOGUE_VARIANTS = 7 times, per validate()).
@@ -55,6 +71,21 @@ public class EffectCatalogGameTests {
 						+ " registered behaviors, used " + used.size());
 
 		helper.succeed();
+	}
+
+	/** Asserts one frozen catalogue row's palette/paramB/behaviorStrength golden values. */
+	private static void assertFrozenRow(GameTestHelper helper, int id, int argbPrimary, int argbSecondary,
+			float paramB, float behaviorStrength) {
+		EffectDefinition def = EffectRegistry.get(id);
+		helper.assertTrue(def.id() == id, "get(" + id + ") should return the row with that id, got " + def.id());
+		helper.assertTrue(def.argbPrimary() == argbPrimary,
+				String.format(Locale.ROOT, "frozen id %d argbPrimary changed: expected 0x%08X, found 0x%08X", id, argbPrimary, def.argbPrimary()));
+		helper.assertTrue(def.argbSecondary() == argbSecondary,
+				String.format(Locale.ROOT, "frozen id %d argbSecondary changed: expected 0x%08X, found 0x%08X", id, argbSecondary, def.argbSecondary()));
+		helper.assertTrue(Math.abs(def.paramB() - paramB) < 1.0e-4F,
+				"frozen id " + id + " paramB changed: expected " + paramB + ", found " + def.paramB());
+		helper.assertTrue(Math.abs(def.behaviorStrength() - behaviorStrength) < 1.0e-4F,
+				"frozen id " + id + " behaviorStrength changed: expected " + behaviorStrength + ", found " + def.behaviorStrength());
 	}
 
 	/**
@@ -202,18 +233,31 @@ public class EffectCatalogGameTests {
 	/**
 	 * EN/DE parity over the ENTIRE key set (not just effect names): the key sets must be
 	 * identical, so every gui/advancement/axis key added in one language must exist in
-	 * the other. Effect names 00..349 must additionally be present in both.
+	 * the other. Effect names 00..349 must additionally be present in both, and the
+	 * 350 effect display names must be pairwise distinct in BOTH languages (duplicate
+	 * names would make two effects indistinguishable in the picker/boss bar).
 	 */
 	@GameTest
 	public void langKeysComplete(GameTestHelper helper) {
-		Set<String> enKeys = readLangKeys(helper, "/assets/bubbleshield/lang/en_us.json");
-		Set<String> deKeys = readLangKeys(helper, "/assets/bubbleshield/lang/de_de.json");
+		JsonObject en = readJson(helper, "/assets/bubbleshield/lang/en_us.json");
+		JsonObject de = readJson(helper, "/assets/bubbleshield/lang/de_de.json");
+		Set<String> enKeys = en.keySet();
+		Set<String> deKeys = de.keySet();
 		helper.assertTrue(enKeys.equals(deKeys), "en_us.json and de_de.json must have identical key sets");
 
+		Set<String> enNames = new HashSet<>();
+		Set<String> deNames = new HashSet<>();
 		for (int i = 0; i < EffectRegistry.COUNT; i++) {
 			String key = String.format(Locale.ROOT, "effect.bubbleshield.%02d", i);
 			helper.assertTrue(enKeys.contains(key), "missing lang key: " + key);
+			helper.assertTrue(enNames.add(en.get(key).getAsString()),
+					"duplicate en_us effect display name: '" + en.get(key).getAsString() + "' (" + key + ")");
+			helper.assertTrue(deNames.add(de.get(key).getAsString()),
+					"duplicate de_de effect display name: '" + de.get(key).getAsString() + "' (" + key + ")");
 		}
+
+		helper.assertTrue(enNames.size() == EffectRegistry.COUNT, "expected " + EffectRegistry.COUNT + " distinct en_us effect names, found " + enNames.size());
+		helper.assertTrue(deNames.size() == EffectRegistry.COUNT, "expected " + EffectRegistry.COUNT + " distinct de_de effect names, found " + deNames.size());
 
 		for (String key : new String[] {"gui.bubbleshield.shape.sphere", "gui.bubbleshield.shape.dome", "gui.bubbleshield.tier"}) {
 			helper.assertTrue(enKeys.contains(key), "missing lang key: " + key);

@@ -84,7 +84,7 @@ vec4 hexCoords(vec2 uv) {
 // iq cosine palette, baked per effect; used ONLY for bounded accents
 vec3 accentPalette(float t) {
     return vec3(0.5) + vec3(0.5) * cos(6.2831853 * (vec3(0.4754, 1.0707, 0.8196) * t
-        + vec3(0.8093, 0.6153, 0.2874)));
+        + vec3(0.9053, 0.5051, 0.1288)));
 }
 
 // silhouette estimator: the camera-distance varying changes fastest per

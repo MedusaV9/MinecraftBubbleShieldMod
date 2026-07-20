@@ -530,8 +530,8 @@ public final class EffectRegistry {
 	 * (id / 5); no (surface, screenTemplate) pair used more than 3 times across
 	 * the whole catalogue (the tightest cap the 350-row table satisfies: three
 	 * legacy pairs already sit at 3, and the expansion rows never push any pair
-	 * past it); and every {@link #SCREEN_TEMPLATES} entry used by at least one
-	 * effect.
+	 * past it); every {@link #SCREEN_TEMPLATES} entry used by at least one
+	 * effect; and every {@link SurfaceTemplate} value used by at least one effect.
 	 */
 	public static void validate() {
 		if (ALL.size() != COUNT) {
@@ -546,6 +546,7 @@ public final class EffectRegistry {
 		Map<Integer, Set<String>> behaviorsPerFamily = new HashMap<>();
 		Map<String, Integer> surfaceScreenPairCounts = new HashMap<>();
 		Set<String> screenTemplatesUsed = new HashSet<>();
+		Set<SurfaceTemplate> surfaceTemplatesUsed = new HashSet<>();
 		for (int i = 0; i < ALL.size(); i++) {
 			EffectDefinition def = ALL.get(i);
 			if (def.id() != i) {
@@ -602,6 +603,7 @@ public final class EffectRegistry {
 			}
 
 			screenTemplatesUsed.add(def.screenTemplate());
+			surfaceTemplatesUsed.add(def.surface());
 		}
 
 		// Derived invariant: every registered behavior id must cover variants
@@ -630,6 +632,14 @@ public final class EffectRegistry {
 		for (String template : SCREEN_TEMPLATES) {
 			if (!screenTemplatesUsed.contains(template)) {
 				throw new IllegalStateException("Screen template " + template + " is not used by any effect");
+			}
+		}
+
+		// Symmetric completeness for the surface axis: every SurfaceTemplate value
+		// must be exercised by at least one effect (mirrors the screen-family check).
+		for (SurfaceTemplate template : SurfaceTemplate.values()) {
+			if (!surfaceTemplatesUsed.contains(template)) {
+				throw new IllegalStateException("Surface template " + template + " is not used by any effect");
 			}
 		}
 	}

@@ -123,7 +123,7 @@ vec3 voro2(vec2 p, vec2 per, float t) {
 // iq cosine palette, baked per effect; used ONLY for bounded accents
 vec3 accentPalette(float t) {
     return vec3(0.5) + vec3(0.5) * cos(6.2831853 * (vec3(0.6601, 0.5705, 1.2028) * t
-        + vec3(0.3468, 0.2572, 0.1205)));
+        + vec3(0.4409, 0.1645, 0.3348)));
 }
 
 // silhouette estimator: the camera-distance varying changes fastest per

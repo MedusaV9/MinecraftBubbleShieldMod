@@ -82,7 +82,7 @@ vec2 curl2(vec2 p, vec2 per) {
 // iq cosine palette, baked per effect; used ONLY for bounded accents
 vec3 accentPalette(float t) {
     return vec3(0.5) + vec3(0.5) * cos(6.2831853 * (vec3(0.6748, 0.4243, 1.0659) * t
-        + vec3(0.4779, 0.7418, 0.6759)));
+        + vec3(0.5135, 0.7457, 0.9186)));
 }
 
 // latitude band rim: pole caps plus a soft equator belt
