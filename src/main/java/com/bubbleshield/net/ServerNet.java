@@ -11,6 +11,7 @@ import java.util.UUID;
 import com.bubbleshield.advancements.ModCriteria;
 import com.bubbleshield.block.BubbleShieldBlockEntity;
 import com.bubbleshield.effect.EffectRegistry;
+import com.bubbleshield.shield.BeamStyle;
 import com.bubbleshield.shield.ShieldLogic;
 import com.bubbleshield.shield.ShieldMode;
 import com.bubbleshield.shield.ShieldShape;
@@ -68,7 +69,8 @@ public final class ServerNet {
 			int effectId = Mth.clamp(payload.effectId(), MIN_EFFECT_ID, MAX_EFFECT_ID);
 			int shapeOrdinal = Mth.clamp(payload.shapeOrdinal(), 0, ShieldShape.values().length - 1);
 			int modeOrdinal = Mth.clamp(payload.modeOrdinal(), 0, ShieldMode.values().length - 1);
-			shield.setSettings(diameter, effectId, shapeOrdinal, modeOrdinal, payload.cycleEnabled());
+			int beamStyleOrdinal = Mth.clamp(payload.beamStyleOrdinal(), 0, BeamStyle.values().length - 1);
+			shield.setSettings(diameter, effectId, shapeOrdinal, modeOrdinal, payload.cycleEnabled(), beamStyleOrdinal);
 		});
 
 		ServerPlayNetworking.registerGlobalReceiver(ShieldPayloads.WhitelistModifyC2S.TYPE, (payload, ctx) -> {
@@ -330,7 +332,8 @@ public final class ServerNet {
 				healthFrac,
 				shield.tier(),
 				state.shape.ordinal(),
-				state.colorOverride
+				state.colorOverride,
+				state.beamStyle.ordinal()
 			),
 			List.copyOf(state.whitelistUuids),
 			List.copyOf(state.whitelistNames),

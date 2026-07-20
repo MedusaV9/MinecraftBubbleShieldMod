@@ -37,7 +37,8 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 	public static final int DATA_MODE = 8;
 	public static final int DATA_CYCLE = 9;
 	public static final int DATA_CAPACITOR = 10;
-	public static final int DATA_COUNT = 11;
+	public static final int DATA_BEAM = 11;
+	public static final int DATA_COUNT = 12;
 
 	public static final int FUEL_SLOT = 0;
 	public static final int CORE_SLOT = 1;
@@ -164,6 +165,11 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 	/** @return the synced flux-capacitor flag (a capacitor sits in the capacitor slot). */
 	public boolean hasCapacitor() {
 		return this.data.get(DATA_CAPACITOR) != 0;
+	}
+
+	/** @return the synced {@link com.bubbleshield.shield.BeamStyle} ordinal (16-bit safe: max ordinal 5). */
+	public int beamStyle() {
+		return this.data.get(DATA_BEAM);
 	}
 
 	@Override

@@ -82,6 +82,11 @@ public final class ClientShieldManager {
 		public int colorOverride() {
 			return this.visual.colorOverride();
 		}
+
+		/** The synced {@link com.bubbleshield.shield.BeamStyle} ordinal. */
+		public int beamStyle() {
+			return this.visual.beamStyle();
+		}
 	}
 
 	private static final Map<GlobalPos, ClientShield> SHIELDS = new HashMap<>();

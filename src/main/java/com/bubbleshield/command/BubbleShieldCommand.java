@@ -127,7 +127,8 @@ public final class BubbleShieldCommand {
 			effectId,
 			state.shape.ordinal(),
 			state.mode.ordinal(),
-			state.cycleEffect);
+			state.cycleEffect,
+			state.beamStyle.ordinal());
 		source.sendSuccess(
 			() -> Component.translatable("command.bubbleshield.set.success", effectId, Component.translatable(EffectRegistry.get(effectId).nameKey())),
 			false);

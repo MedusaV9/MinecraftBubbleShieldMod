@@ -37,6 +37,11 @@ public class ShieldState {
 	public ShieldMode mode = ShieldMode.DEFENSE;
 	/** When true, the active shield re-rolls its effect periodically (see ShieldLogic). */
 	public boolean cycleEffect;
+	/**
+	 * Style of the central energy beam rising through the bubble (client-rendered).
+	 * {@link BeamStyle#NONE} by default so pre-beam saves stay beam-free.
+	 */
+	public BeamStyle beamStyle = BeamStyle.NONE;
 	public float targetRadius = DEFAULT_TARGET_RADIUS;
 	public float health = DEFAULT_MAX_HEALTH;
 	public float maxHealth = DEFAULT_MAX_HEALTH;
@@ -115,6 +120,7 @@ public class ShieldState {
 		output.putInt("shape", this.shape.ordinal());
 		output.putInt("mode", this.mode.ordinal());
 		output.putBoolean("cycle_effect", this.cycleEffect);
+		output.putInt("beam_style", this.beamStyle.ordinal());
 		output.putFloat("target_radius", this.targetRadius);
 		output.putFloat("health", this.health);
 		output.putFloat("max_health", this.maxHealth);
@@ -147,6 +153,9 @@ public class ShieldState {
 		this.shape = ShieldShape.byOrdinal(input.getIntOr("shape", 0));
 		this.mode = ShieldMode.byOrdinal(input.getIntOr("mode", 0));
 		this.cycleEffect = input.getBooleanOr("cycle_effect", false);
+		// Legacy saves (no key) default to ordinal 0 = NONE; tampered ordinals clamp
+		// back to NONE via byOrdinal — the same hardening as shape/mode above.
+		this.beamStyle = BeamStyle.byOrdinal(input.getIntOr("beam_style", 0));
 		this.targetRadius = input.getFloatOr("target_radius", DEFAULT_TARGET_RADIUS);
 		this.health = input.getFloatOr("health", DEFAULT_MAX_HEALTH);
 		this.maxHealth = input.getFloatOr("max_health", DEFAULT_MAX_HEALTH);

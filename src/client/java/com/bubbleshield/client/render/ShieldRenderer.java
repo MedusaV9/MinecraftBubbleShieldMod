@@ -7,6 +7,7 @@ import com.bubbleshield.client.ClientShieldManager;
 import com.bubbleshield.effect.ContextModifier;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.EffectRegistry;
+import com.bubbleshield.shield.BeamStyle;
 import com.bubbleshield.shield.ShieldShape;
 import com.bubbleshield.shield.ShieldState;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -99,6 +100,24 @@ public final class ShieldRenderer {
 					SPHERE.emit(pose, buffer, radius, argbPrimary, argbSecondary, alphaBase, dissolveCenters);
 				}
 			});
+
+			// The projector's energy beam, per the synced per-bubble setting: AUTO
+			// resolves to the effect's derived preset, NONE renders nothing. Submitted
+			// AFTER the sphere so the additive column reads on top of the membrane.
+			BeamStyle beamStyle = BeamStyle.byOrdinal(shield.beamStyle());
+			if (beamStyle == BeamStyle.AUTO) {
+				beamStyle = def.beamPreset();
+			}
+
+			if (beamStyle != BeamStyle.NONE) {
+				RenderType beamRenderType = ShieldPipelines.beamRenderType(beamStyle.renderIndex());
+				// CPU clock for the moving bright band (the shader patterns run on the
+				// GameTime global); day-modulo keeps float precision on old worlds.
+				float beamTime = (level.getGameTime() % 24000L) / 20.0F;
+				collector.submitCustomGeometry(poseStack, beamRenderType, (pose, buffer) ->
+						BeamMesh.emit(pose, buffer, radius, argbPrimary, argbSecondary, alphaBase, beamTime));
+			}
+
 			poseStack.popPose();
 		}
 	}

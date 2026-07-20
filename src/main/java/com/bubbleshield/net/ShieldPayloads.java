@@ -27,8 +27,14 @@ public final class ShieldPayloads {
 	private ShieldPayloads() {
 	}
 
-	/** Client asks to change diameter/effect/shape/mode (ordinals)/effect-cycle of the projector at {@code pos}. */
-	public record SetSettingsC2S(BlockPos pos, int diameter, int effectId, int shapeOrdinal, int modeOrdinal, boolean cycleEnabled) implements CustomPacketPayload {
+	/**
+	 * Client asks to change diameter/effect/shape/mode/beam (ordinals)/effect-cycle of
+	 * the projector at {@code pos}. This composite sits at 7 of the 12-field
+	 * {@link StreamCodec#composite} cap; if a future change would push past 12, nest a
+	 * settings sub-record with its own codec the way {@link ShieldVisual} nests inside
+	 * {@link ShieldSyncS2C}.
+	 */
+	public record SetSettingsC2S(BlockPos pos, int diameter, int effectId, int shapeOrdinal, int modeOrdinal, boolean cycleEnabled, int beamStyleOrdinal) implements CustomPacketPayload {
 		public static final CustomPacketPayload.Type<SetSettingsC2S> TYPE = new CustomPacketPayload.Type<>(BubbleShield.id("set_settings"));
 		public static final StreamCodec<RegistryFriendlyByteBuf, SetSettingsC2S> CODEC = StreamCodec.composite(
 			BlockPos.STREAM_CODEC, SetSettingsC2S::pos,
@@ -37,6 +43,7 @@ public final class ShieldPayloads {
 			ByteBufCodecs.VAR_INT, SetSettingsC2S::shapeOrdinal,
 			ByteBufCodecs.VAR_INT, SetSettingsC2S::modeOrdinal,
 			ByteBufCodecs.BOOL, SetSettingsC2S::cycleEnabled,
+			ByteBufCodecs.VAR_INT, SetSettingsC2S::beamStyleOrdinal,
 			SetSettingsC2S::new
 		);
 
@@ -123,10 +130,11 @@ public final class ShieldPayloads {
 	 * The renderable core of a shield snapshot, nested inside {@link ShieldSyncS2C} with
 	 * its own codec so the outer {@link StreamCodec#composite} (capped at 12 fields in
 	 * this Minecraft version) keeps free slots for future fields (e.g. tier/shape).
-	 * This nested composite itself sits at 8 of those 12 fields.
+	 * This nested composite itself sits at 9 of those 12 fields.
 	 *
 	 * <p>{@code colorOverride} is the owner-picked recolor: -1 = authored palette,
 	 * otherwise an opaque ARGB (negative as a signed int; compare against -1, not 0).
+	 * {@code beamStyle} is the synced {@link com.bubbleshield.shield.BeamStyle} ordinal.
 	 */
 	public record ShieldVisual(
 		boolean active,
@@ -136,7 +144,8 @@ public final class ShieldPayloads {
 		float healthFrac,
 		int tier,
 		int shape,
-		int colorOverride
+		int colorOverride,
+		int beamStyle
 	) {
 		public static final StreamCodec<ByteBuf, ShieldVisual> STREAM_CODEC = StreamCodec.composite(
 			ByteBufCodecs.BOOL, ShieldVisual::active,
@@ -147,6 +156,7 @@ public final class ShieldPayloads {
 			ByteBufCodecs.VAR_INT, ShieldVisual::tier,
 			ByteBufCodecs.VAR_INT, ShieldVisual::shape,
 			ByteBufCodecs.VAR_INT, ShieldVisual::colorOverride,
+			ByteBufCodecs.VAR_INT, ShieldVisual::beamStyle,
 			ShieldVisual::new
 		);
 	}

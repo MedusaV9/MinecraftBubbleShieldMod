@@ -198,7 +198,7 @@ public class ColorGameTests {
 	@GameTest(environment = ISOLATED_ENVIRONMENT)
 	public void syncPayloadCarriesOverride(GameTestHelper helper) {
 		ShieldPayloads.ShieldVisual original = new ShieldPayloads.ShieldVisual(
-				true, 7, 8.0F, 6.5F, 0.75F, 2, 1, OPAQUE_RED);
+				true, 7, 8.0F, 6.5F, 0.75F, 2, 1, OPAQUE_RED, 0);
 
 		ByteBuf buffer = Unpooled.buffer();
 		try {
@@ -211,7 +211,7 @@ public class ColorGameTests {
 
 			// The -1 sentinel (no override) round-trips too.
 			ShieldPayloads.ShieldVisual plain = new ShieldPayloads.ShieldVisual(
-					false, 0, 16.0F, 0.0F, 1.0F, 0, 0, ShieldState.NO_COLOR_OVERRIDE);
+					false, 0, 16.0F, 0.0F, 1.0F, 0, 0, ShieldState.NO_COLOR_OVERRIDE, 0);
 			ShieldPayloads.ShieldVisual.STREAM_CODEC.encode(buffer, plain);
 			helper.assertTrue(plain.equals(ShieldPayloads.ShieldVisual.STREAM_CODEC.decode(buffer)),
 					"a visual without an override should round-trip");

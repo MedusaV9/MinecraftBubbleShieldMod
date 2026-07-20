@@ -126,17 +126,17 @@ public class EffectPickerScreen extends Screen {
 		this.rebuildWidgets();
 	}
 
-	/** Sends the picked effect, echoing the live (server-synced) diameter/shape/mode/cycle. */
+	/** Sends the picked effect, echoing the live (server-synced) diameter/shape/mode/cycle/beam. */
 	private void pick(int effectId) {
 		ClientPlayNetworking.send(new ShieldPayloads.SetSettingsC2S(
-			this.menu.pos(), this.menu.diameter(), effectId, this.menu.shape(), this.menu.mode(), this.menu.cycleEffect()));
+			this.menu.pos(), this.menu.diameter(), effectId, this.menu.shape(), this.menu.mode(), this.menu.cycleEffect(), this.menu.beamStyle()));
 		this.onClose();
 	}
 
 	/** Sends the flipped effect-cycle toggle, echoing the live values of everything else. */
 	private void toggleCycle() {
 		ClientPlayNetworking.send(new ShieldPayloads.SetSettingsC2S(
-			this.menu.pos(), this.menu.diameter(), this.menu.effectId(), this.menu.shape(), this.menu.mode(), !this.menu.cycleEffect()));
+			this.menu.pos(), this.menu.diameter(), this.menu.effectId(), this.menu.shape(), this.menu.mode(), !this.menu.cycleEffect(), this.menu.beamStyle()));
 	}
 
 	private Component cycleLabel() {

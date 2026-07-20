@@ -159,7 +159,7 @@ public class NbtHardeningGameTests {
 		return new ShieldPayloads.ShieldSyncS2C(
 			new BlockPos(0, 64, 0),
 			helper.getLevel().dimension(),
-			new ShieldPayloads.ShieldVisual(false, 0, ShieldState.DEFAULT_TARGET_RADIUS, 0.0F, 1.0F, 0, 0, ShieldState.NO_COLOR_OVERRIDE),
+			new ShieldPayloads.ShieldVisual(false, 0, ShieldState.DEFAULT_TARGET_RADIUS, 0.0F, 1.0F, 0, 0, ShieldState.NO_COLOR_OVERRIDE, 0),
 			List.of(),
 			List.of(),
 			0,

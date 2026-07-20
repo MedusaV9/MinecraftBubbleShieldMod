@@ -47,7 +47,11 @@ import org.slf4j.LoggerFactory;
  * <ul>
  *   <li>{@code BUBBLESHIELD_CAPTURE_DIR} — destination directory;</li>
  *   <li>{@code BUBBLESHIELD_CAPTURE_IDS} — comma-separated effect ids replacing the
- *       default one-per-surface-family outside set.</li>
+ *       default one-per-surface-family outside set;</li>
+ *   <li>{@code BUBBLESHIELD_CAPTURE_BEAM} — {@link com.bubbleshield.shield.BeamStyle}
+ *       ordinal applied to every capture retune (default 0 = NONE; 2..5 = the rendered
+ *       STORM/PULSE/HELIX/PRISM styles), so the beam styles can be screenshotted
+ *       without code edits.</li>
  * </ul>
  */
 public class ShaderScreenshotTest implements FabricClientGameTest {
@@ -114,7 +118,7 @@ public class ShaderScreenshotTest implements FabricClientGameTest {
 				BubbleShieldBlockEntity shield = (BubbleShieldBlockEntity) level.getBlockEntity(PROJECTOR_POS);
 				shield.setOwner(player);
 				shield.addFuelSeconds(36000);
-				shield.setSettings(DIAMETER, 0, 0, 0, false);
+				shield.setSettings(DIAMETER, 0, 0, 0, false, beamOrdinal());
 				if (!shield.tryActivate()) {
 					throw new AssertionError("Shield failed to activate");
 				}
@@ -188,7 +192,7 @@ public class ShaderScreenshotTest implements FabricClientGameTest {
 		try {
 			server.runOnServer(mc -> {
 				BubbleShieldBlockEntity shield = (BubbleShieldBlockEntity) mc.overworld().getBlockEntity(PROJECTOR_POS);
-				shield.setSettings(DIAMETER, effectId, shapeOrdinal, 0, false);
+				shield.setSettings(DIAMETER, effectId, shapeOrdinal, 0, false, beamOrdinal());
 			});
 			ctx.waitTicks(SETTLE_TICKS);
 			Path png = ctx.takeScreenshot(TestScreenshotOptions.of(name)
@@ -200,6 +204,12 @@ public class ShaderScreenshotTest implements FabricClientGameTest {
 			LOGGER.error("Capture {} failed", name, e);
 			return false;
 		}
+	}
+
+	/** The {@code BUBBLESHIELD_CAPTURE_BEAM} beam-style ordinal (default 0 = NONE). */
+	private static int beamOrdinal() {
+		String override = System.getenv("BUBBLESHIELD_CAPTURE_BEAM");
+		return override == null || override.isBlank() ? 0 : Integer.parseInt(override.trim());
 	}
 
 	/**

@@ -7,6 +7,7 @@ import com.bubbleshield.net.ServerNet;
 import com.bubbleshield.net.ShieldPayloads;
 import com.bubbleshield.registry.ModBlockEntities;
 import com.bubbleshield.registry.ModItems;
+import com.bubbleshield.shield.BeamStyle;
 import com.bubbleshield.shield.FuelMap;
 import com.bubbleshield.shield.ShieldGeometry;
 import com.bubbleshield.shield.ShieldLinking;
@@ -97,6 +98,7 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 				case BubbleShieldMenu.DATA_MODE -> state.mode.ordinal();
 				case BubbleShieldMenu.DATA_CYCLE -> state.cycleEffect ? 1 : 0;
 				case BubbleShieldMenu.DATA_CAPACITOR -> BubbleShieldBlockEntity.this.hasCapacitor() ? 1 : 0;
+				case BubbleShieldMenu.DATA_BEAM -> state.beamStyle.ordinal();
 				default -> 0;
 			};
 		}
@@ -519,14 +521,16 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 
 	/**
 	 * Applies validated settings from the client: diameter (converted to radius),
-	 * effect id, shield shape and mode (by ordinal), and the effect-cycle toggle.
+	 * effect id, shield shape, mode and beam style (by ordinal, clamped), and the
+	 * effect-cycle toggle.
 	 */
-	public void setSettings(int diameter, int effectId, int shapeOrdinal, int modeOrdinal, boolean cycleEffect) {
+	public void setSettings(int diameter, int effectId, int shapeOrdinal, int modeOrdinal, boolean cycleEffect, int beamStyleOrdinal) {
 		this.shieldState.targetRadius = diameter / 2.0F;
 		this.shieldState.effectId = effectId;
 		this.shieldState.shape = ShieldShape.byOrdinal(shapeOrdinal);
 		this.shieldState.mode = ShieldMode.byOrdinal(modeOrdinal);
 		this.shieldState.cycleEffect = cycleEffect;
+		this.shieldState.beamStyle = BeamStyle.byOrdinal(beamStyleOrdinal);
 		this.markUpdated();
 	}
 
@@ -732,7 +736,8 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 				state.maxHealth > 0.0F ? state.health / state.maxHealth : 0.0F,
 				this.tier(),
 				state.shape.ordinal(),
-				state.colorOverride
+				state.colorOverride,
+				state.beamStyle.ordinal()
 			),
 			Set.copyOf(state.whitelistUuids),
 			Set.copyOf(state.whitelistNames),

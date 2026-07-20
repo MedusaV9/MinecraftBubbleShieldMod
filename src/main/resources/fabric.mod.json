@@ -37,7 +37,8 @@
 			"com.bubbleshield.gametest.LinkingGameTests",
 			"com.bubbleshield.gametest.CapacitorGameTests",
 			"com.bubbleshield.gametest.WorldIntegrationGameTests",
-			"com.bubbleshield.gametest.NbtHardeningGameTests"
+			"com.bubbleshield.gametest.NbtHardeningGameTests",
+			"com.bubbleshield.gametest.BeamGameTests"
 		]
 	},
 	"mixins": [

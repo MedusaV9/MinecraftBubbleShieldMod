@@ -26,6 +26,11 @@ COUNT-derived inventory (fail-closed):
 
 * the bubble dir must contain EXACTLY fx_000..fx_{COUNT-1}.fsh + surface.vsh
   (contiguous, no gaps, no extras);
+* the beam dir must contain EXACTLY the four hand-written projector-beam
+  shaders (beam_storm/beam_pulse/beam_helix/beam_prism.fsh) -- a small NAMED
+  set, one per BeamStyle, NOT per-effect, so it is deliberately excluded from
+  the fx_/sfx_ COUNT contiguity cross-check but still fully compile- and
+  link-validated (against bubble/surface.vsh, whose varyings they share);
 * the screenfx dir must contain EXACTLY sfx_000..sfx_{COUNT-1}.fsh;
 * the post_effect dir must contain EXACTLY effect_00..effect_{COUNT-1}.json;
 * a recursive sweep of BOTH shader roots (src/client and src/main
@@ -75,8 +80,8 @@ On top of that it enforces the generated-shader invariants:
   silently scramble the uniforms at runtime.
 
 The full scan at COUNT=350 is 351 files under bubble/ (350 fx_*.fsh +
-surface.vsh) + 350 under screenfx/ (sfx_*.fsh) = 701 compiles, plus 700
-vsh<->fsh link checks.
+surface.vsh) + 4 under beam/ + 350 under screenfx/ (sfx_*.fsh) = 705
+compiles, plus 704 vsh<->fsh link checks.
 
 Exits nonzero when any shader fails to compile or link, any inventory entry is
 missing/extra/misplaced, or any invariant is violated. Usage:
@@ -106,8 +111,14 @@ REGISTRY_JAVA = REPO_ROOT / "src/main/java/com/bubbleshield/effect/EffectRegistr
 CLIENT_SHADER_ROOT = REPO_ROOT / "src/client/resources/assets/bubbleshield/shaders"
 MAIN_SHADER_ROOT = REPO_ROOT / "src/main/resources/assets/bubbleshield/shaders"
 BUBBLE_DIR = CLIENT_SHADER_ROOT / "bubble"
+BEAM_DIR = CLIENT_SHADER_ROOT / "beam"
 SCREENFX_DIR = MAIN_SHADER_ROOT / "screenfx"
 SURFACE_VSH = BUBBLE_DIR / "surface.vsh"
+# The projector-beam shaders: a fixed NAMED set (one per rendered BeamStyle in
+# com.bubbleshield.shield.BeamStyle), hand-written rather than generated, so
+# they sit outside the fx_/sfx_ COUNT contiguity contract but are still
+# compile-validated and link-validated against bubble/surface.vsh.
+BEAM_NAMES = ("beam_storm.fsh", "beam_pulse.fsh", "beam_helix.fsh", "beam_prism.fsh")
 MANIFEST_PATH = REPO_ROOT / "tools/surface_manifest.json"
 SCREEN_MANIFEST_PATH = REPO_ROOT / "tools/screen_manifest.json"
 CLASSPATH_SCREEN_MANIFEST = REPO_ROOT / "src/main/resources/assets/bubbleshield/screen_manifest.json"
@@ -228,6 +239,12 @@ def check_inventory(count: int, skip_fx: bool, skip_sfx: bool, skip_post: bool) 
         expected_bubble |= {f"fx_{i:03d}.fsh" for i in range(count)}
     diff_exact(BUBBLE_DIR, expected_bubble, f"bubble shader set (COUNT={count})")
 
+    # The beam set is COUNT-independent (one shader per rendered BeamStyle),
+    # but still exact: a missing style crashes the client's pipeline
+    # registration at resource load, an extra file is a stray.
+    expected_beam = set(BEAM_NAMES)
+    diff_exact(BEAM_DIR, expected_beam, "beam shader set (fixed named set)")
+
     expected_screen = set() if skip_sfx else {f"sfx_{i:03d}.fsh" for i in range(count)}
     diff_exact(SCREENFX_DIR, expected_screen, f"screenfx shader set (COUNT={count})")
 
@@ -239,6 +256,7 @@ def check_inventory(count: int, skip_fx: bool, skip_sfx: bool, skip_post: bool) 
     # shader roots outside the exact per-directory sets above (a misplaced
     # fx_*.fsh under screenfx/ or a stray nested dir must fail, not be ignored).
     allowed = {(CLIENT_SHADER_ROOT, Path("bubble") / name) for name in expected_bubble}
+    allowed |= {(CLIENT_SHADER_ROOT, Path("beam") / name) for name in expected_beam}
     allowed |= {(MAIN_SHADER_ROOT, Path("screenfx") / name) for name in expected_screen}
     for root in (CLIENT_SHADER_ROOT, MAIN_SHADER_ROOT):
         if not root.is_dir():
@@ -536,7 +554,9 @@ def main() -> None:
         link_jobs: list[tuple[str, list[str]]] = []
         interface_issues: list[str] = []
         for shader in shaders:
-            if FX_NAME.match(shader.name) and SURFACE_VSH in stitched_paths:
+            if (FX_NAME.match(shader.name) or shader.name in BEAM_NAMES) and SURFACE_VSH in stitched_paths:
+                # The beam shaders pair with the same bubble/surface.vsh
+                # passthrough as the per-effect fx_* set (BEAM_SNIPPET reuses it).
                 label = f"link surface.vsh <-> {shader.name}"
                 link_jobs.append((label, ["glslangValidator", "-l",
                                           str(stitched_paths[SURFACE_VSH]), str(stitched_paths[shader])]))

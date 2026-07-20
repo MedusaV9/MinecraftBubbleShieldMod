@@ -2,6 +2,8 @@ package com.bubbleshield.effect;
 
 import java.util.Locale;
 
+import com.bubbleshield.shield.BeamStyle;
+
 /**
  * Immutable description of one selectable shield effect.
  *
@@ -44,6 +46,18 @@ public record EffectDefinition(
 	 */
 	public String surfaceShaderId() {
 		return String.format(Locale.ROOT, "bubble/fx_%03d", id);
+	}
+
+	/**
+	 * The beam style the {@link BeamStyle#AUTO} setting resolves to for this effect:
+	 * a pure, deterministic derivation from the surface technique family (every effect
+	 * of the same family shares the same beam look), always one of the RENDERED styles
+	 * — never NONE/AUTO. No record field and no catalogue row changes, so frozen rows
+	 * stay byte-identical. The resolution rule (client renderer and any future server
+	 * logic) is: {@code effective = beamStyle == AUTO ? def.beamPreset() : beamStyle}.
+	 */
+	public BeamStyle beamPreset() {
+		return BeamStyle.RENDERED[this.surface.ordinal() % BeamStyle.RENDERED.length];
 	}
 
 	/**

@@ -3,6 +3,7 @@ package com.bubbleshield.client.gui;
 import com.bubbleshield.BubbleShield;
 import com.bubbleshield.menu.BubbleShieldMenu;
 import com.bubbleshield.net.ShieldPayloads;
+import com.bubbleshield.shield.BeamStyle;
 import com.bubbleshield.shield.ShieldMode;
 import com.bubbleshield.shield.ShieldShape;
 
@@ -11,6 +12,7 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.renderer.RenderPipelines;
@@ -34,6 +36,7 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 	private DiameterSlider diameterSlider;
 	private Button shapeButton;
 	private Button modeButton;
+	private Button beamButton;
 
 	public BubbleShieldScreen(BubbleShieldMenu menu, Inventory inventory, Component title) {
 		super(menu, inventory, title, 176, 166);
@@ -75,10 +78,19 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 			).bounds(x, this.topPos + 54, width, 13).build()
 		);
 
+		// Whitelist and beam share the fifth row, split exactly like the shape/mode
+		// row: 42px whitelist + 2px gap + 44px beam = 88px (no slot/button overlap).
 		this.addRenderableWidget(
 			Button.builder(Component.translatable("gui.bubbleshield.whitelist"), button ->
 				this.minecraft.gui.setScreen(new WhitelistScreen(this, this.menu.pos()))
-			).bounds(x, this.topPos + 68, width, 13).build()
+			).bounds(x, this.topPos + 68, 42, 13).build()
+		);
+
+		this.beamButton = this.addRenderableWidget(
+			Button.builder(this.beamLabel(), button -> this.cycleBeam())
+				.bounds(x + 44, this.topPos + 68, 44, 13)
+				.tooltip(Tooltip.create(Component.translatable("gui.bubbleshield.beam.tooltip")))
+				.build()
 		);
 
 		// Left column, between the fuel (y=20) and tier (y=44) labels: a free 13px spot.
@@ -101,11 +113,11 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 		return Component.translatable(this.menu.isActive() ? "gui.bubbleshield.deactivate" : "gui.bubbleshield.activate");
 	}
 
-	/** Sends the toggled shape, echoing the current (server-synced) diameter/effect/mode/cycle. */
+	/** Sends the toggled shape, echoing the current (server-synced) diameter/effect/mode/cycle/beam. */
 	private void toggleShape() {
 		int toggled = this.menu.shape() == ShieldShape.SPHERE.ordinal() ? ShieldShape.DOME.ordinal() : ShieldShape.SPHERE.ordinal();
 		ClientPlayNetworking.send(new ShieldPayloads.SetSettingsC2S(
-			this.menu.pos(), this.menu.diameter(), this.menu.effectId(), toggled, this.menu.mode(), this.menu.cycleEffect()));
+			this.menu.pos(), this.menu.diameter(), this.menu.effectId(), toggled, this.menu.mode(), this.menu.cycleEffect(), this.menu.beamStyle()));
 	}
 
 	private Component shapeLabel() {
@@ -117,7 +129,7 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 	private void cycleMode() {
 		int next = (this.menu.mode() + 1) % ShieldMode.values().length;
 		ClientPlayNetworking.send(new ShieldPayloads.SetSettingsC2S(
-			this.menu.pos(), this.menu.diameter(), this.menu.effectId(), this.menu.shape(), next, this.menu.cycleEffect()));
+			this.menu.pos(), this.menu.diameter(), this.menu.effectId(), this.menu.shape(), next, this.menu.cycleEffect(), this.menu.beamStyle()));
 	}
 
 	private Component modeLabel() {
@@ -125,6 +137,24 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 			case PULSE -> "gui.bubbleshield.mode.pulse";
 			case ECO -> "gui.bubbleshield.mode.eco";
 			default -> "gui.bubbleshield.mode.defense";
+		});
+	}
+
+	/** Sends the next beam style in the NONE -> AUTO -> STORM -> PULSE -> HELIX -> PRISM cycle. */
+	private void cycleBeam() {
+		int next = (this.menu.beamStyle() + 1) % BeamStyle.values().length;
+		ClientPlayNetworking.send(new ShieldPayloads.SetSettingsC2S(
+			this.menu.pos(), this.menu.diameter(), this.menu.effectId(), this.menu.shape(), this.menu.mode(), this.menu.cycleEffect(), next));
+	}
+
+	private Component beamLabel() {
+		return Component.translatable(switch (BeamStyle.byOrdinal(this.menu.beamStyle())) {
+			case AUTO -> "gui.bubbleshield.beam.auto";
+			case STORM -> "gui.bubbleshield.beam.storm";
+			case PULSE -> "gui.bubbleshield.beam.pulse";
+			case HELIX -> "gui.bubbleshield.beam.helix";
+			case PRISM -> "gui.bubbleshield.beam.prism";
+			default -> "gui.bubbleshield.beam.none";
 		});
 	}
 
@@ -136,9 +166,10 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 		// ContainerData arrives after init(), so the slider must re-sync once the
 		// real diameter shows up (and whenever the server changes it).
 		this.diameterSlider.syncFromMenu();
-		// Same story for the shape and mode: the labels always reflect the synced server state.
+		// Same story for the shape, mode and beam: the labels always reflect the synced server state.
 		this.shapeButton.setMessage(this.shapeLabel());
 		this.modeButton.setMessage(this.modeLabel());
+		this.beamButton.setMessage(this.beamLabel());
 	}
 
 	@Override
@@ -241,16 +272,16 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 			}
 		}
 
-		/** Sends the pending diameter to the server (keeping the synced effect/shape/mode/cycle). */
+		/** Sends the pending diameter to the server (keeping the synced effect/shape/mode/cycle/beam). */
 		private void flush() {
 			if (!this.dirty) {
 				return;
 			}
 
 			this.dirty = false;
-			// The current (server-synced) shape/mode/cycle are echoed back so only the diameter changes.
+			// The current (server-synced) shape/mode/cycle/beam are echoed back so only the diameter changes.
 			ClientPlayNetworking.send(new ShieldPayloads.SetSettingsC2S(
-				this.menu.pos(), this.diameter(), this.menu.effectId(), this.menu.shape(), this.menu.mode(), this.menu.cycleEffect()));
+				this.menu.pos(), this.diameter(), this.menu.effectId(), this.menu.shape(), this.menu.mode(), this.menu.cycleEffect(), this.menu.beamStyle()));
 		}
 
 		@Override
