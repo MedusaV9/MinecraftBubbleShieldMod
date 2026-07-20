@@ -73,20 +73,22 @@ void main() {
     float animAmp = 1.0;
     float strength = ParamsA.y * animAmp;
 
+    float glitchK = min(ParamsA.y, 1.0);
+    float flashK = 1.0 - baseLuma;
     // Scanband tears: a few rows shear sideways each glitch frame.
     // The frame counter wraps at 1024 so the hash input stays small enough
     // for fp32 (an unbounded counter would freeze the glitch within minutes).
     float frame = mod(floor(anim * 5.1279), 1024.0);
     float band = floor(texCoord.y * 20.2533);
     float tearRoll = hash11(band * 7.31 + frame * 13.7);
-    float tear = (tearRoll > 0.85 ? (tearRoll - 0.85) / 0.15 - 0.5 : 0.0) * 0.0596 * ParamsA.y * animAmp;
+    float tear = (tearRoll > 0.85 ? (tearRoll - 0.85) / 0.15 - 0.5 : 0.0) * 0.0596 * glitchK * animAmp;
     vec2 baseOff = vec2(tear, 0.0);
-    float split = (0.004 + abs(tear) * 0.5) * ParamsA.y;
+    float split = (0.004 + abs(tear) * 0.5) * glitchK;
     float red = sampleAt(texCoord + safeOffset(baseOff + vec2(split, 0.0))).r;
     float green = sampleAt(texCoord + safeOffset(baseOff)).g;
     float blue = sampleAt(texCoord + safeOffset(baseOff - vec2(split, 0.0))).b;
     vec3 torn = vec3(red, green, blue);
-    float flash = abs(tear) > 0.0001 ? ParamsB.z : 0.0;
+    float flash = abs(tear) > 0.0001 ? ParamsB.z * flashK : 0.0;
     vec3 outColor = mix(torn, torn * Primary.rgb, flash);
 
     // Overlay: sparse twinkling motes.

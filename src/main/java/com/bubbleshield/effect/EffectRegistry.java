@@ -495,23 +495,23 @@ public final class EffectRegistry {
 		all.add(row(350, 0xB8FFD9, 0x1E4D3A, "kaliset", "vex_wisps", 0, GuardStyle.GLOW, ContextProfile.CROWD_SCALE, "particle.soul_escape", 0.6F, 80, "tint"));
 		all.add(row(351, 0x9FF7C6, 0x0F3D2E, "volumecloud", "soul_procession", 0, GuardStyle.GUST, ContextProfile.NIGHT_BLOOM, "ambient.soul_sand_valley.loop", 0.9F, 145, "chroma"));
 		all.add(row(352, 0xCCFFE2, 0x2A5C40, "chrome", "phantom_flock", 0, GuardStyle.NONE, ContextProfile.NONE, "entity.warden.heartbeat", 1.2F, 210, "bloomglow"));
-		all.add(row(353, 0x8AE8B8, 0x123829, "lavaflow", "sonic_ghosts", 0, GuardStyle.STING, ContextProfile.STORM_CHARGED, "block.sculk_sensor.clicking", 0.6F, 100, "edgeglow"));
+		all.add(row(353, 0x8AE8B8, 0x123829, "voidtendril", "sonic_ghosts", 0, GuardStyle.STING, ContextProfile.STORM_CHARGED, "block.sculk_sensor.clicking", 0.6F, 100, "edgeglow"));
 		all.add(row(354, 0xA8FFCF, 0x1B4A33, "tendrilnet", "ender_watchers", 0, GuardStyle.BLIND, ContextProfile.LOW_HEALTH_FRENZY, "block.sculk_catalyst.bloom", 0.9F, 165, "posterize"));
 		// F71 "Soulfire Procession" (soul teal x ember umber)
 		all.add(row(355, 0x33E0D0, 0x66341A, "ribbonaurora", "wandering_spirits", 0, GuardStyle.SLOW, ContextProfile.HEALTH_HUE, "block.sculk.spread", 1.2F, 230, "kaleido"));
 		all.add(row(356, 0x1FC9C4, 0x4D2914, "frostfern", "graveyard_mist", 0, GuardStyle.DARK, ContextProfile.CROWD_SCALE, "ambient.cave", 0.6F, 120, "moire"));
 		all.add(row(357, 0x55F0E0, 0x804020, "biolume", "spectral_shoal", 0, GuardStyle.GLOW, ContextProfile.NIGHT_BLOOM, "block.portal.ambient", 0.9F, 185, "vignette"));
 		all.add(row(358, 0x0FB8AD, 0x59301C, "hologrid", "wraith_orbs", 0, GuardStyle.GUST, ContextProfile.NONE, "entity.evoker.cast_spell", 1.2F, 250, "desat"));
-		all.add(row(359, 0x47D9D4, 0x73391F, "portalvoid", "seance_circle", 0, GuardStyle.NONE, ContextProfile.STORM_CHARGED, "entity.elder_guardian.ambient", 0.6F, 140, "scanlines"));
+		all.add(row(359, 0x47D9D4, 0x73391F, "emberstorm", "seance_circle", 0, GuardStyle.NONE, ContextProfile.STORM_CHARGED, "entity.elder_guardian.ambient", 0.6F, 140, "scanlines"));
 		// F72 "Phantom Fleet" (phantom grey-blue x storm navy)
 		all.add(row(360, 0x8FA8C9, 0x24344D, "shardtess", "vex_wisps", 1, GuardStyle.STING, ContextProfile.LOW_HEALTH_FRENZY, "block.respawn_anchor.ambient", 0.9F, 205, "posterize"));
 		all.add(row(361, 0x7C99BD, 0x1B2940, "sacredgeo", "soul_procession", 1, GuardStyle.BLIND, ContextProfile.HEALTH_HUE, "ambient.warped_forest.loop", 1.2F, 95, "duotone"));
 		all.add(row(362, 0xA3B8D6, 0x2E4059, "voidtendril", "phantom_flock", 1, GuardStyle.SLOW, ContextProfile.CROWD_SCALE, "block.amethyst_block.chime", 0.6F, 160, "dreamblur"));
 		all.add(row(363, 0x6B8AB0, 0x152238, "crystalrefract", "sonic_ghosts", 1, GuardStyle.DARK, ContextProfile.NIGHT_BLOOM, "entity.glow_squid.ambient", 0.9F, 225, "wobble"));
-		all.add(row(364, 0x97ACC2, 0x1F3147, "kaliset", "ender_watchers", 1, GuardStyle.GLOW, ContextProfile.NONE, "particle.soul_escape", 1.2F, 115, "pixelate"));
+		all.add(row(364, 0x97ACC2, 0x1F3147, "portalvoid", "ender_watchers", 1, GuardStyle.GLOW, ContextProfile.NONE, "particle.soul_escape", 1.2F, 115, "pixelate"));
 		// F73 "Echo Chamber" (sonic teal x sculk black)
 		all.add(row(365, 0x1FD9C2, 0x0A1E1E, "chrome", "wandering_spirits", 1, GuardStyle.GUST, ContextProfile.STORM_CHARGED, "ambient.soul_sand_valley.loop", 0.6F, 180, "scanlines"));
-		all.add(row(366, 0x0DC7B8, 0x05292B, "lavaflow", "graveyard_mist", 1, GuardStyle.NONE, ContextProfile.LOW_HEALTH_FRENZY, "entity.warden.heartbeat", 0.9F, 245, "heathaze"));
+		all.add(row(366, 0x0DC7B8, 0x05292B, "hologrid", "graveyard_mist", 1, GuardStyle.NONE, ContextProfile.LOW_HEALTH_FRENZY, "entity.warden.heartbeat", 0.9F, 245, "heathaze"));
 		all.add(row(367, 0x3BE8D0, 0x11332E, "tendrilnet", "spectral_shoal", 1, GuardStyle.STING, ContextProfile.HEALTH_HUE, "block.sculk_sensor.clicking", 1.2F, 135, "glitch"));
 		all.add(row(368, 0x09B5A6, 0x03211F, "galaxyswirl", "wraith_orbs", 1, GuardStyle.BLIND, ContextProfile.CROWD_SCALE, "block.sculk_catalyst.bloom", 0.6F, 200, "huedrift"));
 		all.add(row(369, 0x2EDFC9, 0x0C2826, "ribbonaurora", "seance_circle", 1, GuardStyle.SLOW, ContextProfile.NIGHT_BLOOM, "block.sculk.spread", 0.9F, 90, "tint"));
@@ -519,10 +519,10 @@ public final class EffectRegistry {
 		all.add(row(370, 0xCC33E6, 0x1A0526, "biolume", "vex_wisps", 2, GuardStyle.DARK, ContextProfile.NONE, "ambient.cave", 1.2F, 155, "pixelate"));
 		all.add(row(371, 0xB81FD9, 0x120421, "hologrid", "soul_procession", 2, GuardStyle.GLOW, ContextProfile.STORM_CHARGED, "block.portal.ambient", 0.6F, 220, "ripple"));
 		all.add(row(372, 0xE059F2, 0x240933, "portalvoid", "phantom_flock", 2, GuardStyle.GUST, ContextProfile.LOW_HEALTH_FRENZY, "entity.evoker.cast_spell", 0.9F, 110, "frostlens"));
-		all.add(row(373, 0xA30DC7, 0x0D021A, "emberstorm", "sonic_ghosts", 2, GuardStyle.NONE, ContextProfile.HEALTH_HUE, "entity.elder_guardian.ambient", 1.2F, 175, "radialblur"));
+		all.add(row(373, 0xA30DC7, 0x0D021A, "kaliset", "sonic_ghosts", 2, GuardStyle.NONE, ContextProfile.HEALTH_HUE, "entity.elder_guardian.ambient", 1.2F, 175, "radialblur"));
 		all.add(row(374, 0xD647EB, 0x1E0730, "shardtess", "ender_watchers", 2, GuardStyle.STING, ContextProfile.CROWD_SCALE, "block.respawn_anchor.ambient", 0.6F, 240, "kaleido"));
 		// F75 "Will-o'-Wisp" (wisp gold x bog green)
-		all.add(row(375, 0xF7E85C, 0x2E4D26, "voidtendril", "wandering_spirits", 2, GuardStyle.BLIND, ContextProfile.NIGHT_BLOOM, "ambient.warped_forest.loop", 0.9F, 130, "tint"));
+		all.add(row(375, 0xF7E85C, 0x2E4D26, "lavaflow", "wandering_spirits", 2, GuardStyle.BLIND, ContextProfile.NIGHT_BLOOM, "ambient.warped_forest.loop", 0.9F, 130, "tint"));
 		all.add(row(376, 0xE8D63B, 0x24401E, "crystalrefract", "graveyard_mist", 2, GuardStyle.SLOW, ContextProfile.NONE, "block.amethyst_block.chime", 1.2F, 195, "chroma"));
 		all.add(row(377, 0xFFF280, 0x3A5C31, "kaliset", "spectral_shoal", 2, GuardStyle.DARK, ContextProfile.STORM_CHARGED, "entity.glow_squid.ambient", 0.6F, 85, "bloomglow"));
 		all.add(row(378, 0xD9C929, 0x1B331A, "volumecloud", "wraith_orbs", 2, GuardStyle.GLOW, ContextProfile.LOW_HEALTH_FRENZY, "particle.soul_escape", 0.9F, 150, "edgeglow"));
@@ -565,10 +565,10 @@ public final class EffectRegistry {
 		all.add(row(409, 0xDEE4ED, 0x7D63A1, "ribbonaurora", "seance_circle", 5, GuardStyle.STING, ContextProfile.HEALTH_HUE, "block.sculk_sensor.clicking", 1.2F, 240, "scanlines"));
 		// F82 "Revenant Forge" (revenant green x rusted iron)
 		all.add(row(410, 0x7ACC29, 0x6B3A24, "biolume", "vex_wisps", 6, GuardStyle.BLIND, ContextProfile.CROWD_SCALE, "block.sculk_catalyst.bloom", 0.6F, 130, "posterize"));
-		all.add(row(411, 0x66B81C, 0x572E1B, "hologrid", "soul_procession", 6, GuardStyle.SLOW, ContextProfile.NIGHT_BLOOM, "block.sculk.spread", 0.9F, 195, "duotone"));
+		all.add(row(411, 0x66B81C, 0x572E1B, "lavaflow", "soul_procession", 6, GuardStyle.SLOW, ContextProfile.NIGHT_BLOOM, "block.sculk.spread", 0.9F, 195, "duotone"));
 		all.add(row(412, 0x8FDE3D, 0x7D482E, "portalvoid", "phantom_flock", 6, GuardStyle.DARK, ContextProfile.NONE, "ambient.cave", 1.2F, 85, "dreamblur"));
-		all.add(row(413, 0x54A312, 0x472414, "emberstorm", "sonic_ghosts", 6, GuardStyle.GLOW, ContextProfile.STORM_CHARGED, "block.portal.ambient", 0.6F, 150, "wobble"));
-		all.add(row(414, 0x85D634, 0x74412A, "shardtess", "ender_watchers", 6, GuardStyle.GUST, ContextProfile.LOW_HEALTH_FRENZY, "entity.evoker.cast_spell", 0.9F, 215, "pixelate"));
+		all.add(row(413, 0x54A312, 0x472414, "shardtess", "sonic_ghosts", 6, GuardStyle.GLOW, ContextProfile.STORM_CHARGED, "block.portal.ambient", 0.6F, 150, "wobble"));
+		all.add(row(414, 0x85D634, 0x74412A, "emberstorm", "ender_watchers", 6, GuardStyle.GUST, ContextProfile.LOW_HEALTH_FRENZY, "entity.evoker.cast_spell", 0.9F, 215, "pixelate"));
 		// F83 "Astral Tide" (astral indigo x moonfoam)
 		all.add(row(415, 0x5C6BE8, 0xD9E8F7, "voidtendril", "wandering_spirits", 6, GuardStyle.NONE, ContextProfile.HEALTH_HUE, "entity.elder_guardian.ambient", 1.2F, 105, "scanlines"));
 		all.add(row(416, 0x4756D9, 0xC7DBEF, "crystalrefract", "graveyard_mist", 6, GuardStyle.STING, ContextProfile.CROWD_SCALE, "block.respawn_anchor.ambient", 0.6F, 170, "heathaze"));

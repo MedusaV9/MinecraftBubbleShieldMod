@@ -86,7 +86,12 @@ void main() {
     vec3 scene = sampleAt(texCoord + safeOffset(grain * 0.012 * frost));
     vec3 iceColor = mix(Secondary.rgb, Primary.rgb, crystals);
     vec3 frosted = mix(scene, iceColor * (0.6 + 0.4 * crystals), 0.5641);
-    vec3 outColor = mix(scene, frosted, frost);
+    // Frost visibility calibration: real rime scatters WHITE over bright
+    // backgrounds (sky), so the frosted layer whitens with baseLuma, and
+    // sparse crystal facets catch glints that keep the sheet readable.
+    frosted = mix(frosted, vec3(1.0), baseLuma * baseLuma * 0.2595 * crystals);
+    float glint = smoothstep(0.8534, 1.0, crystals) * (0.5 + 0.5 * sin(anim * 1.2319 + crystals * 37.0));
+    vec3 outColor = mix(scene, frosted, frost) + iceColor * glint * frost * 0.4;
 
     // Overlay: a faint breathing glow of the effect color at the rim.
     float oBreath = 0.5 + 0.5 * sin(anim * 0.9451 + ParamsB.x * 6.2831);

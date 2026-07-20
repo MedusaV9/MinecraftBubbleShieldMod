@@ -29,7 +29,7 @@
   "100": {
     "family": "glitch",
     "file": "sfx_100.fsh",
-    "lines": 111,
+    "lines": 113,
     "motion": "surge",
     "overlay": "grain",
     "seed": "4097f88a4254d701",
@@ -83,7 +83,7 @@
   "106": {
     "family": "glitch",
     "file": "sfx_106.fsh",
-    "lines": 107,
+    "lines": 109,
     "motion": "surge",
     "overlay": "grain",
     "seed": "7da04b926df9f42c",
@@ -128,7 +128,7 @@
   "110": {
     "family": "frostlens",
     "file": "sfx_110.fsh",
-    "lines": 108,
+    "lines": 113,
     "motion": "surge",
     "overlay": "grain",
     "seed": "3d0abae70f2e9138",
@@ -146,7 +146,7 @@
   "112": {
     "family": "glitch",
     "file": "sfx_112.fsh",
-    "lines": 99,
+    "lines": 101,
     "motion": "surge",
     "overlay": "none",
     "seed": "90c68f810c6a4afe",
@@ -173,7 +173,7 @@
   "115": {
     "family": "frostlens",
     "file": "sfx_115.fsh",
-    "lines": 108,
+    "lines": 113,
     "motion": "surge",
     "overlay": "pulseglow",
     "seed": "29d70fd4109b39e8",
@@ -191,7 +191,7 @@
   "117": {
     "family": "glitch",
     "file": "sfx_117.fsh",
-    "lines": 109,
+    "lines": 111,
     "motion": "steady",
     "overlay": "grain",
     "seed": "76c26ae1f89c7790",
@@ -218,7 +218,7 @@
   "12": {
     "family": "frostlens",
     "file": "sfx_012.fsh",
-    "lines": 102,
+    "lines": 108,
     "motion": "pulse",
     "overlay": "none",
     "seed": "f3be50bb0d4e0909",
@@ -245,7 +245,7 @@
   "122": {
     "family": "frostlens",
     "file": "sfx_122.fsh",
-    "lines": 108,
+    "lines": 114,
     "motion": "drift",
     "overlay": "pulseglow",
     "seed": "da3d97be278cc65c",
@@ -281,7 +281,7 @@
   "126": {
     "family": "glitch",
     "file": "sfx_126.fsh",
-    "lines": 106,
+    "lines": 108,
     "motion": "steady",
     "overlay": "grain",
     "seed": "1571ce65058234b5",
@@ -344,7 +344,7 @@
   "132": {
     "family": "scanlines",
     "file": "sfx_132.fsh",
-    "lines": 105,
+    "lines": 106,
     "motion": "surge",
     "overlay": "grain",
     "seed": "6a9fb17db0105c7f",
@@ -362,7 +362,7 @@
   "134": {
     "family": "edgeglow",
     "file": "sfx_134.fsh",
-    "lines": 99,
+    "lines": 102,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "502832382ffa1171",
@@ -371,7 +371,7 @@
   "135": {
     "family": "frostlens",
     "file": "sfx_135.fsh",
-    "lines": 107,
+    "lines": 112,
     "motion": "drift",
     "overlay": "grain",
     "seed": "6606699025d2dee1",
@@ -380,7 +380,7 @@
   "136": {
     "family": "glitch",
     "file": "sfx_136.fsh",
-    "lines": 104,
+    "lines": 106,
     "motion": "pulse",
     "overlay": "pulseglow",
     "seed": "a71e1b6313f96b1f",
@@ -452,7 +452,7 @@
   "143": {
     "family": "scanlines",
     "file": "sfx_143.fsh",
-    "lines": 94,
+    "lines": 95,
     "motion": "surge",
     "overlay": "none",
     "seed": "67ae230bceb61c2e",
@@ -488,7 +488,7 @@
   "147": {
     "family": "frostlens",
     "file": "sfx_147.fsh",
-    "lines": 108,
+    "lines": 113,
     "motion": "surge",
     "overlay": "sparkle",
     "seed": "e13fa9177d097073",
@@ -506,7 +506,7 @@
   "149": {
     "family": "edgeglow",
     "file": "sfx_149.fsh",
-    "lines": 100,
+    "lines": 103,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "9d8ffaa55bf05abc",
@@ -524,7 +524,7 @@
   "150": {
     "family": "glitch",
     "file": "sfx_150.fsh",
-    "lines": 110,
+    "lines": 112,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "2796cec153769506",
@@ -560,7 +560,7 @@
   "154": {
     "family": "scanlines",
     "file": "sfx_154.fsh",
-    "lines": 105,
+    "lines": 106,
     "motion": "pulse",
     "overlay": "sparkle",
     "seed": "a61a512655b6eab1",
@@ -659,7 +659,7 @@
   "164": {
     "family": "edgeglow",
     "file": "sfx_164.fsh",
-    "lines": 99,
+    "lines": 102,
     "motion": "pulse",
     "overlay": "sparkle",
     "seed": "14afd7af5345a8c7",
@@ -668,7 +668,7 @@
   "165": {
     "family": "frostlens",
     "file": "sfx_165.fsh",
-    "lines": 109,
+    "lines": 114,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "29c6571e9809f5e8",
@@ -677,7 +677,7 @@
   "166": {
     "family": "glitch",
     "file": "sfx_166.fsh",
-    "lines": 100,
+    "lines": 102,
     "motion": "surge",
     "overlay": "none",
     "seed": "314afca685ef64f6",
@@ -749,7 +749,7 @@
   "173": {
     "family": "scanlines",
     "file": "sfx_173.fsh",
-    "lines": 93,
+    "lines": 94,
     "motion": "steady",
     "overlay": "none",
     "seed": "c993c1ae94b9f7fb",
@@ -821,7 +821,7 @@
   "180": {
     "family": "frostlens",
     "file": "sfx_180.fsh",
-    "lines": 107,
+    "lines": 113,
     "motion": "steady",
     "overlay": "grain",
     "seed": "c8dac4baff87d84b",
@@ -830,7 +830,7 @@
   "181": {
     "family": "edgeglow",
     "file": "sfx_181.fsh",
-    "lines": 94,
+    "lines": 97,
     "motion": "drift",
     "overlay": "pulseglow",
     "seed": "30f30d810d30be66",
@@ -839,7 +839,7 @@
   "182": {
     "family": "glitch",
     "file": "sfx_182.fsh",
-    "lines": 104,
+    "lines": 106,
     "motion": "steady",
     "overlay": "pulseglow",
     "seed": "c30eb1a750ce6d34",
@@ -965,7 +965,7 @@
   "195": {
     "family": "edgeglow",
     "file": "sfx_195.fsh",
-    "lines": 93,
+    "lines": 96,
     "motion": "pulse",
     "overlay": "pulseglow",
     "seed": "9075f3bb277ce1d3",
@@ -974,7 +974,7 @@
   "196": {
     "family": "glitch",
     "file": "sfx_196.fsh",
-    "lines": 110,
+    "lines": 112,
     "motion": "pulse",
     "overlay": "sparkle",
     "seed": "fd471016e34fd54c",
@@ -983,7 +983,7 @@
   "197": {
     "family": "frostlens",
     "file": "sfx_197.fsh",
-    "lines": 108,
+    "lines": 113,
     "motion": "pulse",
     "overlay": "sparkle",
     "seed": "a22f2f1a6e71b2f9",
@@ -1010,7 +1010,7 @@
   "2": {
     "family": "edgeglow",
     "file": "sfx_002.fsh",
-    "lines": 98,
+    "lines": 101,
     "motion": "steady",
     "overlay": "grain",
     "seed": "0736febe77bedaa1",
@@ -1064,7 +1064,7 @@
   "204": {
     "family": "scanlines",
     "file": "sfx_204.fsh",
-    "lines": 80,
+    "lines": 82,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "5f87f0970262598b",
@@ -1118,7 +1118,7 @@
   "21": {
     "family": "scanlines",
     "file": "sfx_021.fsh",
-    "lines": 79,
+    "lines": 81,
     "motion": "drift",
     "overlay": "grain",
     "seed": "ae468c33f1ac38e3",
@@ -1145,7 +1145,7 @@
   "212": {
     "family": "edgeglow",
     "file": "sfx_212.fsh",
-    "lines": 100,
+    "lines": 103,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "d607844d87087d70",
@@ -1154,7 +1154,7 @@
   "213": {
     "family": "glitch",
     "file": "sfx_213.fsh",
-    "lines": 111,
+    "lines": 113,
     "motion": "pulse",
     "overlay": "sparkle",
     "seed": "fc7a591b44945969",
@@ -1172,7 +1172,7 @@
   "215": {
     "family": "frostlens",
     "file": "sfx_215.fsh",
-    "lines": 108,
+    "lines": 113,
     "motion": "drift",
     "overlay": "pulseglow",
     "seed": "08596e68d013f18e",
@@ -1208,7 +1208,7 @@
   "219": {
     "family": "scanlines",
     "file": "sfx_219.fsh",
-    "lines": 92,
+    "lines": 93,
     "motion": "pulse",
     "overlay": "none",
     "seed": "16f5408930694cee",
@@ -1298,7 +1298,7 @@
   "228": {
     "family": "edgeglow",
     "file": "sfx_228.fsh",
-    "lines": 99,
+    "lines": 102,
     "motion": "steady",
     "overlay": "grain",
     "seed": "a6507778228bdc64",
@@ -1334,7 +1334,7 @@
   "231": {
     "family": "glitch",
     "file": "sfx_231.fsh",
-    "lines": 110,
+    "lines": 112,
     "motion": "surge",
     "overlay": "grain",
     "seed": "7444cc4e3e842007",
@@ -1343,7 +1343,7 @@
   "232": {
     "family": "frostlens",
     "file": "sfx_232.fsh",
-    "lines": 103,
+    "lines": 108,
     "motion": "drift",
     "overlay": "none",
     "seed": "d4131b5f67715267",
@@ -1415,7 +1415,7 @@
   "24": {
     "family": "edgeglow",
     "file": "sfx_024.fsh",
-    "lines": 88,
+    "lines": 91,
     "motion": "surge",
     "overlay": "none",
     "seed": "fa50912b724fd824",
@@ -1424,7 +1424,7 @@
   "240": {
     "family": "scanlines",
     "file": "sfx_240.fsh",
-    "lines": 73,
+    "lines": 75,
     "motion": "drift",
     "overlay": "pulseglow",
     "seed": "c5035f96e236522c",
@@ -1442,7 +1442,7 @@
   "242": {
     "family": "edgeglow",
     "file": "sfx_242.fsh",
-    "lines": 87,
+    "lines": 90,
     "motion": "steady",
     "overlay": "none",
     "seed": "44091688109a62d7",
@@ -1469,7 +1469,7 @@
   "245": {
     "family": "frostlens",
     "file": "sfx_245.fsh",
-    "lines": 102,
+    "lines": 107,
     "motion": "surge",
     "overlay": "none",
     "seed": "79318340bda8cbf1",
@@ -1505,7 +1505,7 @@
   "249": {
     "family": "glitch",
     "file": "sfx_249.fsh",
-    "lines": 99,
+    "lines": 101,
     "motion": "pulse",
     "overlay": "none",
     "seed": "a7241ebcfcd91b46",
@@ -1595,7 +1595,7 @@
   "258": {
     "family": "frostlens",
     "file": "sfx_258.fsh",
-    "lines": 102,
+    "lines": 107,
     "motion": "pulse",
     "overlay": "none",
     "seed": "be9afa35570a22a2",
@@ -1658,7 +1658,7 @@
   "264": {
     "family": "scanlines",
     "file": "sfx_264.fsh",
-    "lines": 104,
+    "lines": 105,
     "motion": "steady",
     "overlay": "grain",
     "seed": "72ff20bb246d9956",
@@ -1721,7 +1721,7 @@
   "270": {
     "family": "edgeglow",
     "file": "sfx_270.fsh",
-    "lines": 99,
+    "lines": 102,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "3b8211b2b4c59941",
@@ -1748,7 +1748,7 @@
   "273": {
     "family": "scanlines",
     "file": "sfx_273.fsh",
-    "lines": 93,
+    "lines": 94,
     "motion": "surge",
     "overlay": "none",
     "seed": "c63028f9654a37f1",
@@ -1775,7 +1775,7 @@
   "276": {
     "family": "edgeglow",
     "file": "sfx_276.fsh",
-    "lines": 89,
+    "lines": 92,
     "motion": "drift",
     "overlay": "none",
     "seed": "84cfb7252706fcca",
@@ -1793,7 +1793,7 @@
   "278": {
     "family": "frostlens",
     "file": "sfx_278.fsh",
-    "lines": 103,
+    "lines": 109,
     "motion": "drift",
     "overlay": "none",
     "seed": "deb149609af8bba8",
@@ -1802,7 +1802,7 @@
   "279": {
     "family": "glitch",
     "file": "sfx_279.fsh",
-    "lines": 98,
+    "lines": 100,
     "motion": "pulse",
     "overlay": "none",
     "seed": "edf7b82a86d44bb6",
@@ -1811,7 +1811,7 @@
   "28": {
     "family": "edgeglow",
     "file": "sfx_028.fsh",
-    "lines": 99,
+    "lines": 102,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "ff9a4bdb1328545f",
@@ -1874,7 +1874,7 @@
   "286": {
     "family": "edgeglow",
     "file": "sfx_286.fsh",
-    "lines": 100,
+    "lines": 103,
     "motion": "pulse",
     "overlay": "sparkle",
     "seed": "c9b0b21911ebecc1",
@@ -1892,7 +1892,7 @@
   "288": {
     "family": "scanlines",
     "file": "sfx_288.fsh",
-    "lines": 68,
+    "lines": 70,
     "motion": "drift",
     "overlay": "none",
     "seed": "ea21fd14ae5cf577",
@@ -1928,7 +1928,7 @@
   "291": {
     "family": "frostlens",
     "file": "sfx_291.fsh",
-    "lines": 108,
+    "lines": 113,
     "motion": "drift",
     "overlay": "pulseglow",
     "seed": "c8fdaf23209c5666",
@@ -1982,7 +1982,7 @@
   "297": {
     "family": "glitch",
     "file": "sfx_297.fsh",
-    "lines": 112,
+    "lines": 114,
     "motion": "surge",
     "overlay": "sparkle",
     "seed": "59563fd80ad93693",
@@ -2018,7 +2018,7 @@
   "30": {
     "family": "frostlens",
     "file": "sfx_030.fsh",
-    "lines": 109,
+    "lines": 114,
     "motion": "surge",
     "overlay": "sparkle",
     "seed": "ae78e7445349b4b9",
@@ -2045,7 +2045,7 @@
   "302": {
     "family": "scanlines",
     "file": "sfx_302.fsh",
-    "lines": 105,
+    "lines": 106,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "92640b789a77be74",
@@ -2054,7 +2054,7 @@
   "303": {
     "family": "glitch",
     "file": "sfx_303.fsh",
-    "lines": 109,
+    "lines": 111,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "1b616c65e5a0840c",
@@ -2099,7 +2099,7 @@
   "308": {
     "family": "edgeglow",
     "file": "sfx_308.fsh",
-    "lines": 100,
+    "lines": 103,
     "motion": "surge",
     "overlay": "sparkle",
     "seed": "84f27c0a87b1aca5",
@@ -2162,7 +2162,7 @@
   "314": {
     "family": "frostlens",
     "file": "sfx_314.fsh",
-    "lines": 108,
+    "lines": 113,
     "motion": "drift",
     "overlay": "grain",
     "seed": "64491e21f50a29dc",
@@ -2261,7 +2261,7 @@
   "324": {
     "family": "frostlens",
     "file": "sfx_324.fsh",
-    "lines": 103,
+    "lines": 108,
     "motion": "drift",
     "overlay": "none",
     "seed": "c3a3811f6c9fb214",
@@ -2270,7 +2270,7 @@
   "325": {
     "family": "edgeglow",
     "file": "sfx_325.fsh",
-    "lines": 100,
+    "lines": 103,
     "motion": "surge",
     "overlay": "sparkle",
     "seed": "35ca3672893a5ae7",
@@ -2279,7 +2279,7 @@
   "326": {
     "family": "glitch",
     "file": "sfx_326.fsh",
-    "lines": 103,
+    "lines": 105,
     "motion": "steady",
     "overlay": "pulseglow",
     "seed": "874cd085d0c68537",
@@ -2333,7 +2333,7 @@
   "331": {
     "family": "scanlines",
     "file": "sfx_331.fsh",
-    "lines": 94,
+    "lines": 95,
     "motion": "drift",
     "overlay": "none",
     "seed": "6d788eb8ca992b61",
@@ -2378,7 +2378,7 @@
   "336": {
     "family": "glitch",
     "file": "sfx_336.fsh",
-    "lines": 110,
+    "lines": 112,
     "motion": "steady",
     "overlay": "grain",
     "seed": "62a2b7dec3c98013",
@@ -2450,7 +2450,7 @@
   "343": {
     "family": "edgeglow",
     "file": "sfx_343.fsh",
-    "lines": 100,
+    "lines": 103,
     "motion": "drift",
     "overlay": "grain",
     "seed": "44b506254ce69373",
@@ -2468,7 +2468,7 @@
   "345": {
     "family": "scanlines",
     "file": "sfx_345.fsh",
-    "lines": 104,
+    "lines": 105,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "ca35840622c2b3e7",
@@ -2549,7 +2549,7 @@
   "353": {
     "family": "edgeglow",
     "file": "sfx_353.fsh",
-    "lines": 87,
+    "lines": 90,
     "motion": "pulse",
     "overlay": "none",
     "seed": "e0498891971b0122",
@@ -2603,7 +2603,7 @@
   "359": {
     "family": "scanlines",
     "file": "sfx_359.fsh",
-    "lines": 104,
+    "lines": 105,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "cac1251a3a837379",
@@ -2666,7 +2666,7 @@
   "365": {
     "family": "scanlines",
     "file": "sfx_365.fsh",
-    "lines": 68,
+    "lines": 70,
     "motion": "surge",
     "overlay": "none",
     "seed": "be2313487cd75df4",
@@ -2684,7 +2684,7 @@
   "367": {
     "family": "glitch",
     "file": "sfx_367.fsh",
-    "lines": 99,
+    "lines": 101,
     "motion": "surge",
     "overlay": "none",
     "seed": "03058d203b1d818f",
@@ -2738,7 +2738,7 @@
   "372": {
     "family": "frostlens",
     "file": "sfx_372.fsh",
-    "lines": 102,
+    "lines": 107,
     "motion": "drift",
     "overlay": "none",
     "seed": "580c7c3d718f9011",
@@ -2792,7 +2792,7 @@
   "378": {
     "family": "edgeglow",
     "file": "sfx_378.fsh",
-    "lines": 101,
+    "lines": 104,
     "motion": "surge",
     "overlay": "sparkle",
     "seed": "6df3eeba650f3712",
@@ -2810,7 +2810,7 @@
   "38": {
     "family": "scanlines",
     "file": "sfx_038.fsh",
-    "lines": 98,
+    "lines": 99,
     "motion": "pulse",
     "overlay": "pulseglow",
     "seed": "8116603f72cab206",
@@ -2855,7 +2855,7 @@
   "384": {
     "family": "scanlines",
     "file": "sfx_384.fsh",
-    "lines": 98,
+    "lines": 99,
     "motion": "steady",
     "overlay": "pulseglow",
     "seed": "5edba27666b17241",
@@ -2918,7 +2918,7 @@
   "390": {
     "family": "scanlines",
     "file": "sfx_390.fsh",
-    "lines": 98,
+    "lines": 99,
     "motion": "surge",
     "overlay": "pulseglow",
     "seed": "420594b9d091139b",
@@ -2936,7 +2936,7 @@
   "392": {
     "family": "glitch",
     "file": "sfx_392.fsh",
-    "lines": 110,
+    "lines": 112,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "45d44eecd88c9e1a",
@@ -2981,7 +2981,7 @@
   "397": {
     "family": "frostlens",
     "file": "sfx_397.fsh",
-    "lines": 107,
+    "lines": 112,
     "motion": "steady",
     "overlay": "pulseglow",
     "seed": "c684e3aa5a403e55",
@@ -3053,7 +3053,7 @@
   "403": {
     "family": "edgeglow",
     "file": "sfx_403.fsh",
-    "lines": 93,
+    "lines": 96,
     "motion": "drift",
     "overlay": "pulseglow",
     "seed": "61084fc094467d34",
@@ -3107,7 +3107,7 @@
   "409": {
     "family": "scanlines",
     "file": "sfx_409.fsh",
-    "lines": 79,
+    "lines": 81,
     "motion": "pulse",
     "overlay": "sparkle",
     "seed": "3c629a2e7872f268",
@@ -3170,7 +3170,7 @@
   "415": {
     "family": "scanlines",
     "file": "sfx_415.fsh",
-    "lines": 77,
+    "lines": 78,
     "motion": "drift",
     "overlay": "none",
     "seed": "8c7eebb22dfc476b",
@@ -3188,7 +3188,7 @@
   "417": {
     "family": "glitch",
     "file": "sfx_417.fsh",
-    "lines": 99,
+    "lines": 101,
     "motion": "drift",
     "overlay": "none",
     "seed": "4e261034f560cdcf",
@@ -3224,7 +3224,7 @@
   "43": {
     "family": "frostlens",
     "file": "sfx_043.fsh",
-    "lines": 107,
+    "lines": 112,
     "motion": "surge",
     "overlay": "grain",
     "seed": "831cd3c582f0a916",
@@ -3260,7 +3260,7 @@
   "47": {
     "family": "scanlines",
     "file": "sfx_047.fsh",
-    "lines": 87,
+    "lines": 88,
     "motion": "steady",
     "overlay": "grain",
     "seed": "0912b01f725dc802",
@@ -3269,7 +3269,7 @@
   "48": {
     "family": "edgeglow",
     "file": "sfx_048.fsh",
-    "lines": 98,
+    "lines": 101,
     "motion": "steady",
     "overlay": "grain",
     "seed": "17a7324c815fcce0",
@@ -3296,7 +3296,7 @@
   "50": {
     "family": "edgeglow",
     "file": "sfx_050.fsh",
-    "lines": 99,
+    "lines": 102,
     "motion": "drift",
     "overlay": "grain",
     "seed": "51747f813a2134f8",
@@ -3341,7 +3341,7 @@
   "55": {
     "family": "scanlines",
     "file": "sfx_055.fsh",
-    "lines": 103,
+    "lines": 104,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "f8673d43b0e637d5",
@@ -3377,7 +3377,7 @@
   "59": {
     "family": "frostlens",
     "file": "sfx_059.fsh",
-    "lines": 109,
+    "lines": 114,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "7fc54e57098e6366",
@@ -3449,7 +3449,7 @@
   "66": {
     "family": "edgeglow",
     "file": "sfx_066.fsh",
-    "lines": 99,
+    "lines": 102,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "d0a246640929aa11",
@@ -3458,7 +3458,7 @@
   "67": {
     "family": "scanlines",
     "file": "sfx_067.fsh",
-    "lines": 78,
+    "lines": 80,
     "motion": "steady",
     "overlay": "grain",
     "seed": "fbfe9561d296c533",
@@ -3512,7 +3512,7 @@
   "72": {
     "family": "frostlens",
     "file": "sfx_072.fsh",
-    "lines": 106,
+    "lines": 111,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "c20bd90aaa554e05",
@@ -3575,7 +3575,7 @@
   "79": {
     "family": "edgeglow",
     "file": "sfx_079.fsh",
-    "lines": 92,
+    "lines": 95,
     "motion": "steady",
     "overlay": "pulseglow",
     "seed": "f202252979be2f68",
@@ -3584,7 +3584,7 @@
   "8": {
     "family": "scanlines",
     "file": "sfx_008.fsh",
-    "lines": 87,
+    "lines": 88,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "d52b4649c6e4e4d2",
@@ -3602,7 +3602,7 @@
   "81": {
     "family": "glitch",
     "file": "sfx_081.fsh",
-    "lines": 110,
+    "lines": 112,
     "motion": "surge",
     "overlay": "grain",
     "seed": "849a5076c855262a",
@@ -3629,7 +3629,7 @@
   "84": {
     "family": "scanlines",
     "file": "sfx_084.fsh",
-    "lines": 82,
+    "lines": 83,
     "motion": "drift",
     "overlay": "pulseglow",
     "seed": "e11c981d907d38ef",
@@ -3638,7 +3638,7 @@
   "85": {
     "family": "glitch",
     "file": "sfx_085.fsh",
-    "lines": 98,
+    "lines": 100,
     "motion": "steady",
     "overlay": "none",
     "seed": "ba406e2c0ad758a8",
@@ -3674,7 +3674,7 @@
   "89": {
     "family": "edgeglow",
     "file": "sfx_089.fsh",
-    "lines": 101,
+    "lines": 104,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "4833dc3c997e6091",
@@ -3773,7 +3773,7 @@
   "99": {
     "family": "glitch",
     "file": "sfx_099.fsh",
-    "lines": 103,
+    "lines": 105,
     "motion": "pulse",
     "overlay": "pulseglow",
     "seed": "c803ef6343f140b1",

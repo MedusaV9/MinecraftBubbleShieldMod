@@ -54,8 +54,10 @@ void main() {
     float strength = ParamsA.y * animAmp;
 
     // Faint raster grid: both axes carry drifting line sets.
-    float scanY = 0.5 + 0.5 * sin((texCoord.y * ParamsA.z - anim * 0.5563) * 6.2831);
-    float scanX = 0.5 + 0.5 * sin((texCoord.x * ParamsA.z * 0.8469 + anim * 0.3156) * 6.2831);
+    float lineY = min(ParamsA.z, safeInSize.y * 0.25);
+    float lineX = min(ParamsA.z * 0.8469, safeInSize.x * 0.25);
+    float scanY = 0.5 + 0.5 * sin((texCoord.y * lineY - anim * 0.5563) * 6.2831);
+    float scanX = 0.5 + 0.5 * sin((texCoord.x * lineX + anim * 0.3156) * 6.2831);
     float darken = 1.0 - ParamsA.y * animAmp * (0.2090 * scanY + 0.1315 * scanX);
     vec3 outColor = mix(base * darken, base * darken * Primary.rgb, ParamsB.z);
 

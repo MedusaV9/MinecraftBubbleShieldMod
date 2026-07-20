@@ -74,18 +74,20 @@ void main() {
     float animAmp = 0.7 + 0.3 * surge * surge * surge;
     float strength = ParamsA.y * animAmp;
 
+    float glitchK = min(ParamsA.y, 1.0);
+    float flashK = 1.0 - baseLuma;
     // The color channels wander apart and snap back on glitch frames.
     // Frame counter wrapped at 1024: keeps the hash input fp32-friendly.
     float frame = mod(floor(anim * 4.0693), 1024.0);
     float wander = hash11(frame * 17.3) - 0.5;
-    float split = (0.004 + abs(wander) * 0.0168) * ParamsA.y * animAmp;
+    float split = (0.004 + abs(wander) * 0.0168) * glitchK * animAmp;
     vec2 baseOff = vec2(0.0);
     float red = sampleAt(texCoord + safeOffset(baseOff + vec2(split, 0.0))).r;
     float green = sampleAt(texCoord + safeOffset(baseOff)).g;
     float blue = sampleAt(texCoord + safeOffset(baseOff - vec2(split, 0.0))).b;
     vec3 torn = vec3(red, green, blue);
-    float microTear = step(0.9815, hash11(floor(texCoord.y * 90.0) + frame)) * ParamsA.y;
-    vec3 outColor = mix(torn, torn * Primary.rgb, microTear * ParamsB.z * 2.0);
+    float microTear = step(0.9815, hash11(floor(texCoord.y * 90.0) + frame)) * glitchK;
+    vec3 outColor = mix(torn, torn * Primary.rgb, clamp(microTear * ParamsB.z * 2.0 * flashK, 0.0, 1.0));
 
     // Overlay: living film grain (frame counter wrapped at 256 so the
     // hash input stays fp32-friendly across the whole GameTime day).

@@ -60,7 +60,8 @@ void main() {
     float strength = ParamsA.y * animAmp;
 
     // A bright readout band rolls down the raster.
-    float scan = 0.5 + 0.5 * sin(texCoord.y * ParamsA.z * 6.2831 - anim * 3.3858);
+    float lineCount = min(ParamsA.z, safeInSize.y * 0.25);
+    float scan = 0.5 + 0.5 * sin(texCoord.y * lineCount * 6.2831 - anim * 3.3858);
     float bandPos = fract(anim * 0.0554);
     float roll = invsmooth(0.0, 0.0620, abs(texCoord.y - bandPos));
     float darken = 1.0 - ParamsA.y * 0.2919 * scan * animAmp;

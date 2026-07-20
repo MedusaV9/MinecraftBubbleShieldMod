@@ -211,39 +211,54 @@ void main() {
 
     // [palette:gradient3]
     // Runtime 3-stop palette derived from vertexColor.rgb: the dark stop
-    // darkens AND saturates (base*base stays in-hue instead of greying),
-    // the hot stop screen-blends a hue-nudged base toward white. The
-    // owner /color override replaces vertexColor wholesale, so the whole
-    // ramp re-derives from it -- recolor-safe by construction.
+    // darkens AND saturates (base*base stays in-hue instead of greying);
+    // the hot stop is a LUMA-CAPPED CHROMATIC highlight -- a hue-nudged,
+    // saturation-lifted, brightened base whose luma is capped relative to
+    // the base luma, so the highlight can NEVER wash out toward white.
+    // The owner /color override replaces vertexColor wholesale, so the
+    // whole ramp re-derives from it -- recolor-safe by construction.
     vec3 baseCol = vertexColor.rgb;
     vec3 deepStop = baseCol * baseCol * 0.7007;
     vec3 spun = clamp(hueSpin(baseCol, -0.1968), 0.0, 1.0);
-    vec3 hotStop = clamp(1.0 - (1.0 - spun) * (1.0 - spun) * 0.8019, 0.0, 1.0);
+    vec3 hotStop = satLift(spun, 1.3099) * 1.45;
+    float hotLuma = dot(hotStop, vec3(0.299, 0.587, 0.114));
+    float lumaCap = max(0.5246, dot(baseCol, vec3(0.299, 0.587, 0.114)) * 1.7327);
+    hotStop = clamp(hotStop * min(1.0, lumaCap / max(hotLuma, 0.001)), 0.0, 1.0);
+    // Secondary palette color, derived IN-SHADER from vertexColor via the
+    // baked primary->secondary relation (hue angle + sat/value ratios) --
+    // the vertex format has no second color attribute, and deriving both
+    // from the live vertexColor keeps the owner recolor authoritative.
+    vec3 secCol = clamp(satLift(clamp(hueSpin(baseCol, 0.0074), 0.0, 1.0), 1.1086) * 0.5633, 0.0, 1.0);
 
     // [layer:deep:parallax3d_ridge_x4]
     // Interior volume: correlated parallax PLANES of ONE deep field on
-    // the 3D sphere direction. Farther planes show finer features, spin
-    // slower (integer turns/day: the daily wrap lands on a full turn),
-    // slide along the silhouette slope (rimDir is screen-space, so it is
-    // seam-safe) and recede toward the dark stop (aerial perspective).
+    // the 3D sphere direction, composited FRONT-TO-BACK under Beer-
+    // Lambert transmittance -- each plane occludes the ones behind it,
+    // and its light lands in BOTH the color accumulator (per-plane color
+    // receding baseCol -> secCol -> dark stop) and the opacity term that
+    // feeds the alpha. Farther planes show finer features, spin slower
+    // (integer turns/day: the daily wrap lands on a full turn) and slide
+    // along the silhouette slope (rimDir is screen-space: seam-safe).
     vec2 rimDirRaw = vec2(dFdx(sphericalVertexDistance), dFdy(sphericalVertexDistance));
     vec2 rimDir = rimDirRaw / (length(rimDirRaw) + 0.0001);
     vec3 spinAxis = vec3(0.5828, 0.5204, -0.6241);
     vec3 par = rimDir.x * vec3(0.9374, -0.3138, 0.1513) + rimDir.y * vec3(0.3819, -0.6022, 0.7011);
+    float deepTrans = 1.0;
+    vec3 deepCol = vec3(0.0);
     float dp = deepField(rotA(spinAxis, time * 0.146608) * (sdir * 2.6309), time);
-    vec3 deepCol = 1.0000 * dp * baseCol;
-    float deepPat = 1.0000 * dp;
+    deepCol += deepTrans * dp * baseCol;
+    deepTrans *= 1.0 - 0.5326 * clamp(dp, 0.0, 1.0);
     dp = deepField(rotA(spinAxis, time * 0.104720) * (sdir * 3.6047) + par * 0.0581, time);
-    deepCol += 0.4052 * dp * mix(baseCol, deepStop, 0.2813);
-    deepPat += 0.4052 * dp;
+    deepCol += deepTrans * dp * mix(mix(baseCol, secCol, 0.4219), deepStop, 0.1547);
+    deepTrans *= 1.0 - 0.5326 * clamp(dp, 0.0, 1.0);
     dp = deepField(rotA(spinAxis, time * 0.083776) * (sdir * 4.5785) + par * 0.1162, time);
-    deepCol += 0.1641 * dp * mix(baseCol, deepStop, 0.5626);
-    deepPat += 0.1641 * dp;
+    deepCol += deepTrans * dp * mix(mix(baseCol, secCol, 0.8439), deepStop, 0.3094);
+    deepTrans *= 1.0 - 0.5326 * clamp(dp, 0.0, 1.0);
     dp = deepField(rotA(spinAxis, time * 0.068068) * (sdir * 5.5522) + par * 0.1743, time);
-    deepCol += 0.0665 * dp * mix(baseCol, deepStop, 0.8439);
-    deepPat += 0.0665 * dp;
-    deepCol *= 0.7179;
-    deepPat = pow(clamp(deepPat * 0.6113, 0.0, 1.0), 1.2924);
+    deepCol += deepTrans * dp * mix(mix(baseCol, secCol, 1.0000), deepStop, 0.4641);
+    deepTrans *= 1.0 - 0.5326 * clamp(dp, 0.0, 1.0);
+    deepCol *= 0.7962;
+    float deepPat = pow(clamp((1.0 - deepTrans) * 1.0501, 0.0, 1.0), 1.2924);
 
     // [layer:mid:scales_warp2_rotate]
     // Signature structure of this effect, domain-warped and animated.
@@ -276,7 +291,7 @@ void main() {
     float flourish = 0.2362 * sparkle(wuv * 2.0 + 7.7, time * 1.4, midPer.x * 2.0);
     float grain = 0.0965 * (cellHash(floor(wuv * 62.0000) + vec2(floor(time * 6.0), 0.0), 496.0000) - 0.5);
 
-    // Recolor-safe composite v3: the whole pattern is graded through the
+    // Recolor-safe composite v4: the whole pattern is graded through the
     // vertexColor-derived 3-stop ramp (low pattern falls to the DARK stop
     // and low alpha -- never pale grey), the deep volume sits BEHIND the
     // signature structure, and the gradient position leans toward the hot
@@ -288,7 +303,11 @@ void main() {
     float midCover = clamp(1.1404 * mid + 0.6672 * rim, 0.0, 1.0);
     rgb = mix(deepCol, rgb, midCover);
     rgb = satLift(rgb, 1.1060);
-    rgb += hotStop * 0.1561 * smoothstep(0.72, 1.0, pattern);
+    // Hue-preserving soft-clip on the hot crests: brightness saturates
+    // toward the palette's own bright tint (1 - exp(-k * hotStop * x)),
+    // never toward additive white -- rich color instead of pastel.
+    vec3 softHot = 1.0 - exp(-2.6997 * hotStop * (pattern + 0.35 * rim));
+    rgb = mix(rgb, softHot, 0.2061 * smoothstep(0.55, 1.10, pattern));
     vec3 accent = accentPalette(0.9803 + pattern * 0.6715);
     rgb = mix(rgb, rgb * (0.55 + 0.9 * accent), 0.3711);
     // Two-band chromatic dispersion on the rim (thin-film-like), biased
@@ -300,11 +319,12 @@ void main() {
     rgb = mix(rgb, rgb * (0.72 + 0.56 * rimDisp), clamp(rim, 0.0, 1.0) * 0.2132);
     vec3 lineDisp = 0.5 + 0.5 * cos(vec3(0.6452, 0.8065, 1.0) * (rimLine * 0.7417 + baseUV.y * 0.31 + 0.0589) * 6.2831853);
     rgb = mix(rgb, hotStop * (0.62 + 0.50 * lineDisp), clamp(rimLine, 0.0, 1.0) * 0.2188);
-    // Presence alpha: a solid-but-translucent membrane floor wherever the
-    // pattern is present, rising toward the ceiling on bright features;
+    // Presence alpha (family-tuned): a solid-but-translucent membrane
+    // floor wherever the pattern is present, rising toward the ceiling on
+    // bright features, plus the deep volume's own Beer-Lambert opacity;
     // pattern-free areas stay dark AND thin (anti-washout).
     float presence = smoothstep(0.02, 0.30, pattern);
-    float alpha = vertexColor.a * min(0.0512 + 0.3071 * presence + 0.4267 * pattern, 0.7812);
+    float alpha = vertexColor.a * min(0.0512 + 0.3071 * presence + 0.4267 * pattern + 0.1082 * (1.0 - deepTrans), 0.7812);
     vec4 color = vec4(clamp(rgb, 0.0, 1.0), alpha);
     if (color.a < 0.01) {
         discard;

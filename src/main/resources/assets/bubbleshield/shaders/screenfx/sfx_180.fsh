@@ -74,10 +74,11 @@ void main() {
     float animAmp = 1.0;
     float strength = ParamsA.y * animAmp;
 
-    // A thin full-pane rime sheet, heaviest in the corners.
+    // A thin full-pane rime sheet, heaviest in the corners. The floor is
+    // raised (~0.32+) so the sheet stays visible even at screen center.
     float crystals = vnoise(texCoord * ParamsA.z) * 0.55 + vnoise(texCoord * ParamsA.z * 2.7) * 0.45;
     vec2 corner = abs(centered) * 2.0;
-    float frost = clamp(0.2671 + 0.5789 * max(corner.x, corner.y) * crystals, 0.0, 1.0) * strength;
+    float frost = clamp(0.3897 + 0.5789 * max(corner.x, corner.y) * crystals, 0.0, 1.0) * strength;
     vec2 grain = vec2(
         vnoise(texCoord * ParamsA.z + 13.7) - 0.5,
         vnoise(texCoord * ParamsA.z + 71.3) - 0.5
@@ -85,7 +86,12 @@ void main() {
     vec3 scene = sampleAt(texCoord + safeOffset(grain * 0.012 * frost));
     vec3 iceColor = mix(Secondary.rgb, Primary.rgb, crystals);
     vec3 frosted = mix(scene, iceColor * (0.6 + 0.4 * crystals), 0.4798);
-    vec3 outColor = mix(scene, frosted, frost);
+    // Frost visibility calibration: real rime scatters WHITE over bright
+    // backgrounds (sky), so the frosted layer whitens with baseLuma, and
+    // sparse crystal facets catch glints that keep the sheet readable.
+    frosted = mix(frosted, vec3(1.0), baseLuma * baseLuma * 0.3414 * crystals);
+    float glint = smoothstep(0.8185, 1.0, crystals) * (0.5 + 0.5 * sin(anim * 1.3905 + crystals * 37.0));
+    vec3 outColor = mix(scene, frosted, frost) + iceColor * glint * frost * 0.4;
 
     // Overlay: living film grain (frame counter wrapped at 256 so the
     // hash input stays fp32-friendly across the whole GameTime day).

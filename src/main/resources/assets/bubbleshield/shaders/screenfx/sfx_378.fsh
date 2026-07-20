@@ -77,8 +77,11 @@ void main() {
     float gx = (tr + 2.0 * mr + br) - (tl + 2.0 * ml + bl);
     float gy = (bl + 2.0 * bc + br) - (tl + 2.0 * tc + tr);
     float edge = clamp(length(vec2(gx, gy)), 0.0, 1.0);
+    // Additive-family calibration: the glow strength is capped at 1.0 and
+    // attenuated on already-bright pixels so edges accent, not overpower.
+    float glowK = min(strength, 1.0) * (1.0 - 0.5 * baseLuma);
     float breath = 0.5818 + 0.3667 * sin(anim * 1.6973 + ParamsB.x * 6.2831);
-    vec3 outColor = base + Primary.rgb * edge * strength * breath;
+    vec3 outColor = base + Primary.rgb * edge * glowK * breath;
 
     // Overlay: sparse twinkling motes.
     vec2 oCell = floor(texCoord * safeInSize / 11.2417);

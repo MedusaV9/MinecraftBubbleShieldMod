@@ -71,11 +71,12 @@ void main() {
     // CRT rows: per-row sync jitter plus rolling dark scanlines.
     // The frame counter wraps at 1024 so the hash input stays small enough
     // for fp32 (an unbounded counter would freeze the jitter within minutes).
-    float row = floor(texCoord.y * ParamsA.z);
+    float lineCount = min(ParamsA.z, safeInSize.y * 0.25);
+    float row = floor(texCoord.y * lineCount);
     float frame = mod(floor(anim * 8.0), 1024.0);
     float jitter = (hash11(row + frame * 91.7) - 0.5) * 0.0027 * ParamsA.y;
     vec3 scene = sampleAt(texCoord + safeOffset(vec2(jitter, 0.0)));
-    float scan = 0.5 + 0.5 * sin((texCoord.y * ParamsA.z - anim * 0.6465) * 6.2831);
+    float scan = 0.5 + 0.5 * sin((texCoord.y * lineCount - anim * 0.6465) * 6.2831);
     float darken = 1.0 - ParamsA.y * 0.3898 * scan * animAmp;
     vec3 outColor = mix(scene * darken, scene * darken * Primary.rgb, ParamsB.z);
 

@@ -71,7 +71,10 @@ void main() {
     float gx = (tr + 2.0 * mr + br) - (tl + 2.0 * ml + bl);
     float gy = (bl + 2.0 * bc + br) - (tl + 2.0 * tc + tr);
     float edge = clamp(length(vec2(gx, gy)), 0.0, 1.0);
-    vec3 outColor = base + Primary.rgb * edge * strength;
+    // Additive-family calibration: the glow strength is capped at 1.0 and
+    // attenuated on already-bright pixels so edges accent, not overpower.
+    float glowK = min(strength, 1.0) * (1.0 - 0.5 * baseLuma);
+    vec3 outColor = base + Primary.rgb * edge * glowK;
 
     // Overlay: a faint breathing glow of the effect color at the rim.
     float oBreath = 0.5 + 0.5 * sin(anim * 0.5016 + ParamsB.x * 6.2831);

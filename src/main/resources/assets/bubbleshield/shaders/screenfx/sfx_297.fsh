@@ -74,21 +74,23 @@ void main() {
     float animAmp = 0.7 + 0.3 * surge * surge * surge;
     float strength = ParamsA.y * animAmp;
 
+    float glitchK = min(ParamsA.y, 1.0);
+    float flashK = 1.0 - baseLuma;
     // Coarse block dropouts: cells occasionally displace as a chunk.
     // Frame counter wrapped at 1024: keeps the hash input fp32-friendly.
     float frame = mod(floor(anim * 4.3778), 1024.0);
     vec2 cell = floor(texCoord * vec2(9.4194, 6.7916));
     float cellRoll = hash11(cell.x * 3.7 + cell.y * 11.9 + frame * 5.3);
     vec2 jitter = cellRoll > 0.9079
-        ? (vec2(hash11(cellRoll * 91.7), hash11(cellRoll * 47.3)) - 0.5) * 0.0343 * ParamsA.y
+        ? (vec2(hash11(cellRoll * 91.7), hash11(cellRoll * 47.3)) - 0.5) * 0.0343 * glitchK
         : vec2(0.0);
     vec2 baseOff = jitter;
-    float split = 0.003 * ParamsA.y;
+    float split = 0.003 * glitchK;
     float red = sampleAt(texCoord + safeOffset(baseOff + vec2(split, 0.0))).r;
     float green = sampleAt(texCoord + safeOffset(baseOff)).g;
     float blue = sampleAt(texCoord + safeOffset(baseOff - vec2(split, 0.0))).b;
     vec3 torn = vec3(red, green, blue);
-    float flash = length(jitter) > 0.0001 ? ParamsB.z * 1.2 : 0.0;
+    float flash = length(jitter) > 0.0001 ? ParamsB.z * 1.2 * flashK : 0.0;
     vec3 outColor = mix(torn, mix(torn * Primary.rgb, torn * Secondary.rgb, hash11(cellRoll * 3.1)), clamp(flash, 0.0, 1.0));
 
     // Overlay: sparse twinkling motes.

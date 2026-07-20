@@ -84,7 +84,12 @@ void main() {
     vec3 scene = sampleAt(texCoord + safeOffset(grain * 0.012 * frost));
     vec3 iceColor = mix(Secondary.rgb, Primary.rgb, crystals);
     vec3 frosted = mix(scene, iceColor * (0.6 + 0.4 * crystals), 0.4798);
-    vec3 outColor = mix(scene, frosted, frost);
+    // Frost visibility calibration: real rime scatters WHITE over bright
+    // backgrounds (sky), so the frosted layer whitens with baseLuma, and
+    // sparse crystal facets catch glints that keep the sheet readable.
+    frosted = mix(frosted, vec3(1.0), baseLuma * baseLuma * 0.2966 * crystals);
+    float glint = smoothstep(0.8497, 1.0, crystals) * (0.5 + 0.5 * sin(anim * 1.3421 + crystals * 37.0));
+    vec3 outColor = mix(scene, frosted, frost) + iceColor * glint * frost * 0.4;
 
     // Overlay: living film grain (frame counter wrapped at 256 so the
     // hash input stays fp32-friendly across the whole GameTime day).

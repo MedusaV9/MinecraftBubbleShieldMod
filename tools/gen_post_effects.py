@@ -29,14 +29,20 @@ GLSL of every referenced sfx file):
   derived from the FROZEN per-id derivation (paramA = 0.3 + 0.012 * id,
   paramB = 0.4 + ((id * 37) % PARAM_CYCLE) / PARAM_CYCLE; PARAM_CYCLE = 75,
   mirrored from EffectRegistry -- keep in lockstep). Per family:
-      Speed     = paramA for every family (animation rate);
+      Speed     = paramA (animation rate), CLAMPED per family for the
+                  flicker-prone techniques (glitch/scanlines/posterize
+                  min(paramA, 1.55) -- photosensitivity: unclamped, ids near
+                  419 strobe at ~5x the id-104 rate). The clamp only bites
+                  above id 104 (paramA(104) = 1.548), so the frozen V1
+                  contract is untouched. See SPEED_CLAMP;
       Strength  = the family's main knob, same formula the V1 template
                   uniforms used (e.g. tint 0.5*paramB, wobble amplitude
                   0.004*paramB, pixelate mosaic 2+2*paramB, posterize levels
                   5+3*paramB, ... see FAMILY_KNOBS);
       Scale     = the family's frequency/cell knob where one existed
                   (wobble 24, ripple 48, scanlines 160+180*min(paramA, 2.0),
-                  frostlens 10+20*paramA, moire 90+120*paramA), else 0;
+                  frostlens 10+20*min(paramA, 2.0), moire
+                  90+120*min(paramA, 2.0)), else 0;
       Aux       = the family's secondary knob where one existed (bloomglow
                   threshold 0.35+0.25*min(paramA, 1.55), pixelate posterize
                   resolution 24), else 0. The min() clamps only bite above
@@ -604,7 +610,9 @@ FAMILY_KNOBS = {
     # ids do not alias into shimmer soup. No-op for ids 0..141.
     "scanlines":  (lambda a, b: 0.7 * b,        lambda a, b: 160.0 + 180.0 * min(a, 2.0), lambda a, b: 0.0, 0.15),
     "edgeglow":   (lambda a, b: 0.8 * b,        lambda a, b: 0.0,              lambda a, b: 0.0,            0.5),
-    "frostlens":  (lambda a, b: 0.75 * b,       lambda a, b: 10.0 + 20.0 * a,  lambda a, b: 0.0,            0.55),
+    # frostlens' crystal scale is clamped (min(a, 2.0) -> scale <= 50) so high
+    # ids do not shrink the crystals into per-pixel noise. No-op for ids 0..141.
+    "frostlens":  (lambda a, b: 0.75 * b,       lambda a, b: 10.0 + 20.0 * min(a, 2.0), lambda a, b: 0.0,   0.55),
     "heathaze":   (lambda a, b: 0.9 * b,        lambda a, b: 0.0,              lambda a, b: 0.0,            0.12),
     "posterize":  (lambda a, b: 5.0 + 3.0 * b,  lambda a, b: 0.0,              lambda a, b: 0.0,            0.2),
     "radialblur": (lambda a, b: 0.85 * b,       lambda a, b: 0.0,              lambda a, b: 0.0,            0.2),
@@ -613,7 +621,20 @@ FAMILY_KNOBS = {
     "kaleido":    (lambda a, b: 0.5 * b,        lambda a, b: 0.0,              lambda a, b: 0.0,            0.4),
     "huedrift":   (lambda a, b: 0.45 + 0.35 * b, lambda a, b: 0.0,             lambda a, b: 0.0,            0.25),
     "dreamblur":  (lambda a, b: 0.6 * b,        lambda a, b: 0.0,              lambda a, b: 0.0,            0.35),
-    "moire":      (lambda a, b: 0.5 * b,        lambda a, b: 90.0 + 120.0 * a, lambda a, b: 0.0,            0.3),
+    # moire's grating frequency is clamped like scanlines/frostlens (min(a, 2.0)
+    # -> scale <= 330) against high-id aliasing. No-op for ids 0..141.
+    "moire":      (lambda a, b: 0.5 * b,        lambda a, b: 90.0 + 120.0 * min(a, 2.0), lambda a, b: 0.0,  0.3),
+}
+
+# Per-family Speed (ParamsA.x) ceiling: the hard-cut/strobing techniques must
+# not tick faster than ~1.55 (photosensitivity -- an id-419 glitch would
+# otherwise reroll tears at ~5x the id-104 rate). paramA(104) = 1.548, so the
+# clamp is a NO-OP for the frozen ids 0..104; posterize covers its dither
+# variant. Smooth families keep their unclamped ramp.
+SPEED_CLAMP = {
+    "glitch": 1.55,
+    "scanlines": 1.55,
+    "posterize": 1.55,
 }
 
 LUMA_FLOOR = 0.35
@@ -636,7 +657,7 @@ def fx_config(effect_id: int, family: str, primary: list[float], secondary: list
     """Entry order must match the GLSL std140 FxConfig block member order."""
     strength_f, scale_f, aux_f, tint_mix = FAMILY_KNOBS[family]
     params_a = [
-        round(param_a, 4),
+        round(min(param_a, SPEED_CLAMP.get(family, param_a)), 4),
         round(strength_f(param_a, param_b), 5),
         round(scale_f(param_a, param_b), 4),
         round(aux_f(param_a, param_b), 4),

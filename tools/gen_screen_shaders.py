@@ -55,6 +55,21 @@ Design (see /tmp/shader_plan.md section 4.2 and AGENTS.md):
   gameplay-visibility guarantees (both passes are hue-preserving and the
   floor still applies last).
 
+* Per-family calibration (v4, from the 10-way screenshot review):
+  - edgeglow: additive glow rides min(strength, 1.0) * (1 - 0.5*baseLuma)
+    so edges accent bright scenes instead of blowing them out;
+  - glitch: tear/split amplitudes ride min(ParamsA.y, 1.0) and every flash
+    tint is scaled by (1 - baseLuma);
+  - frostlens: the sheet variant's floor is raised to ~0.32+, the frosted
+    layer whitens over bright backgrounds (baseLuma^2 term) and sparse
+    crystal facets carry animated glints, so the rime is actually visible;
+  - scanlines: the line count is resolution-aware -- min(ParamsA.z,
+    safeInSize * 0.25) per axis -- so the raster cannot alias into shimmer
+    soup on small framebuffers.
+  The Speed/scale knobs of the strobe-prone families are additionally
+  clamped on the JSON side (tools/gen_post_effects.py SPEED_CLAMP + the
+  min(paramA, 2.0) scale clamps); ids 0..104 are unaffected by construction.
+
 * Compile safety: conservative GLSL 330 subset only -- const-bounded for loops
   (blur/streak <= 12 taps, 3x3 kernels), no while, no switch, no arrays of
   structs, explicit float literals, every function defined before use, no
@@ -606,16 +621,21 @@ def fam_ripple(v, u):
 
 
 def fam_scanlines(v, u):
+    # Resolution-aware line density: the packed line count is capped at a
+    # quarter of the framebuffer's pixel rows (columns for the vertical
+    # variant) so the raster can never alias into shimmer soup on small
+    # windows -- min(scale, safeInSize * 0.25).
     if v == "horizontal":
         return [
             "// CRT rows: per-row sync jitter plus rolling dark scanlines.",
             "// The frame counter wraps at 1024 so the hash input stays small enough",
             "// for fp32 (an unbounded counter would freeze the jitter within minutes).",
-            "float row = floor(texCoord.y * ParamsA.z);",
+            "float lineCount = min(ParamsA.z, safeInSize.y * 0.25);",
+            "float row = floor(texCoord.y * lineCount);",
             "float frame = mod(floor(anim * 8.0), 1024.0);",
             f"float jitter = (hash11(row + frame * 91.7) - 0.5) * {F(u(0, 0.002, 0.0035))} * ParamsA.y;",
             "vec3 scene = sampleAt(texCoord + safeOffset(vec2(jitter, 0.0)));",
-            f"float scan = 0.5 + 0.5 * sin((texCoord.y * ParamsA.z - anim * {F(u(1, 0.4, 0.7))}) * 6.2831);",
+            f"float scan = 0.5 + 0.5 * sin((texCoord.y * lineCount - anim * {F(u(1, 0.4, 0.7))}) * 6.2831);",
             f"float darken = 1.0 - ParamsA.y * {F(u(2, 0.3, 0.4))} * scan * animAmp;",
             "vec3 outColor = mix(scene * darken, scene * darken * Primary.rgb, ParamsB.z);",
         ], {"hash11", "safeOffset", "sampleAt"}
@@ -623,18 +643,20 @@ def fam_scanlines(v, u):
         return [
             "// Vertical raster columns with per-column shimmer.",
             "// Frame counter wrapped at 1024: keeps the hash input fp32-friendly.",
-            "float col = floor(texCoord.x * ParamsA.z);",
+            "float lineCount = min(ParamsA.z, safeInSize.x * 0.25);",
+            "float col = floor(texCoord.x * lineCount);",
             "float frame = mod(floor(anim * 6.0), 1024.0);",
             f"float jitter = (hash11(col + frame * 47.3) - 0.5) * {F(u(0, 0.002, 0.0035))} * ParamsA.y;",
             "vec3 scene = sampleAt(texCoord + safeOffset(vec2(0.0, jitter)));",
-            f"float scan = 0.5 + 0.5 * sin((texCoord.x * ParamsA.z + anim * {F(u(1, 0.3, 0.6))}) * 6.2831);",
+            f"float scan = 0.5 + 0.5 * sin((texCoord.x * lineCount + anim * {F(u(1, 0.3, 0.6))}) * 6.2831);",
             f"float darken = 1.0 - ParamsA.y * {F(u(2, 0.28, 0.38))} * scan * animAmp;",
             "vec3 outColor = mix(scene * darken, scene * darken * Primary.rgb, ParamsB.z);",
         ], {"hash11", "safeOffset", "sampleAt"}
     if v == "rolling":
         return [
             "// A bright readout band rolls down the raster.",
-            f"float scan = 0.5 + 0.5 * sin(texCoord.y * ParamsA.z * 6.2831 - anim * {F(u(0, 2.0, 3.5))});",
+            "float lineCount = min(ParamsA.z, safeInSize.y * 0.25);",
+            f"float scan = 0.5 + 0.5 * sin(texCoord.y * lineCount * 6.2831 - anim * {F(u(0, 2.0, 3.5))});",
             f"float bandPos = fract(anim * {F(u(1, 0.05, 0.11))});",
             f"float roll = invsmooth(0.0, {F(u(2, 0.06, 0.12))}, abs(texCoord.y - bandPos));",
             f"float darken = 1.0 - ParamsA.y * {F(u(3, 0.25, 0.35))} * scan * animAmp;",
@@ -644,8 +666,10 @@ def fam_scanlines(v, u):
     # grid
     return [
         "// Faint raster grid: both axes carry drifting line sets.",
-        f"float scanY = 0.5 + 0.5 * sin((texCoord.y * ParamsA.z - anim * {F(u(0, 0.3, 0.6))}) * 6.2831);",
-        f"float scanX = 0.5 + 0.5 * sin((texCoord.x * ParamsA.z * {F(u(1, 0.6, 0.9))} + anim * {F(u(2, 0.2, 0.5))}) * 6.2831);",
+        "float lineY = min(ParamsA.z, safeInSize.y * 0.25);",
+        f"float lineX = min(ParamsA.z * {F(u(1, 0.6, 0.9))}, safeInSize.x * 0.25);",
+        f"float scanY = 0.5 + 0.5 * sin((texCoord.y * lineY - anim * {F(u(0, 0.3, 0.6))}) * 6.2831);",
+        f"float scanX = 0.5 + 0.5 * sin((texCoord.x * lineX + anim * {F(u(2, 0.2, 0.5))}) * 6.2831);",
         f"float darken = 1.0 - ParamsA.y * animAmp * ({F(u(3, 0.18, 0.26))} * scanY + {F(u(4, 0.12, 0.2))} * scanX);",
         "vec3 outColor = mix(base * darken, base * darken * Primary.rgb, ParamsB.z);",
     ], set()
@@ -666,24 +690,27 @@ def fam_edgeglow(v, u):
         "float gx = (tr + 2.0 * mr + br) - (tl + 2.0 * ml + bl);",
         "float gy = (bl + 2.0 * bc + br) - (tl + 2.0 * tc + tr);",
         "float edge = clamp(length(vec2(gx, gy)), 0.0, 1.0);",
+        "// Additive-family calibration: the glow strength is capped at 1.0 and",
+        "// attenuated on already-bright pixels so edges accent, not overpower.",
+        "float glowK = min(strength, 1.0) * (1.0 - 0.5 * baseLuma);",
     ]
     if v == "sobel":
         return ["// 3x3 Sobel over scene luma; edges glow in the primary color."] + sobel + [
-            "vec3 outColor = base + Primary.rgb * edge * strength;",
+            "vec3 outColor = base + Primary.rgb * edge * glowK;",
         ], {"lumaAt", "safeOffset"}
     if v == "pulse":
         return ["// Sobel edges whose glow breathes on GameTime."] + sobel + [
             f"float breath = {F(u(0, 0.55, 0.7))} + {F(u(1, 0.3, 0.45))} * sin(anim * {F(u(2, 1.2, 2.2))} + ParamsB.x * 6.2831);",
-            "vec3 outColor = base + Primary.rgb * edge * strength * breath;",
+            "vec3 outColor = base + Primary.rgb * edge * glowK * breath;",
         ], {"lumaAt", "safeOffset"}
     if v == "duo":
         return ["// Direction-split edges: horizontal gradients glow Primary, vertical Secondary."] + sobel + [
             "vec3 glowColor = mix(Secondary.rgb, Primary.rgb, clamp(0.5 + 0.5 * (abs(gx) - abs(gy)) * 2.0, 0.0, 1.0));",
-            "vec3 outColor = base + glowColor * edge * strength;",
+            "vec3 outColor = base + glowColor * edge * glowK;",
         ], {"lumaAt", "safeOffset"}
     # thick
     return ["// Wide-radius Sobel: thick painterly outlines."] + sobel + [
-        f"vec3 outColor = base + Primary.rgb * pow(edge, {F(u(0, 0.6, 0.8))}) * strength * {F(u(1, 0.75, 0.9))};",
+        f"vec3 outColor = base + Primary.rgb * pow(edge, {F(u(0, 0.6, 0.8))}) * glowK * {F(u(1, 0.75, 0.9))};",
     ], {"lumaAt", "safeOffset"}
 
 
@@ -696,7 +723,12 @@ def fam_frostlens(v, u):
         "vec3 scene = sampleAt(texCoord + safeOffset(grain * 0.012 * frost));",
         "vec3 iceColor = mix(Secondary.rgb, Primary.rgb, crystals);",
         f"vec3 frosted = mix(scene, iceColor * (0.6 + 0.4 * crystals), {F(u(9, 0.45, 0.6))});",
-        "vec3 outColor = mix(scene, frosted, frost);",
+        "// Frost visibility calibration: real rime scatters WHITE over bright",
+        "// backgrounds (sky), so the frosted layer whitens with baseLuma, and",
+        "// sparse crystal facets catch glints that keep the sheet readable.",
+        f"frosted = mix(frosted, vec3(1.0), baseLuma * baseLuma * {F(u(7, 0.25, 0.35))} * crystals);",
+        f"float glint = smoothstep({F(u(8, 0.78, 0.86))}, 1.0, crystals) * (0.5 + 0.5 * sin(anim * {F(u(6, 0.8, 1.5))} + crystals * 37.0));",
+        "vec3 outColor = mix(scene, frosted, frost) + iceColor * glint * frost * 0.4;",
     ]
     if v == "creep":
         return [
@@ -713,10 +745,11 @@ def fam_frostlens(v, u):
         ] + refract, {"vnoise", "safeOffset", "sampleAt"}
     if v == "sheet":
         return [
-            "// A thin full-pane rime sheet, heaviest in the corners.",
+            "// A thin full-pane rime sheet, heaviest in the corners. The floor is",
+            "// raised (~0.32+) so the sheet stays visible even at screen center.",
             f"float crystals = vnoise(texCoord * ParamsA.z) * 0.55 + vnoise(texCoord * ParamsA.z * 2.7) * 0.45;",
             "vec2 corner = abs(centered) * 2.0;",
-            f"float frost = clamp({F(u(0, 0.18, 0.28))} + {F(u(1, 0.45, 0.6))} * max(corner.x, corner.y) * crystals, 0.0, 1.0) * strength;",
+            f"float frost = clamp({F(u(0, 0.32, 0.40))} + {F(u(1, 0.45, 0.6))} * max(corner.x, corner.y) * crystals, 0.0, 1.0) * strength;",
         ] + refract, {"vnoise", "safeOffset", "sampleAt"}
     # breath
     return [
@@ -882,6 +915,13 @@ def fam_glitch(v, u):
     # The shear and the RGB split are summed FIRST and clamped once, so the
     # total scene displacement can never exceed the safeOffset bound (the old
     # baseCoord + second safeOffset stacked two clamps to up to 2x the limit).
+    # Calibration: the tear/split amplitudes ride min(ParamsA.y, 1.0) (`glitchK`
+    # below) so high-id strengths cannot over-drive them, and every flash tint
+    # is scaled by (1 - baseLuma) so bright scenes are not blown out further.
+    prelude = [
+        "float glitchK = min(ParamsA.y, 1.0);",
+        "float flashK = 1.0 - baseLuma;",
+    ]
     split_tail = [
         "float red = sampleAt(texCoord + safeOffset(baseOff + vec2(split, 0.0))).r;",
         "float green = sampleAt(texCoord + safeOffset(baseOff)).g;",
@@ -889,61 +929,61 @@ def fam_glitch(v, u):
         "vec3 torn = vec3(red, green, blue);",
     ]
     if v == "tear":
-        return [
+        return prelude + [
             "// Scanband tears: a few rows shear sideways each glitch frame.",
             "// The frame counter wraps at 1024 so the hash input stays small enough",
             "// for fp32 (an unbounded counter would freeze the glitch within minutes).",
             f"float frame = mod(floor(anim * {F(u(0, 5.0, 8.0))}), 1024.0);",
             f"float band = floor(texCoord.y * {F(u(1, 18.0, 30.0))});",
             "float tearRoll = hash11(band * 7.31 + frame * 13.7);",
-            f"float tear = (tearRoll > 0.85 ? (tearRoll - 0.85) / 0.15 - 0.5 : 0.0) * {F(u(2, 0.05, 0.08))} * ParamsA.y * animAmp;",
+            f"float tear = (tearRoll > 0.85 ? (tearRoll - 0.85) / 0.15 - 0.5 : 0.0) * {F(u(2, 0.05, 0.08))} * glitchK * animAmp;",
             "vec2 baseOff = vec2(tear, 0.0);",
-            "float split = (0.004 + abs(tear) * 0.5) * ParamsA.y;",
+            "float split = (0.004 + abs(tear) * 0.5) * glitchK;",
         ] + split_tail + [
-            "float flash = abs(tear) > 0.0001 ? ParamsB.z : 0.0;",
+            "float flash = abs(tear) > 0.0001 ? ParamsB.z * flashK : 0.0;",
             "vec3 outColor = mix(torn, torn * Primary.rgb, flash);",
         ], {"hash11", "safeOffset", "sampleAt"}
     if v == "blocks":
-        return [
+        return prelude + [
             "// Coarse block dropouts: cells occasionally displace as a chunk.",
             "// Frame counter wrapped at 1024: keeps the hash input fp32-friendly.",
             f"float frame = mod(floor(anim * {F(u(0, 4.0, 7.0))}), 1024.0);",
             f"vec2 cell = floor(texCoord * vec2({F(u(1, 6.0, 10.0))}, {F(u(2, 4.0, 8.0))}));",
             "float cellRoll = hash11(cell.x * 3.7 + cell.y * 11.9 + frame * 5.3);",
             f"vec2 jitter = cellRoll > {F(u(3, 0.88, 0.93))}",
-            f"    ? (vec2(hash11(cellRoll * 91.7), hash11(cellRoll * 47.3)) - 0.5) * {F(u(4, 0.025, 0.04))} * ParamsA.y",
+            f"    ? (vec2(hash11(cellRoll * 91.7), hash11(cellRoll * 47.3)) - 0.5) * {F(u(4, 0.025, 0.04))} * glitchK",
             "    : vec2(0.0);",
             "vec2 baseOff = jitter;",
-            "float split = 0.003 * ParamsA.y;",
+            "float split = 0.003 * glitchK;",
         ] + split_tail + [
-            "float flash = length(jitter) > 0.0001 ? ParamsB.z * 1.2 : 0.0;",
+            "float flash = length(jitter) > 0.0001 ? ParamsB.z * 1.2 * flashK : 0.0;",
             "vec3 outColor = mix(torn, mix(torn * Primary.rgb, torn * Secondary.rgb, hash11(cellRoll * 3.1)), clamp(flash, 0.0, 1.0));",
         ], {"hash11", "safeOffset", "sampleAt"}
     if v == "rgbdrift":
-        return [
+        return prelude + [
             "// The color channels wander apart and snap back on glitch frames.",
             "// Frame counter wrapped at 1024: keeps the hash input fp32-friendly.",
             f"float frame = mod(floor(anim * {F(u(0, 3.0, 5.0))}), 1024.0);",
             "float wander = hash11(frame * 17.3) - 0.5;",
-            f"float split = (0.004 + abs(wander) * {F(u(1, 0.01, 0.018))}) * ParamsA.y * animAmp;",
+            f"float split = (0.004 + abs(wander) * {F(u(1, 0.01, 0.018))}) * glitchK * animAmp;",
             "vec2 baseOff = vec2(0.0);",
         ] + split_tail + [
-            f"float microTear = step({F(u(2, 0.96, 0.985))}, hash11(floor(texCoord.y * 90.0) + frame)) * ParamsA.y;",
-            "vec3 outColor = mix(torn, torn * Primary.rgb, microTear * ParamsB.z * 2.0);",
+            f"float microTear = step({F(u(2, 0.96, 0.985))}, hash11(floor(texCoord.y * 90.0) + frame)) * glitchK;",
+            "vec3 outColor = mix(torn, torn * Primary.rgb, clamp(microTear * ParamsB.z * 2.0 * flashK, 0.0, 1.0));",
         ], {"hash11", "safeOffset", "sampleAt"}
     # rowcol
-    return [
+    return prelude + [
         "// Row tears and column jitters interleave on alternating frames.",
         "// Frame counter wrapped at 1024: keeps the hash input fp32-friendly.",
         f"float frame = mod(floor(anim * {F(u(0, 5.0, 8.0))}), 1024.0);",
         f"float rowRoll = hash11(floor(texCoord.y * {F(u(1, 20.0, 32.0))}) * 7.31 + frame * 13.7);",
         f"float colRoll = hash11(floor(texCoord.x * {F(u(2, 14.0, 24.0))}) * 5.13 + frame * 7.9);",
-        f"float tearX = (rowRoll > 0.88 ? rowRoll - 0.88 : 0.0) * {F(u(3, 0.3, 0.5))} * ParamsA.y * animAmp;",
-        f"float tearY = (colRoll > 0.9 ? colRoll - 0.9 : 0.0) * {F(u(4, 0.2, 0.4))} * ParamsA.y * animAmp;",
+        f"float tearX = (rowRoll > 0.88 ? rowRoll - 0.88 : 0.0) * {F(u(3, 0.3, 0.5))} * glitchK * animAmp;",
+        f"float tearY = (colRoll > 0.9 ? colRoll - 0.9 : 0.0) * {F(u(4, 0.2, 0.4))} * glitchK * animAmp;",
         "vec2 baseOff = vec2(tearX, tearY);",
-        "float split = (0.003 + (tearX + tearY) * 0.3) * ParamsA.y;",
+        "float split = (0.003 + (tearX + tearY) * 0.3) * glitchK;",
     ] + split_tail + [
-        "float flash = (tearX + tearY) > 0.0001 ? ParamsB.z : 0.0;",
+        "float flash = (tearX + tearY) > 0.0001 ? ParamsB.z * flashK : 0.0;",
         "vec3 outColor = mix(torn, torn * Primary.rgb, flash);",
     ], {"hash11", "safeOffset", "sampleAt"}
 

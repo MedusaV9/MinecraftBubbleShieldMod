@@ -69,11 +69,12 @@ void main() {
 
     // Vertical raster columns with per-column shimmer.
     // Frame counter wrapped at 1024: keeps the hash input fp32-friendly.
-    float col = floor(texCoord.x * ParamsA.z);
+    float lineCount = min(ParamsA.z, safeInSize.x * 0.25);
+    float col = floor(texCoord.x * lineCount);
     float frame = mod(floor(anim * 6.0), 1024.0);
     float jitter = (hash11(col + frame * 47.3) - 0.5) * 0.0025 * ParamsA.y;
     vec3 scene = sampleAt(texCoord + safeOffset(vec2(0.0, jitter)));
-    float scan = 0.5 + 0.5 * sin((texCoord.x * ParamsA.z + anim * 0.3911) * 6.2831);
+    float scan = 0.5 + 0.5 * sin((texCoord.x * lineCount + anim * 0.3911) * 6.2831);
     float darken = 1.0 - ParamsA.y * 0.3783 * scan * animAmp;
     vec3 outColor = mix(scene * darken, scene * darken * Primary.rgb, ParamsB.z);
 
