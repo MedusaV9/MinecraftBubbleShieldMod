@@ -5,6 +5,7 @@ import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.EffectRegistry;
 import com.bubbleshield.effect.SurfaceTemplate;
 import com.bubbleshield.registry.ModBlocks;
+import com.bubbleshield.shield.BeamStyle;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -40,7 +41,11 @@ import org.slf4j.LoggerFactory;
  * representative effect set (the lowest catalogue id of each of the 24
  * {@link SurfaceTemplate} families), retunes the live shield server-side and captures a
  * framed screenshot of the rendered bubble. Also captures a handful of inside shots
- * (screen post-effect + shield boss bar) and one dome-shape shot.
+ * (screen post-effect + shield boss bar), one dome-shape shot, and — ALWAYS, as part of
+ * the default set — one shot per rendered projector-beam style
+ * ({@code beam_storm/pulse/helix/prism.png}, effect {@value #BEAM_EFFECT_ID} from a
+ * pulled-back camera framing the whole column), so the beam is visually reviewable on
+ * every harness run.
  *
  * <p>Screenshots are written to {@code /tmp/bubble_captures} (NOT the run dir, which
  * Loom clears on every run). Override with env vars:
@@ -49,9 +54,10 @@ import org.slf4j.LoggerFactory;
  *   <li>{@code BUBBLESHIELD_CAPTURE_IDS} — comma-separated effect ids replacing the
  *       default one-per-surface-family outside set;</li>
  *   <li>{@code BUBBLESHIELD_CAPTURE_BEAM} — {@link com.bubbleshield.shield.BeamStyle}
- *       ordinal applied to every capture retune (default 0 = NONE; 2..5 = the rendered
- *       STORM/PULSE/HELIX/PRISM styles), so the beam styles can be screenshotted
- *       without code edits.</li>
+ *       ordinal applied to every NON-beam capture retune (default 0 = NONE; 2..5 = the
+ *       rendered STORM/PULSE/HELIX/PRISM styles), so any effect/beam combination can
+ *       be screenshotted without code edits. The four dedicated beam shots always run
+ *       regardless.</li>
  * </ul>
  */
 public class ShaderScreenshotTest implements FabricClientGameTest {
@@ -65,8 +71,20 @@ public class ShaderScreenshotTest implements FabricClientGameTest {
 	private static final String OUTSIDE_CAMERA = "tp @a -5 -58 0 -90 12";
 	/** Inside camera: ~2 east of the projector, looking east through the bubble's far wall. */
 	private static final String INSIDE_CAMERA = "tp @a 10.5 -60 0.5 -90 5";
+	/**
+	 * Beam camera: pulled back (~20.5 blocks) and pitched up 10 degrees so the whole
+	 * energy column — base flare, membrane crossing and top fade (12 blocks above the
+	 * center at radius 6) — fits the frame.
+	 */
+	private static final String BEAM_CAMERA = "tp @a -12 -58 0 -90 -10";
 	/** Ticks to wait after a server-side effect retune for S2C sync + a few rendered frames. */
 	private static final int SETTLE_TICKS = 20;
+	/**
+	 * Effect used for the dedicated per-beam-style shots: fx_006 (pink/purple "arcs"
+	 * palette 0xFF66E0/0x5500BB) — strongly hued, so any beam whiteout/clipping
+	 * regression is immediately visible against it.
+	 */
+	private static final int BEAM_EFFECT_ID = 6;
 
 	/** Screen-fx families captured from inside the bubble (post-effect + boss bar shots). */
 	private static final List<String> INSIDE_SCREEN_FAMILIES =
@@ -135,7 +153,7 @@ public class ShaderScreenshotTest implements FabricClientGameTest {
 			for (EffectDefinition def : outsideSet()) {
 				String name = String.format(Locale.ROOT, "fx_%03d_%s",
 						def.id(), def.surface().name().toLowerCase(Locale.ROOT));
-				if (capture(ctx, server, def.id(), 0, name, captureDir)) {
+				if (capture(ctx, server, def.id(), 0, beamOrdinal(), name, captureDir)) {
 					captured++;
 				} else {
 					failed++;
@@ -144,10 +162,24 @@ public class ShaderScreenshotTest implements FabricClientGameTest {
 
 			// --- Dome-shape variant, still from outside. ---
 			String domeName = String.format(Locale.ROOT, "dome_fx_%03d", DOME_EFFECT_ID);
-			if (capture(ctx, server, DOME_EFFECT_ID, 1, domeName, captureDir)) {
+			if (capture(ctx, server, DOME_EFFECT_ID, 1, beamOrdinal(), domeName, captureDir)) {
 				captured++;
 			} else {
 				failed++;
+			}
+
+			// --- The four rendered beam styles, ALWAYS captured (default set): ---
+			// fx_006 with beamStyle STORM/PULSE/HELIX/PRISM from the pulled-back
+			// camera, so every harness run leaves reviewable beam PNGs.
+			server.runCommand(BEAM_CAMERA);
+			ctx.waitTicks(10);
+			for (BeamStyle style : BeamStyle.RENDERED) {
+				String name = "beam_" + style.name().toLowerCase(Locale.ROOT);
+				if (capture(ctx, server, BEAM_EFFECT_ID, 0, style.ordinal(), name, captureDir)) {
+					captured++;
+				} else {
+					failed++;
+				}
 			}
 
 			// --- Inside shots: screen post-effect + boss bar, HUD visible. ---
@@ -160,7 +192,7 @@ public class ShaderScreenshotTest implements FabricClientGameTest {
 			ctx.waitTicks(10);
 			for (EffectDefinition def : insideSet()) {
 				String name = String.format(Locale.ROOT, "inside_fx_%03d_%s", def.id(), def.screenTemplate());
-				if (capture(ctx, server, def.id(), 0, name, captureDir)) {
+				if (capture(ctx, server, def.id(), 0, beamOrdinal(), name, captureDir)) {
 					captured++;
 				} else {
 					failed++;
@@ -184,15 +216,15 @@ public class ShaderScreenshotTest implements FabricClientGameTest {
 	}
 
 	/**
-	 * Retunes the live shield to the given effect/shape, waits for sync + render, then
-	 * takes a screenshot. Failures are logged and reported, never abort the batch.
+	 * Retunes the live shield to the given effect/shape/beam, waits for sync + render,
+	 * then takes a screenshot. Failures are logged and reported, never abort the batch.
 	 */
 	private boolean capture(ClientGameTestContext ctx, TestServerContext server,
-			int effectId, int shapeOrdinal, String name, Path captureDir) {
+			int effectId, int shapeOrdinal, int beamStyleOrdinal, String name, Path captureDir) {
 		try {
 			server.runOnServer(mc -> {
 				BubbleShieldBlockEntity shield = (BubbleShieldBlockEntity) mc.overworld().getBlockEntity(PROJECTOR_POS);
-				shield.setSettings(DIAMETER, effectId, shapeOrdinal, 0, false, beamOrdinal());
+				shield.setSettings(DIAMETER, effectId, shapeOrdinal, 0, false, beamStyleOrdinal);
 			});
 			ctx.waitTicks(SETTLE_TICKS);
 			Path png = ctx.takeScreenshot(TestScreenshotOptions.of(name)
@@ -206,7 +238,10 @@ public class ShaderScreenshotTest implements FabricClientGameTest {
 		}
 	}
 
-	/** The {@code BUBBLESHIELD_CAPTURE_BEAM} beam-style ordinal (default 0 = NONE). */
+	/**
+	 * The {@code BUBBLESHIELD_CAPTURE_BEAM} beam-style ordinal (default 0 = NONE),
+	 * applied to the non-beam captures; the dedicated beam shots pass explicit styles.
+	 */
 	private static int beamOrdinal() {
 		String override = System.getenv("BUBBLESHIELD_CAPTURE_BEAM");
 		return override == null || override.isBlank() ? 0 : Integer.parseInt(override.trim());

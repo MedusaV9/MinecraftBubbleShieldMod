@@ -62,9 +62,15 @@ public final class ShieldPipelines {
 	 * binding / depth state to the bubble snippet, but with vanilla's
 	 * {@code BlendFunction.LIGHTNING} (SRC_ALPHA, ONE — verified in the decompiled
 	 * 26.2 {@code BlendFunction}): additive-scaled-by-alpha, so the CPU-side vertex
-	 * alpha profile IS the beam's intensity profile and overlapping shells simply add
+	 * alpha profile IS the beam's intensity profile and the crossed planes simply add
 	 * up. Additive output is order-independent against itself, so no
 	 * {@code sortOnUpload} is needed.
+	 *
+	 * <p>Unlike the bubble, the beam back-face CULLS: additive blending gains nothing
+	 * from back faces (they only double the brightness budget and the overdraw), and
+	 * {@link BeamMesh} re-orients its crossed planes toward the camera every frame
+	 * with front-facing (counter-clockwise) winding, so the front faces are always
+	 * the visible ones.
 	 */
 	private static final RenderPipeline.Snippet BEAM_SNIPPET = RenderPipeline.builder(RenderPipelines.GLOBALS_SNIPPET)
 			.withBindGroupLayout(BindGroupLayouts.MATRICES_PROJECTION)
@@ -76,7 +82,7 @@ public final class ShieldPipelines {
 			.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX_COLOR)
 			.withPrimitiveTopology(PrimitiveTopology.QUADS)
 			.withColorTargetState(new ColorTargetState(BlendFunction.LIGHTNING))
-			.withCull(false)
+			.withCull(true)
 			.withDepthStencilState(new DepthStencilState(CompareOp.GREATER_THAN_OR_EQUAL, false))
 			.buildSnippet();
 

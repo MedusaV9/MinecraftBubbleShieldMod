@@ -116,11 +116,13 @@ public final class ShieldRenderer {
 
 			if (beamStyle != BeamStyle.NONE) {
 				RenderType beamRenderType = ShieldPipelines.beamRenderType(beamStyle.renderIndex());
-				// CPU clock for the moving bright band (the shader patterns run on the
-				// GameTime global); day-modulo keeps float precision on old worlds.
-				float beamTime = (level.getGameTime() % 24000L) / 20.0F;
+				// The beam's crossed planes re-orient toward the camera every frame
+				// (the horizontal camera offset picks the bearing); all animation runs
+				// shader-side on the GameTime global.
+				float camDx = (float) (camera.x - center.x);
+				float camDz = (float) (camera.z - center.z);
 				collector.submitCustomGeometry(poseStack, beamRenderType, (pose, buffer) ->
-						BeamMesh.emit(pose, buffer, radius, argbPrimary, argbSecondary, alphaBase, beamTime));
+						BeamMesh.emit(pose, buffer, radius, argbPrimary, argbSecondary, alphaBase, camDx, camDz));
 			}
 
 			poseStack.popPose();

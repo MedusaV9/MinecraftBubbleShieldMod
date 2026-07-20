@@ -3,19 +3,23 @@
 #moj_import <minecraft:fog.glsl>
 #moj_import <minecraft:globals.glsl>
 
-// Beam surface shader beam_prism -- a calm "tractor beam": broad slow bands
-// drifting up the column, a minor counter-spiral, and a thin-film-style
-// per-channel dispersion so the light splits into spectral fringes.
+// Beam surface shader beam_prism -- the SOLID "tractor beam": the steadiest,
+// fullest column of the four (high body floor, calm slow bands) with a
+// thin-film spectral treatment: per-channel LATERAL dispersion (the R/G/B glow
+// skirts are offset slightly across the beam, splitting the edges into
+// spectral fringes) plus a bounded soap-film interference multiplier.
 // HAND-WRITTEN (not generated; one shader per BeamStyle). Follows the frozen
 // bubble fragment contract: fog+globals imports only, no custom uniforms or
-// textures, GameTime-only animation with day-quantized speeds (every sin
-// speed is an integer multiple of 2*pi/1200), integer u-harmonics across the
-// tube seam, recolor-safe output (the dispersion is a BOUNDED multiplier on
-// the vertexColor-derived rgb, so the owner /color override stays
-// authoritative; final alpha = vertexColor.a * pattern), discard < 0.01,
-// apply_fog last. Rendered with the additive LIGHTNING blend, so alpha is
-// intensity. u = angle fraction, v = height fraction (the outer glow shell
-// flips v, so its bands sink while the core's rise).
+// textures, GameTime-only animation with day-quantized speeds (every sin speed
+// is an integer multiple of 2*pi/1200), recolor-safe output (the dispersion
+// and film terms are BOUNDED per-channel weights on the vertexColor-derived
+// energy, so the owner /color override stays authoritative; the final rgb is a
+// HUE-PRESERVING soft clip 1-exp(-k*palette*energy) that saturates toward the
+// palette's bright tint and NEVER toward white), discard < 0.01, apply_fog
+// last. Rendered with the additive LIGHTNING blend on 2 crossed camera-facing
+// planes: u runs ACROSS the beam width (u = 0.5 is the axis; x = 2u-1 is the
+// signed cross-beam coordinate), v = height fraction with the membrane
+// crossing pinned at v = 0.75 (BeamMesh.APEX_V). No angular seam on a plane.
 
 in vec2 texCoord0;
 in vec4 vertexColor;
@@ -36,31 +40,50 @@ void main() {
     float t = GameTime * 1200.0;
     float u = texCoord0.x;
     float v = texCoord0.y;
+    float x = 2.0 * u - 1.0;
+
+    // Cross-section with per-channel lateral dispersion: the R and B glow
+    // skirts are shifted a touch across the beam, so the column's edges split
+    // into spectral fringes while the center stays palette-true.
+    float xr = x - 0.10;
+    float xb = x + 0.10;
+    vec3 glow3 = vec3(exp(-3.0 * xr * xr), exp(-3.0 * x * x), exp(-3.0 * xb * xb));
+    float glow = glow3.g;
+    float core = exp(-26.0 * x * x);
 
     // Broad slow bands: 3 soft waves over the column height, rising at
-    // 2*pi*50/1200 per second -- the calm tractor-beam body.
+    // 2*pi*50/1200 per second -- the calm tractor-beam body motion.
     float bands = 0.5 + 0.5 * sin(v * 18.8495559 - t * 0.2617994);
-    bands = pow(bands, 1.5);
+    bands = bands * bands * (0.6 + 0.4 * bands);
 
-    // Minor counter-spiral: one integer harmonic around the tube, 2 turns
-    // over the height, rotating at 2*pi*70/1200 per second the other way.
-    float spiral = pow(0.5 + 0.5 * sin(u * 6.2831853 + v * 12.5663706 + t * 0.3665191), 3.0);
+    // Gentle iridescent sheen sweeping the height (2*pi*20/1200 per second).
+    float sheen = 0.5 + 0.5 * sin(v * 6.2831853 + x * 2.0 + t * 0.1047198);
 
-    // Gentle iridescent shimmer sweeping the height (2*pi*20/1200 per second).
-    float sheen = 0.5 + 0.5 * sin(v * 6.2831853 + u * 6.2831853 + t * 0.1047198);
+    // Base impact flare at the projector and an apex bloom + faint ring where
+    // the beam pierces the membrane (pinned at v = 0.75 by BeamMesh).
+    float flare = exp(-10.0 * v) * exp(-1.8 * x * x);
+    float av = v - 0.75;
+    float apex = exp(-180.0 * av * av);
+    float ringx = abs(x) - 0.62;
+    float apexRing = apex * exp(-60.0 * ringx * ringx);
 
-    float body = 0.34;
-    float pattern = clamp(body + 0.75 * bands + 0.45 * spiral + 0.15 * sheen, 0.0, 1.5);
+    // SOLID body: the highest floor of the four styles; bands modulate gently
+    // on top instead of carving the column apart.
+    vec3 energy = glow3 * (0.34 + 0.22 * bands + 0.08 * sheen)
+            + vec3(core) * (0.55 + 0.15 * bands)
+            + vec3(flare) * 0.8
+            + vec3(apex * 0.40 * glow + apexRing * 0.35);
 
-    // Recolor-safe composite: the palette rides vertexColor.rgb, then the
-    // spectral dispersion multiplies it as a bounded (0.55..1.45) factor keyed
-    // to the band phase -- fringes split into rainbow hues on any base color.
-    vec3 rgb = vertexColor.rgb * (0.55 + 0.85 * pattern);
-    vec3 film = thinFilm(0.35 + 0.9 * bands + 0.4 * v + 0.25 * spiral);
-    rgb = rgb * (0.55 + 0.9 * film);
-    rgb = mix(rgb, vec3(1.0), 0.25 * smoothstep(0.95, 1.4, pattern));
+    // Bounded (0.55..1.45) soap-film multiplier keyed to the band phase and
+    // the cross-beam position -- spectral fringes on any base palette.
+    vec3 film = thinFilm(0.35 + 0.9 * bands + 0.30 * abs(x) + 0.25 * v);
+    energy *= 0.55 + 0.9 * film;
 
-    float alpha = vertexColor.a * clamp(pattern, 0.0, 1.0);
+    // HUE-PRESERVING soft clip: the column saturates toward the palette's
+    // bright tint (zero channels never light up), never toward white.
+    vec3 rgb = 1.0 - exp(-2.6 * vertexColor.rgb * energy);
+
+    float alpha = vertexColor.a * clamp(dot(energy, vec3(0.3333333)), 0.0, 1.0);
     vec4 color = vec4(clamp(rgb, 0.0, 1.0), alpha);
     if (color.a < 0.01) {
         discard;
