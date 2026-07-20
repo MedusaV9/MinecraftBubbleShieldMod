@@ -29,6 +29,10 @@ fabricApi {
 	configureTests {
 		createSourceSet = false
 		eula = true
+		// Adds the runClientGameTest task (visual screenshot harness, see
+		// com.bubbleshield.clienttest.ShaderScreenshotTest). Independent from the
+		// server gametests run by runGameTest.
+		enableClientGameTests = true
 	}
 }
 
