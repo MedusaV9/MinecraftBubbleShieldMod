@@ -152,7 +152,10 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 		});
 	}
 
-	/** Sends the next beam style in the NONE -> AUTO -> STORM -> PULSE -> HELIX -> PRISM cycle. */
+	/**
+	 * Sends the next beam style in the NONE -> AUTO -> STORM -> PULSE -> HELIX ->
+	 * PRISM -> VOID -> EMBER -> RUNIC -> FROST cycle.
+	 */
 	private void cycleBeam() {
 		int next = (this.menu.beamStyle() + 1) % BeamStyle.values().length;
 		ClientPlayNetworking.send(new ShieldPayloads.SetSettingsC2S(
@@ -166,6 +169,10 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 			case PULSE -> "gui.bubbleshield.beam.pulse";
 			case HELIX -> "gui.bubbleshield.beam.helix";
 			case PRISM -> "gui.bubbleshield.beam.prism";
+			case VOID -> "gui.bubbleshield.beam.void";
+			case EMBER -> "gui.bubbleshield.beam.ember";
+			case RUNIC -> "gui.bubbleshield.beam.runic";
+			case FROST -> "gui.bubbleshield.beam.frost";
 			default -> "gui.bubbleshield.beam.none";
 		});
 	}

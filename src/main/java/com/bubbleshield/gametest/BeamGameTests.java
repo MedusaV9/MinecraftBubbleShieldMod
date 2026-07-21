@@ -203,7 +203,7 @@ public class BeamGameTests {
 		// The receiver-side clamp expression (mirrored from ServerNet's SetSettings
 		// handler) maps any payload value into the valid ordinal range first.
 		int max = BeamStyle.values().length - 1;
-		helper.assertTrue(Mth.clamp(99, 0, max) == max && BeamStyle.byOrdinal(Mth.clamp(99, 0, max)) == BeamStyle.PRISM,
+		helper.assertTrue(Mth.clamp(99, 0, max) == max && BeamStyle.byOrdinal(Mth.clamp(99, 0, max)) == BeamStyle.FROST,
 				"the receiver clamp should map 99 to the last style");
 		helper.assertTrue(Mth.clamp(-7, 0, max) == 0 && BeamStyle.byOrdinal(Mth.clamp(-7, 0, max)) == BeamStyle.NONE,
 				"the receiver clamp should map negatives to NONE");
@@ -243,13 +243,14 @@ public class BeamGameTests {
 		}
 
 		// Golden spot-checks (surface families verified against the frozen rows):
-		// effect 0 = AURORA (ordinal 3 % 4 = 3) -> PRISM; effect 74 = RINGS
-		// (ordinal 5 % 4 = 1) -> PULSE; effect 104 = INTERFERENCE (ordinal 11 % 4
-		// = 3) -> PRISM.
+		// effect 0 = AURORA (ordinal 3 % 8 = 3) -> PRISM; effect 74 = RINGS
+		// (ordinal 5 % 8 = 5) -> EMBER; effect 104 = INTERFERENCE (ordinal 11 % 8
+		// = 3) -> PRISM. (The RENDERED growth from 4 to 8 styles intentionally
+		// redistributed the AUTO presets: RINGS moved from PULSE to EMBER.)
 		helper.assertTrue(EffectRegistry.get(0).beamPreset() == BeamStyle.PRISM,
 				"effect 0 (AURORA) should derive PRISM, got " + EffectRegistry.get(0).beamPreset());
-		helper.assertTrue(EffectRegistry.get(74).beamPreset() == BeamStyle.PULSE,
-				"effect 74 (RINGS) should derive PULSE, got " + EffectRegistry.get(74).beamPreset());
+		helper.assertTrue(EffectRegistry.get(74).beamPreset() == BeamStyle.EMBER,
+				"effect 74 (RINGS) should derive EMBER, got " + EffectRegistry.get(74).beamPreset());
 		helper.assertTrue(EffectRegistry.get(104).beamPreset() == BeamStyle.PRISM,
 				"effect 104 (INTERFERENCE) should derive PRISM, got " + EffectRegistry.get(104).beamPreset());
 		helper.succeed();

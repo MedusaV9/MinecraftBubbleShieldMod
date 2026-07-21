@@ -43,7 +43,7 @@ import org.slf4j.LoggerFactory;
  * framed screenshot of the rendered bubble. Also captures a handful of inside shots
  * (screen post-effect + shield boss bar), one dome-shape shot, and — ALWAYS, as part of
  * the default set — one shot per rendered projector-beam style
- * ({@code beam_storm/pulse/helix/prism.png}, effect {@value #BEAM_EFFECT_ID} from a
+ * ({@code beam_<style>.png} for every {@code BeamStyle.RENDERED} entry, effect {@value #BEAM_EFFECT_ID} from a
  * pulled-back camera framing the whole column), so the beam is visually reviewable on
  * every harness run.
  *
@@ -54,10 +54,10 @@ import org.slf4j.LoggerFactory;
  *   <li>{@code BUBBLESHIELD_CAPTURE_IDS} — comma-separated effect ids replacing the
  *       default one-per-surface-family outside set;</li>
  *   <li>{@code BUBBLESHIELD_CAPTURE_BEAM} — {@link com.bubbleshield.shield.BeamStyle}
- *       ordinal applied to every NON-beam capture retune (default 0 = NONE; 2..5 = the
- *       rendered STORM/PULSE/HELIX/PRISM styles), so any effect/beam combination can
- *       be screenshotted without code edits. The four dedicated beam shots always run
- *       regardless.</li>
+ *       ordinal applied to every NON-beam capture retune (default 0 = NONE; 2..9 = the
+ *       rendered STORM/PULSE/HELIX/PRISM/VOID/EMBER/RUNIC/FROST styles), so any
+ *       effect/beam combination can be screenshotted without code edits. The dedicated
+ *       per-style beam shots always run regardless.</li>
  * </ul>
  */
 public class ShaderScreenshotTest implements FabricClientGameTest {
@@ -168,8 +168,8 @@ public class ShaderScreenshotTest implements FabricClientGameTest {
 				failed++;
 			}
 
-			// --- The four rendered beam styles, ALWAYS captured (default set): ---
-			// fx_006 with beamStyle STORM/PULSE/HELIX/PRISM from the pulled-back
+			// --- Every rendered beam style, ALWAYS captured (default set): ---
+			// fx_006 with each BeamStyle.RENDERED entry from the pulled-back
 			// camera, so every harness run leaves reviewable beam PNGs.
 			server.runCommand(BEAM_CAMERA);
 			ctx.waitTicks(10);

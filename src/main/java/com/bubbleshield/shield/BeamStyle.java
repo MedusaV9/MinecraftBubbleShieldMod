@@ -23,7 +23,11 @@ public enum BeamStyle {
 	STORM,
 	PULSE,
 	HELIX,
-	PRISM;
+	PRISM,
+	VOID,
+	EMBER,
+	RUNIC,
+	FROST;
 
 	private static final BeamStyle[] VALUES = values();
 
@@ -31,7 +35,7 @@ public enum BeamStyle {
 	 * The rendered styles (everything past NONE/AUTO), indexable by
 	 * {@link #renderIndex()}. Cached; never mutate.
 	 */
-	public static final BeamStyle[] RENDERED = {STORM, PULSE, HELIX, PRISM};
+	public static final BeamStyle[] RENDERED = {STORM, PULSE, HELIX, PRISM, VOID, EMBER, RUNIC, FROST};
 
 	/** @return the style with the given ordinal, clamped to the valid range (default {@link #NONE}). */
 	public static BeamStyle byOrdinal(int ordinal) {
@@ -39,7 +43,7 @@ public enum BeamStyle {
 	}
 
 	/**
-	 * @return this style's index into {@link #RENDERED} (0 = STORM .. 3 = PRISM), or -1
+	 * @return this style's index into {@link #RENDERED} (0 = STORM .. 7 = FROST), or -1
 	 * for the non-rendered NONE/AUTO. The client clamps defensively before indexing
 	 * its render-type array, so a stale/foreign ordinal can never go out of bounds.
 	 */

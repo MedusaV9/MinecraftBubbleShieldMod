@@ -88,11 +88,12 @@ public final class ShieldPipelines {
 
 	/**
 	 * The rendered beam styles, in {@link BeamStyle#RENDERED} order (STORM, PULSE,
-	 * HELIX, PRISM). A small fixed NAMED set — one hand-written shader per style under
+	 * HELIX, PRISM, VOID, EMBER, RUNIC, FROST). A small fixed NAMED set — one
+	 * hand-written shader per style under
 	 * {@code assets/bubbleshield/shaders/beam/beam_<name>.fsh} — unlike the per-effect
 	 * fx_* set, so their registration cost is negligible.
 	 */
-	private static final String[] BEAM_STYLE_NAMES = {"storm", "pulse", "helix", "prism"};
+	private static final String[] BEAM_STYLE_NAMES = {"storm", "pulse", "helix", "prism", "void", "ember", "runic", "frost"};
 
 	private static final RenderType[] RENDER_TYPES = buildRenderTypes();
 	private static final RenderType[] BEAM_RENDER_TYPES = buildBeamRenderTypes();
@@ -140,7 +141,7 @@ public final class ShieldPipelines {
 
 	/**
 	 * The render type for a rendered beam style, by {@code BeamStyle.renderIndex()}
-	 * (0 = STORM .. 3 = PRISM). Indices are clamped defensively so a stale/foreign
+	 * (0 = STORM .. 7 = FROST). Indices are clamped defensively so a stale/foreign
 	 * synced ordinal can never index out of bounds.
 	 */
 	public static RenderType beamRenderType(int styleIndex) {
