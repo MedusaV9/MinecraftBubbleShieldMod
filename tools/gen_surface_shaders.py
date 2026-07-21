@@ -245,12 +245,9 @@ Design (see /tmp/shader_plan.md sections 1, 2, 4.1 and AGENTS.md):
     atlas influence (mid lift, body grade, emission) now fades to its
     no-atlas value at the caps via atlasPoleW (latitude smoothstep).
   - STROBE-FREE EMISSION (photosensitivity): the emissive add never
-    oscillates faster than ~2 Hz. Flicker-anim files sample the atlas from a
-    SMOOTH `tuv` twin (same drift, plain time, never the jumped ft) and
-    drive the emission from smooth-domain terms only; the LIGHTNING /
-    HOLOGRID / HOLOPARALLAX composers export a strobe-free `emitMid` copy of
-    their signature for the emission drive (the visible strobe stays in the
-    color pattern only).
+    oscillates faster than ~2 Hz. (Superseded by v10: the visible PATTERN
+    itself is now strobe-free everywhere, so the v7 emitMid/tuv twin
+    machinery is gone and the emission drives from `pattern` directly.)
   - WASH GUARD: the emissive gain and the emitCol white-mix both fall off
     with the palette's own luma (computed from the LIVE vertexColor --
     recolor-safe), so bright palettes (CHROME/MOIRE pastels) glow in hue
@@ -294,8 +291,9 @@ Design (see /tmp/shader_plan.md sections 1, 2, 4.1 and AGENTS.md):
     of its own height field at half-cycle-offset fract phases and
     crossfaded by phase distance -- the energy visibly CRAWLS. The phase
     speed completes integer cycles/day (day-wrap-safe) and the flow vector
-    is a function of the seam-periodic texUV domain (u = 0/1 safe); flicker
-    files keep riding the SMOOTH tuv twin (no strobe in the atlas domain).
+    is a function of the seam-periodic texUV domain (u = 0/1 safe); the
+    flicker anim's domain is itself smooth since v10, so the atlas rides
+    the shared wuv domain in every anim mode.
   - DEPTH-SOFT EDGES: bodyAlpha *= smoothstep(0, softDist, sceneViewDist -
     fragViewDist) with both distances linearized from the reverse-Z ProjMat
     (viewDist helper), so the shield melts into terrain instead of a hard
@@ -335,6 +333,41 @@ Design (see /tmp/shader_plan.md sections 1, 2, 4.1 and AGENTS.md):
     center the view-space normal's xy vanishes, which is exactly why flat
     families (holoparallax) never visibly refracted -- the texture-slope
     term keeps the backdrop wobbling there like real relief glass.
+
+* v10 "real refractive shield" pass (EVERY file):
+  - VISIBLE REFRACTION: the TRANSLUCENT pipeline computes framebuffer =
+    shieldRGB * a + sceneRGB * (1 - a), so the shader's refracted scene
+    sample was being RE-BLENDED over the straight background at net
+    ~0.70 alpha and the bend washed out. The refraction body-alpha floor
+    rises to 0.92-0.97 by family, the final ceiling to <= 0.985, and the
+    CPU vertex alpha (ShieldRenderer) to 0.95 at full health -- where
+    refraction is active, framebuffer ~= refractedScene and the backdrop
+    VISIBLY bends. The energy-overlay base drops so gaps stay glassy;
+    dissolve authority is untouched (vertexColor.a stays outermost).
+  - FRESNEL RIM: fresGlow/fresRim/energyFres all rise -- edges now clearly
+    glow brighter than the refraction-dominated body.
+  - NEAR-WHITE WASH GUARD ([layer:wash:high_luma]): washHi =
+    smoothstep(0.55, 0.85, baseLuma) cuts the specular add, the emissive
+    add + white-mix, the fresnel glow and the energy overlay much harder
+    for near-white palettes (chrome/crystal) ONLY, compresses the whole
+    energy body pre-clip (near-white crests otherwise all clip to 1.0 and
+    flatten into one sheet) and darkens the low-pattern body so structure
+    shows; dark palettes are untouched. Recolor-safe: washHi derives from
+    the live vertexColor.
+  - PATTERN-LEVEL PHOTOSENSITIVITY: every >2 Hz discontinuity in the
+    VISIBLE pattern is gone -- LIGHTNING's 3-6 Hz hash gate + 6.4 Hz sin
+    strobe became a smooth two-sine surge (<= ~1.8 Hz), HOLOGRID's 6-11 Hz
+    and HOLOPARALLAX's 8-14 Hz hash flickers became smooth <= ~1.5 Hz
+    sines, the flicker anim's 2-5 Hz hash domain jump became a smooth
+    two-sine phase wander (<= ~1.8 Hz), and the micro-grain reseed dropped
+    6 Hz -> 2 Hz. The v7 emitMid/tuv strobe-isolation machinery is
+    therefore gone (pattern is safe at the source).
+  - LIGHTNING LEGIBILITY: sharper bolt cut, halved micro grain and a 0.55
+    deep-volume weight so the bolt filaments read instead of a noise ball.
+  - MOTIF SALIENCE: envelope floors rise to ~0.45-0.55 (was 0.10-0.15),
+    elements grow (sigma 0.050-0.085; wider sigil bands/scan bars/cores)
+    and the gain rises to 0.90-1.35 -- the per-id fingerprint stays
+    identifiable BETWEEN pulses, still <= 2 Hz.
 
 * Compile safety: conservative GLSL 330 subset only -- const-bounded for
   loops (fbm <= 6 octaves, parallax <= 4 taps, voronoi 3x3/5x5), no while, no
@@ -598,16 +631,14 @@ for _tile, _fams in _tile_occupants.items():
 # it -- v7 remaps its texDetail range and boosts its emission mask.
 STARFIELD_TILE = 8
 
-# Families whose MID signature carries a >2 Hz strobe/gate multiplier
-# (LIGHTNING's hash gate + 6.4 Hz sin, HOLOGRID's 6..11 Hz hash flicker,
-# HOLOPARALLAX's 8..14 Hz hash flicker). Their composers also define a
-# STROBE-FREE `emitMid` copy of the signature, and the [layer:emit] drive
-# uses it instead of `pattern` -- the visible strobe stays in the color
-# pattern, but the emissive add must never oscillate above ~2 Hz
-# (photosensitivity). The bool records whether that family's emitMid rides
-# the wuv domain (then a flicker-anim id must fall back to texDetail, since
-# wuv itself jumps at 2..5 Hz there).
-STROBE_MID_FAMILIES = {"LIGHTNING": False, "HOLOGRID": False, "HOLOPARALLAX": True}
+# v10: there are NO strobing mid signatures left. The former >2 Hz
+# strobe/gate multipliers (LIGHTNING's 3-6 Hz hash gate + 6.4 Hz sin,
+# HOLOGRID's 6..11 Hz and HOLOPARALLAX's 8..14 Hz hash flickers, and the
+# flicker anim's 2..5 Hz domain jumps) were all replaced by SMOOTH <= ~2 Hz
+# quantized-sine motion directly in the visible pattern -- photosensitivity
+# safety now holds in the pattern itself, not just the emissive add, so the
+# v7 strobe-free `emitMid` twins and the STROBE_MID_FAMILIES special-casing
+# are gone and the emission drives from `pattern` everywhere.
 
 # v7 per-family override of the v5 ghost-alpha floor range (draw index 68):
 # GRAVLENS is a sparse near-black starfield, so the luminance-weighted ghost
@@ -1572,18 +1603,18 @@ def mid_composer(family: str, c: dict):
         ], [])
     if family == "LIGHTNING":
         # 3D: bolts live on the rotating sphere direction with a quantized
-        # sin sway (day-safe); the strobe gate reseeds at the wrap as before.
-        # v7: `emitMid` is the STROBE-FREE bolt mask -- the strobe stays in
-        # the color pattern, but the emissive add must not flash at 3-6 Hz
-        # (photosensitivity), so the [layer:emit] drive uses emitMid instead.
-        return (["fbm3", "hash11"], [
+        # sin sway (day-safe). v10 photosensitivity fix: the old hash gate
+        # (3-6 Hz hard switch) + 6.4 Hz sin strobe are GONE -- the bolts now
+        # surge under two summed smooth sines, both <= ~1.8 Hz (and their
+        # sum stays continuous, no discontinuous domain jumps). The bolt
+        # mask itself is cut sharper (higher abs multiplier) so the bolt
+        # signature reads as filaments instead of a washed noise ball.
+        return (["fbm3"], [
             f"vec3 lw3 = mdir + vec3(0.0, {F(u(46, 0.30, 0.60))} * sin(time * {qs(47, 0.15, 0.35)}), 0.0);",
             "float n = fbm3(lw3);",
-            f"float bolt = pow(clamp(1.0 - abs(2.0 * n - 1.0) * {F(u(41, 1.1, 1.5))}, 0.0, 1.0), {F(u(42, 9.0, 15.0))});",
-            f"float gate = step({F(u(43, 0.35, 0.55))}, hash11(floor(time * {F(u(44, 3.0, 6.0))})));",
-            f"float strobe = 0.35 + 0.65 * gate * (0.5 + 0.5 * sin(time * {qsc(40.0)}));",
-            f"float mid = bolt * strobe + {F(u(45, 0.15, 0.30))} * bolt;",
-            f"float emitMid = bolt * {F(0.675 + u(45, 0.15, 0.30))};",
+            f"float bolt = pow(clamp(1.0 - abs(2.0 * n - 1.0) * {F(u(41, 1.25, 1.65))}, 0.0, 1.0), {F(u(42, 9.0, 15.0))});",
+            f"float surge = 0.62 + 0.24 * sin(time * {qs(43, 3.0, 6.0)}) + 0.14 * sin(time * {qs(44, 7.0, 11.5)} + {F(u(58, 0.0, 6.2832))});",
+            f"float mid = bolt * (surge + {F(u(45, 0.20, 0.35))});",
         ], [])
     if family == "THINFILM":
         mtw = F(u(46, 0.25, 0.40))
@@ -1857,20 +1888,19 @@ def mid_composer(family: str, c: dict):
         # 2D: holographic graticule. v4 rescue: BRIGHTER continuous lines
         # (lower pow + higher weight so the grid never dissolves into dots)
         # with FEWER, DIMMER node glints (tighter hash gate, smaller lift),
-        # plus the v-sweeping scan band under a hash flicker gate.
-        # v7: `emitMid` is the same graticule WITHOUT the 6..11 Hz flicker
-        # gate -- the flicker stays visible in the color pattern, but the
-        # emissive add must never strobe (photosensitivity).
-        return (["invsmooth", "cellHash", "hash11"], [
+        # plus the v-sweeping scan band. v10 photosensitivity fix: the old
+        # 6..11 Hz hash flicker gate is GONE -- the hologram shimmer is now
+        # a smooth <= ~1.5 Hz sine, so the visible pattern never strobes
+        # and the emission can ride the pattern directly (no emitMid twin).
+        return (["invsmooth", "cellHash"], [
             f"float lonLine = pow(abs(sin(baseUV.x * 3.1415927 * {F(float(lon_n))})), {F(u(42, 7.0, 12.0))});",
             f"float latLine = pow(abs(sin(baseUV.y * 3.1415927 * {F(float(lat_n))})), {F(u(43, 7.0, 12.0))});",
             f"float scanPos = fract(time * {F6(quant_fract_speed(u(44, 0.04, 0.10)))});",
             f"float scan = invsmooth(0.0, {F(u(45, 0.10, 0.20))}, abs(baseUV.y - scanPos));",
             f"float glint = step(0.82, cellHash(floor(vec2(baseUV.x * {F(float(lon_n))}, baseUV.y * {F(float(lat_n))})), {F(float(lon_n))})) * lonLine * latLine;",
-            f"float holoFlicker = 0.90 + 0.10 * step(0.35, hash11(floor(time * {F(u(46, 6.0, 11.0))})));",
+            f"float holoFlicker = 0.94 + 0.06 * sin(time * {qs(46, 4.0, 9.0)});",
             f"float holoSteady = (lonLine + latLine) * {F(u(47, 0.62, 0.85))};",
             f"float mid = clamp(holoSteady * holoFlicker + scan * {F(u(48, 0.35, 0.55))} + glint * 0.9, 0.0, 1.25);",
-            f"float emitMid = clamp(holoSteady + scan * {F(u(48, 0.35, 0.55))} + glint * 0.9, 0.0, 1.25);",
         ], [])
     if family == "PORTALVOID":
         suck_n = 3 + int(u(42, 0.0, 2.999))  # integer streak symmetry
@@ -2080,10 +2110,13 @@ def mid_composer(family: str, c: dict):
         # screen-space silhouette slope (rimDir -- seam-safe by construction,
         # the same trick as the deep planes) with integer per-layer scales so
         # every layer tiles the u wrap; plus a v-sweeping horizontal sync
-        # band and a hash flicker gate.
+        # band. v10 photosensitivity fix: the old 8..14 Hz hash flicker gate
+        # is GONE -- the hologram shimmer is a smooth <= ~1.5 Hz sine, so
+        # the visible pattern never strobes and the emission rides the
+        # pattern directly (no emitMid twin).
         hp_layers = 3 + int(u(39, 0.0, 1.999))
         gw = u(42, 0.06, 0.12)
-        return (["invsmooth", "hash11"], [
+        return (["invsmooth"], [
             "float hpAcc = 0.0;",
             f"for (int i = 0; i < {hp_layers}; i++) {{",
             "    float fi = float(i);",
@@ -2096,13 +2129,10 @@ def mid_composer(family: str, c: dict):
             f"    hpAcc += (hpGrid * {F(u(45, 0.50, 0.70))} + hpScan * {F(u(46, 0.06, 0.14))}) * (1.0 - fi * {F(u(47, 0.16, 0.24))});",
             "}",
             f"float hpSync = invsmooth(0.0, {F(u(48, 0.04, 0.08))}, abs(baseUV.y - fract(time * {F6(quant_fract_speed(u(40, 0.05, 0.12)))})));",
-            f"float hpFlick = 0.85 + 0.15 * step(0.4, hash11(floor(time * {F(u(49, 8.0, 14.0))})));",
+            f"float hpFlick = 0.92 + 0.08 * sin(time * {qs(49, 4.0, 9.0)});",
             "// pole guard on the grid layers only; the sync band is latitude-only",
             "// (pole-safe) and keeps sweeping across the caps",
             f"float mid = clamp(mix({F(0.30)}, hpAcc * hpFlick, poleFade) + hpSync * {F(u(55, 0.35, 0.55))}, 0.0, 1.25);",
-            "// v7: strobe-free copy for the emissive drive -- the 8..14 Hz gate",
-            "// stays in the color pattern, never in the emissive add",
-            f"float emitMid = clamp(mix({F(0.30)}, hpAcc, poleFade) + hpSync * {F(u(55, 0.35, 0.55))}, 0.0, 1.25);",
         ], [])
     if family == "ORBITTRAP":
         # 3D-fed 2D fractal: a Julia iteration on the (rotated) sphere-
@@ -2582,6 +2612,9 @@ FAMILY_PRESENCE = {
 # 10-way review found their deep weight muddied the read): multiplies the
 # baked deep weight `dw` in the composite.
 DEEP_WEIGHT = {
+    # v10: LIGHTNING joins -- the deep noise volume buried the sparse bolt
+    # filaments (part of the "washed noise ball" review finding).
+    "LIGHTNING": 0.55,
     "KALISET": 0.5, "VOIDTENDRIL": 0.55, "VOLUMECLOUD": 0.75,
     "TENDRILNET": 0.7, "GALAXYSWIRL": 0.7, "PORTALVOID": 0.7, "BIOLUME": 0.65,
     # v5: the sparse/dark signatures must not be muddied by the deep volume
@@ -2607,15 +2640,20 @@ REALISM_DEFAULT = {
     # video review found whole families (holoparallax) reading as flat
     # decals because their bend never cleared visibility. Every family must
     # now clearly distort the backdrop; glassy families still bend most.
-    "refr": (0.90, 1.30),       # base scene-copy bend
+    # v10: the floor climbs again (0.90 -> 0.93+) and the energy base drops:
+    # the TRANSLUCENT pipeline re-blends this shader's output over the
+    # STRAIGHT background by (1 - alpha), so unless the membrane runs
+    # near-OPAQUE the refracted scene sample washes back out and the
+    # backdrop reads straight again. framebuffer must be ~= refractedScene.
+    "refr": (1.00, 1.45),       # base scene-copy bend
     "refrFres": (0.8, 1.5),     # extra bend factor at grazing fresnel (x refr)
     "disp": (0.045, 0.090),     # chromatic split half-spread of the 3 taps
     "glass": (0.18, 0.32),      # refracted-scene tint toward the live palette
-    "energy": (0.30, 0.42),     # energy-overlay base weight over the glass
+    "energy": (0.20, 0.30),     # energy-overlay base weight over the glass
     "energyGain": (0.38, 0.55), # pattern-driven overlay gain
     "rimPow": (2.4, 3.6),       # fresnel exponent
-    "fresRim": (0.35, 0.60),    # fresnel fold into the rim glow
-    "fresGlow": (0.55, 0.85),   # additive fresnel * hotStop rim
+    "fresRim": (0.55, 0.85),    # fresnel fold into the rim glow
+    "fresGlow": (0.85, 1.20),   # additive fresnel * hotStop rim
     "bump": (1.0, 1.9),         # atlas-gradient normal perturbation
     "wrap": (0.35, 0.60),       # wrap-diffuse softness
     "diffFloor": (0.58, 0.70),  # unlit-side diffuse floor
@@ -2625,7 +2663,7 @@ REALISM_DEFAULT = {
     "flowSpd": (0.05, 0.12),    # flow crossfade cycles/s (day-quantized)
     "flowAmp": (0.030, 0.070),  # flow displacement per unit height slope
     "soft": (0.5, 1.1),         # depth-soft edge distance (blocks)
-    "floor": (0.88, 0.92),      # refraction body-alpha floor
+    "floor": (0.93, 0.96),      # refraction body-alpha floor (near-opaque, v10)
 }
 # Category overrides: glassy families bend the scene hardest and keep the
 # energy film thin (dielectric look); dark/void families bend little and
@@ -2633,17 +2671,17 @@ REALISM_DEFAULT = {
 # diffuse the light, flow widest and melt deepest into terrain. Every family
 # not listed below keeps the default ("energetic" plasma/bolt/lattice) feel.
 REALISM_CATEGORIES = {
-    "glassy": {"refr": (1.25, 1.70), "refrFres": (1.0, 1.8), "disp": (0.08, 0.14),
-               "glass": (0.10, 0.22), "energy": (0.18, 0.28), "energyGain": (0.34, 0.48),
+    "glassy": {"refr": (1.40, 1.90), "refrFres": (1.0, 1.8), "disp": (0.08, 0.14),
+               "glass": (0.10, 0.22), "energy": (0.14, 0.22), "energyGain": (0.34, 0.48),
                "specPow": (24.0, 44.0), "specW": (0.45, 0.70), "bump": (1.3, 2.4),
-               "fresGlow": (0.45, 0.70), "floor": (0.90, 0.94)},
-    "dark":   {"refr": (0.75, 1.10), "disp": (0.050, 0.090), "glass": (0.38, 0.58),
-               "energy": (0.42, 0.56), "energyGain": (0.34, 0.48), "fresGlow": (0.50, 0.80),
+               "fresGlow": (0.80, 1.10), "floor": (0.94, 0.97)},
+    "dark":   {"refr": (0.85, 1.20), "disp": (0.050, 0.090), "glass": (0.38, 0.58),
+               "energy": (0.34, 0.46), "energyGain": (0.34, 0.48), "fresGlow": (0.80, 1.15),
                "specW": (0.18, 0.34), "diffFloor": (0.62, 0.74), "diffGain": (0.36, 0.52),
-               "floor": (0.86, 0.90)},
-    "soft":   {"refr": (0.80, 1.15), "disp": (0.045, 0.085), "bump": (0.9, 1.6),
-               "soft": (1.0, 1.8), "energy": (0.34, 0.46), "specPow": (8.0, 16.0),
-               "specW": (0.16, 0.30), "flowAmp": (0.045, 0.095), "floor": (0.87, 0.91)},
+               "floor": (0.92, 0.95)},
+    "soft":   {"refr": (0.90, 1.25), "disp": (0.045, 0.085), "bump": (0.9, 1.6),
+               "soft": (1.0, 1.8), "energy": (0.26, 0.36), "specPow": (8.0, 16.0),
+               "specW": (0.16, 0.30), "flowAmp": (0.045, 0.095), "floor": (0.92, 0.95)},
 }
 REALISM_CATEGORY_BY_FAMILY = {}
 for _fam in ("THINFILM", "CAUSTIC", "MOIRE", "KALEIDO", "INTERFERENCE", "WAVES",
@@ -2734,7 +2772,8 @@ def emit_shader(asg: dict) -> str:
       saturation lift), 128..143 v6 atlas-texture/emission knobs, 144..151
       v7 wash-guard/pole-fade/gating knobs, 152..183 v8 realism knobs
       (refraction/fresnel/key-light/flow/depth-soft), 184..191 v9
-      refraction-slope + texture-drift knobs, 192..223 v9 motif knobs (each
+      refraction-slope + texture-drift knobs, 192..223 v9 motif knobs,
+      224..236 v10 near-white wash-guard + smooth-flicker knobs (each
       extension appends to the stream, so growing 128 -> 144 -> 160 -> 192
       -> 256 shifted no older draw). The draws are POSITIONAL lookups into
       a fixed 256-entry table, so a composer reusing a spare index only
@@ -2865,17 +2904,16 @@ def emit_shader(asg: dict) -> str:
             f"vec2 auv = vec2(baseUV.x * {sx_lit} + time * {F6(quant_drift(u(36, -0.3, 0.3), float(sx)))}, (baseUV.y - 0.5) * {sy_lit} * breathe + {F(sx * 0.5)} + time * {F6(quant_drift(u(37, -0.3, 0.3), float(syp)))});",
         ]
     else:  # flicker
-        needs.add("hash11")
         flick_dx = F6(quant_drift(u(36, -0.5, 0.5), float(sx)))
         flick_dy = F6(quant_drift(u(37, -0.5, 0.5), float(syp)))
         anim_lines += [
-            f"float jump = hash11(floor(time * {F(u(34, 2.0, 5.0))}));",
-            f"float ft = time + {F(u(35, 0.15, 0.45))} * jump;",
+            "// v10 flicker: a smooth phase WANDER (two summed quantized sines,",
+            "// each <= ~2 Hz) replaces the old hash11(floor(time * 2..5))",
+            "// domain jump -- the nervous jitter stays visible but the pattern",
+            "// domain moves CONTINUOUSLY, so it can never strobe",
+            "// (photosensitivity), and the atlas can ride the same domain.",
+            f"float ft = time + {F(u(35, 0.20, 0.50))} * (0.6 * sin(time * {qs(229, 3.0, 5.5)}) + 0.4 * sin(time * {qs(230, 7.0, 11.5)} + {F(u(231, 0.0, 6.2832))}));",
             f"vec2 auv = vec2(baseUV.x * {sx_lit}, baseUV.y * {sy_lit}) + vec2({flick_dx}, {flick_dy}) * ft;",
-            "// v7: SMOOTH twin of auv (same drift, plain time) for the atlas",
-            "// sample -- the emission mask must never ride the flicker-jumped",
-            "// ft, whose 2-5 Hz domain jumps read as a strobe (photosensitivity)",
-            f"vec2 tuv = vec2(baseUV.x * {sx_lit}, baseUV.y * {sy_lit}) + vec2({flick_dx}, {flick_dy}) * time;",
         ]
 
     # Warp mode -> `vec2 wuv`. Warp offsets are seam-periodic fields, so the
@@ -2957,28 +2995,33 @@ def emit_shader(asg: dict) -> str:
                    "// v9 per-id motif fingerprint: this effect's unique moving bright",
                    f"// element ({motif} x{motif_n}) under its {env} emissive envelope."]
     # -- envelope (<= 2 Hz, day-quantized) --
+    # v10 salience: every envelope FLOOR rises to ~0.45-0.55 (was 0.10-0.15)
+    # -- the per-id fingerprint must stay clearly visible BETWEEN pulses,
+    # not just flash once a cycle, or same-family ids read as recolors.
     if env == "breath":
         motif_lines.append(
-            f"float motifEnv = 0.55 + 0.45 * sin(time * {qs(192, 0.25, 0.90)} + {F(u(193, 0.0, 6.2832))});")
+            f"float motifEnv = 0.72 + 0.28 * sin(time * {qs(192, 0.25, 0.90)} + {F(u(193, 0.0, 6.2832))});")
     elif env == "doublepulse":
         motif_lines += [
             f"float motifP = fract(time * {F6(quant_fract_speed(u(192, 0.22, 0.45)))} + {F(u(193, 0.0, 1.0))});",
-            "float motifEnv = 0.12 + exp(-140.0 * (motifP - 0.16) * (motifP - 0.16))"
-            " + 0.8 * exp(-140.0 * (motifP - 0.38) * (motifP - 0.38));",
+            "float motifEnv = 0.52 + 0.75 * exp(-140.0 * (motifP - 0.16) * (motifP - 0.16))"
+            " + 0.60 * exp(-140.0 * (motifP - 0.38) * (motifP - 0.38));",
         ]
     elif env == "heartbeat":
         motif_lines += [
             f"float motifP = fract(time * {F6(quant_fract_speed(u(192, 0.25, 0.50)))} + {F(u(193, 0.0, 1.0))});",
-            "float motifEnv = 0.10 + pow(max(sin(motifP * 6.2831853), 0.0), 6.0)"
-            " + 0.65 * pow(max(sin((motifP - 0.14) * 6.2831853), 0.0), 10.0);",
+            "float motifEnv = 0.50 + 0.80 * pow(max(sin(motifP * 6.2831853), 0.0), 6.0)"
+            " + 0.52 * pow(max(sin((motifP - 0.14) * 6.2831853), 0.0), 10.0);",
         ]
     else:  # sparklegate
         motif_lines.append(
-            f"float motifEnv = 0.15 + 0.85 * smoothstep(0.30, 0.72, (0.5 + 0.5 * sin(time * {qs(192, 0.35, 0.80)}))"
+            f"float motifEnv = 0.48 + 0.52 * smoothstep(0.30, 0.72, (0.5 + 0.5 * sin(time * {qs(192, 0.35, 0.80)}))"
             f" * (0.5 + 0.5 * sin(time * {qs(193, 0.45, 0.95)} + 1.7)));")
     # -- moving bright element (motifM mask) --
     motif_dir = "1.0" if u(206, 0.0, 1.0) < 0.5 else "-1.0"
-    inv2sig = F(1.0 / (2.0 * u(197, 0.032, 0.060) ** 2))
+    # v10 salience: bigger elements (sigma 0.032-0.060 -> 0.050-0.085) --
+    # the old dots were too small to identify at typical viewing distance.
+    inv2sig = F(1.0 / (2.0 * u(197, 0.050, 0.085) ** 2))
     if motif == "lissajous":
         # coprime integer cycles/day on the two axes: the tracer path never
         # visibly repeats within a day and the daily wrap lands on whole
@@ -3004,10 +3047,10 @@ def emit_shader(asg: dict) -> str:
         n_fold = 2 * motif_n + 1  # 3/5/7/9-fold glyph ring
         motif_lines += [
             f"float motifA = baseUV.x * {F(float(n_fold))} + {motif_dir} * time * {F6(quant_fract_speed(u(200, 0.040, 0.120)))} + {F(u(204, 0.0, 1.0))};",
-            f"float motifSig = pow(0.5 + 0.5 * cos(6.2831853 * motifA), {F(u(199, 8.0, 26.0))});",
+            f"float motifSig = pow(0.5 + 0.5 * cos(6.2831853 * motifA), {F(u(199, 6.0, 18.0))});",
             # exp(-x*x) instead of exp(-pow(x, 2.0)): pow is undefined for
             # x < 0 in GLSL, and the band offset goes negative below the ring
-            f"float motifDy = (baseUV.y - {F(u(198, 0.38, 0.62))}) * {F(1.0 / u(207, 0.050, 0.100))};",
+            f"float motifDy = (baseUV.y - {F(u(198, 0.38, 0.62))}) * {F(1.0 / u(207, 0.075, 0.135))};",
             "float motifBand = exp(-motifDy * motifDy);",
             "float motifM = motifSig * motifBand;",
         ]
@@ -3016,7 +3059,7 @@ def emit_shader(asg: dict) -> str:
         bars = 1 + (motif_n - 1) // 2 + int(u(202, 0.0, 1.999))  # 1..4 bars
         motif_lines += [
             "float motifBand = smoothstep(0.06, 0.22, baseUV.y) * smoothstep(0.06, 0.22, 1.0 - baseUV.y);",
-            f"float motifM = pow(0.5 + 0.5 * cos(6.2831853 * (baseUV.{axis} * {F(float(bars))} - {motif_dir} * time * {F6(quant_fract_speed(u(200, 0.050, 0.160)))} + {F(u(204, 0.0, 1.0))})), {F(u(199, 10.0, 30.0))}) * motifBand;",
+            f"float motifM = pow(0.5 + 0.5 * cos(6.2831853 * (baseUV.{axis} * {F(float(bars))} - {motif_dir} * time * {F6(quant_fract_speed(u(200, 0.050, 0.160)))} + {F(u(204, 0.0, 1.0))})), {F(u(199, 7.0, 20.0))}) * motifBand;",
         ]
     elif motif == "orbit":
         k_nodes = motif_n  # 1..4 circulating nodes
@@ -3034,7 +3077,7 @@ def emit_shader(asg: dict) -> str:
                 f"motifM += exp(-dot(motifD{i}, motifD{i}) * {inv2sig});",
             ]
     else:  # core
-        core_inv = F(1.0 / (2.0 * u(197, 0.10, 0.18) ** 2))
+        core_inv = F(1.0 / (2.0 * u(197, 0.14, 0.24) ** 2))
         motif_lines += [
             "vec2 motifC = vec2(sin((baseUV.x - 0.5) * 3.1415927) * 0.6366, baseUV.y - 0.5);",
             "float motifR = length(motifC);",
@@ -3053,9 +3096,11 @@ def emit_shader(asg: dict) -> str:
                 f"motifM += {F(u(209, 0.45, 0.75))} * exp(-motifPd * motifPd) * (1.0 - motifPing);",
             ]
     motif_lines.append("float motifGlow = clamp(motifM, 0.0, 1.2) * motifEnv;")
-    motif_gain = F(u(194, 0.55, 0.95))
+    # v10 salience: gain up 0.55-0.95 -> 0.90-1.35 -- the fingerprint must
+    # be clearly identifiable, not a faint tint.
+    motif_gain = F(u(194, 0.90, 1.35))
     motif_col_w = F(u(195, 0.15, 0.45))
-    motif_alpha = F(u(196, 0.10, 0.20))
+    motif_alpha = F(u(196, 0.14, 0.26))
 
     # Resolve helper closure over deps (deepField's deps depend on the recipe).
     closed = set()
@@ -3081,7 +3126,9 @@ def emit_shader(asg: dict) -> str:
     aw = F(u(69, 0.15, 0.45))
     _a0 = u(70, 0.10, 0.25)
     _a1 = u(71, 0.60, 0.85)
-    gk = F(u(72, 0.04, 0.10))
+    # v10: LIGHTNING halves its micro grain -- the dense grain buried the
+    # bolt signature (the "washed noise ball" review finding).
+    gk = F(u(72, 0.04, 0.10) * (0.5 if family == "LIGHTNING" else 1.0))
     grain_scale = 24 + int(u(73, 0.0, 40.999))  # integer: seam-aligned grain
     _d_fall = u(75, 0.55, 0.95)  # v3 exponential plane weights: superseded by
     d_pow = F(u(76, 1.0, 1.8))   # the v4 Beer-Lambert transmittance
@@ -3232,7 +3279,7 @@ def emit_shader(asg: dict) -> str:
     glass_tint = F(u(155, *real["glass"]))
     energy_base = F(u(156, *real["energy"]))
     energy_gain = F(u(157, *real["energyGain"]))
-    energy_fres = F(u(158, 0.10, 0.22))    # fresnel lift of the energy overlay
+    energy_fres = F(u(158, 0.18, 0.32))    # fresnel lift of the energy overlay
     rim_pow = F(u(159, *real["rimPow"]))
     fres_rim = F(u(160, *real["fresRim"]))
     fres_glow = F(u(161, *real["fresGlow"]))
@@ -3257,7 +3304,10 @@ def emit_shader(asg: dict) -> str:
     refr_floor = u(174, *real["floor"])
     refr_cap = F(u(176, 0.14, 0.20))       # max screen-UV offset (near-camera sanity)
     energy_max = F(u(177, 0.80, 0.90))     # energy overlay ceiling
-    a_max_refr = F(min(0.965, max(a_max_raw, refr_floor + 0.025)))
+    # v10: the ceiling rises with the floor -- where refraction is active the
+    # membrane must be opaque enough that the refracted scene REPLACES the
+    # straight background (framebuffer ~= refractedScene), not a ~70% overlay.
+    a_max_refr = F(min(0.985, max(a_max_raw, refr_floor + 0.015)))
     # v9 refraction-slope + per-family texture-drift knobs (indices 184..191,
     # appended to the stream). The slope term keeps refraction visible at the
     # sphere center where viewN.xy vanishes (the holoparallax "flat decal"
@@ -3275,6 +3325,35 @@ def emit_shader(asg: dict) -> str:
     # normalized so the height field spans a stable range for the gradient
     _hw_sum = tex_wr_raw + tex_wg_raw + tex_wb_raw
     height_w = (tex_wr_raw / _hw_sum, tex_wg_raw / _hw_sum, tex_wb_raw / _hw_sum)
+
+    # v10 near-white wash guard (indices 224..228, appended to the stream):
+    # the linear per-luma guards (143/144) were not enough for near-WHITE
+    # palettes (chrome, crystal) -- their apex still blew out to white. A
+    # smoothstep(0.55, 0.85, baseLuma) factor (washHi, emitted below) cuts
+    # the specular add, the emissive add/white-mix and the energy overlay
+    # much harder for high-luma palettes ONLY, and darkens the low-pattern
+    # body so the structure reads. Dark/saturated palettes are untouched
+    # (washHi == 0 below luma 0.55).
+    wash_spec = F(u(224, 0.55, 0.75))    # specular cut at white palettes
+    wash_emit = F(u(225, 0.40, 0.60))    # emissive-add cut at white palettes
+    wash_body = F(u(226, 0.25, 0.40))    # extra low-pattern body darkening
+    wash_energy = F(u(227, 0.20, 0.35))  # energy-overlay cut (more refracted scene)
+    wash_white = F(u(228, 0.50, 0.70))   # extra white-mix cut in emitCol
+    # uniform pre-clip compression: near-white crests all clip to 1.0 and
+    # flatten (CHROME's apex read as one white sheet) -- pulling the whole
+    # energy body down keeps the crest/gap difference visible.
+    wash_flat = F(u(232, 0.26, 0.38))    # uniform energy-body compression
+    wash_fres = F(u(233, 0.55, 0.75))    # fresnel-glow cut at white palettes
+    wash_diff = F(u(234, 0.45, 0.65))    # diffuse-gain cut (the lit-side lift
+    #                                      re-brightened white bodies past clip)
+    # washHi-gated final soft-knee: for near-white palettes every additive
+    # path (fresnel glow, motif, emission) lands >= 1.0 and CLIPS, flattening
+    # the apex into one white sheet no matter how the inputs are cut. The
+    # knee compresses everything over (1 - depth) exponentially instead --
+    # crest/gap structure survives right up to white. Gated by washHi, so
+    # dark palettes keep their exact ramp (knee = 1.0 -> identity).
+    wash_knee = u(235, 0.20, 0.28)       # knee depth at washHi = 1
+    wash_knee_k = F(u(236, 3.0, 5.0))    # knee compression steepness
 
     sec_ang, sec_sat, sec_val = secondary_consts(
         asg["primary"], asg["secondary"] if asg.get("secondary") is not None else asg["primary"])
@@ -3452,12 +3531,7 @@ def emit_shader(asg: dict) -> str:
     lines.append("    // v9 family texture-drift: a baked per-FAMILY drift vector (direction")
     lines.append("    // golden-angle-spread by family index, speed day-quantized against the")
     lines.append("    // tile period) -- two families sharing a tile move it differently.")
-    if anim == "flicker":
-        lines.append("    // (flicker anim: the atlas rides the SMOOTH tuv twin, never the")
-        lines.append("    // jumped ft domain -- see the [layer:mid] anim block.)")
-        lines.append(f"    vec2 texUV = tuv * {F(float(tex_mul))} + vec2({tex_drift[0]}, {tex_drift[1]}) * time;")
-    else:
-        lines.append(f"    vec2 texUV = wuv * {F(float(tex_mul))} + vec2({tex_drift[0]}, {tex_drift[1]}) * time;")
+    lines.append(f"    vec2 texUV = wuv * {F(float(tex_mul))} + vec2({tex_drift[0]}, {tex_drift[1]}) * time;")
     lines.append("    // v8 height taps: the atlas R/G/B structural mix doubles as a HEIGHT")
     lines.append("    // field. Its 2-tap gradient (a) tilts the shading normal (bump) and")
     lines.append("    // (b) builds the divergence-free flow vector the energy crawls along.")
@@ -3522,7 +3596,10 @@ def emit_shader(asg: dict) -> str:
     lines.append("    // Flourish accent + micro grain keep large areas alive up close.")
     for ln in flourish_lines:
         lines.append("    " + ln)
-    lines.append(f"    float grain = {gk} * (cellHash(floor(wuv * {F(float(grain_scale))}) + vec2(floor(time * 6.0), 0.0), {F(float(sx * grain_scale))}) - 0.5);")
+    # v10 photosensitivity: the grain reseed drops 6 Hz -> 2 Hz -- every
+    # cell re-rolls simultaneously, so the reseed reads as a full-surface
+    # shimmer and must stay at/below the ~2 Hz safety line.
+    lines.append(f"    float grain = {gk} * (cellHash(floor(wuv * {F(float(grain_scale))}) + vec2(floor(time * 2.0), 0.0), {F(float(sx * grain_scale))}) - 0.5);")
     lines.append("")
     for ln in motif_lines:
         lines.append("    " + ln)
@@ -3574,6 +3651,19 @@ def emit_shader(asg: dict) -> str:
     lines.append(f"    rgb = mix(rgb, rgb * (0.72 + 0.56 * rimDisp), clamp(rim, 0.0, 1.0) * {F(u(83, 0.10, 0.22))});")
     lines.append(f"    vec3 lineDisp = 0.5 + 0.5 * cos(vec3(0.6452, 0.8065, 1.0) * (rimLine * {line_disp_f} + baseUV.y * 0.31 + {line_disp_p}) * 6.2831853);")
     lines.append(f"    rgb = mix(rgb, hotStop * (0.62 + 0.50 * lineDisp), clamp(rimLine, 0.0, 1.0) * {line_disp_w});")
+    lines.append("    // [layer:wash:high_luma]")
+    lines.append("    // v10 near-white wash guard: near-white/high-luma palettes (chrome,")
+    lines.append("    // crystal) still washed to white at the apex under the linear per-luma")
+    lines.append("    // guards, so a smoothstep factor cuts the specular add, the emissive")
+    lines.append("    // add/white-mix and the energy overlay much harder for bright palettes")
+    lines.append("    // ONLY, and darkens the low-pattern body so structure shows. Recolor-")
+    lines.append("    // safe: washHi derives from the live vertexColor luma, nothing baked.")
+    lines.append("    float baseLuma = dot(baseCol, vec3(0.299, 0.587, 0.114));")
+    lines.append("    float washHi = smoothstep(0.55, 0.85, baseLuma);")
+    lines.append("    // uniform pre-clip compression + extra darkening of the low-pattern")
+    lines.append("    // body: near-white crests otherwise all clip to 1.0 and flatten into")
+    lines.append("    // one white sheet at the apex.")
+    lines.append(f"    rgb *= (1.0 - {wash_flat} * washHi) * (1.0 - {wash_body} * washHi * (1.0 - clamp(pattern, 0.0, 1.0)));")
     lines.append("    // [layer:light:wrapkey]")
     lines.append("    // v8 fake lighting: wrap-diffuse + specular from a FIXED world key")
     lines.append("    // light against the bumped normal, applied to the ENERGY only (the")
@@ -3582,9 +3672,9 @@ def emit_shader(asg: dict) -> str:
     lines.append("    // own luma-capped hot stop -- no baked hue anywhere.")
     lines.append(f"    vec3 keyL = vec3({F(key_light[0])}, {F(key_light[1])}, {F(key_light[2])});")
     lines.append(f"    float keyDiff = clamp((dot(bumpN, keyL) + {F(light_wrap)}) / {F(1.0 + light_wrap)}, 0.0, 1.0);")
-    lines.append(f"    rgb *= {diff_floor} + {diff_gain} * keyDiff;")
+    lines.append(f"    rgb *= {diff_floor} + {diff_gain} * keyDiff * (1.0 - {wash_diff} * washHi);")
     lines.append("    float keySpec = pow(clamp(dot(reflect(-viewV, bumpN), keyL), 0.0, 1.0), " + spec_pow + ");")
-    lines.append(f"    rgb += hotStop * (keySpec * {spec_w});")
+    lines.append(f"    rgb += hotStop * (keySpec * {spec_w} * (1.0 - {wash_spec} * washHi));")
     lines.append("    // [layer:refract:scene_copy]")
     lines.append("    // v8 refraction: bend the post-opaque scene copy behind the membrane.")
     lines.append("    // The screen-space offset follows the VIEW-SPACE bumped normal")
@@ -3620,29 +3710,21 @@ def emit_shader(asg: dict) -> str:
     lines.append("    // fresnel glow both derive from the live vertexColor palette.")
     lines.append(f"    refracted *= mix(vec3(1.0), baseCol, {glass_tint});")
     lines.append(f"    float energyW = clamp({energy_base} + {energy_gain} * clamp(pattern, 0.0, 1.0) + {energy_fres} * fresnel, 0.0, {energy_max});")
+    lines.append("    // v10 wash guard on the overlay: white palettes show MORE refracted")
+    lines.append("    // scene instead of piling white energy on white glass.")
+    lines.append(f"    energyW *= 1.0 - {wash_energy} * washHi;")
     lines.append("    rgb = mix(refracted, rgb, energyW);")
-    lines.append(f"    rgb += fresnel * hotStop * {fres_glow};")
+    lines.append(f"    rgb += fresnel * hotStop * ({fres_glow} * (1.0 - {wash_fres} * washHi));")
     lines.append("    // v9 motif add: the per-id moving bright element rides ON TOP of the")
     lines.append("    // energy-glass composite so the fingerprint stays identifiable.")
     lines.append("    // Recolor-safe: its color is a hotStop/secCol mix, both live-derived")
     lines.append("    // from vertexColor; its envelope is <= 2 Hz and day-quantized.")
     lines.append(f"    rgb += motifGlow * mix(hotStop, secCol, {motif_col_w}) * {motif_gain};")
-    # v7 strobe-free emission drive: the emissive add must never oscillate
-    # faster than ~2 Hz (photosensitivity). Three sources could: (1) the
-    # strobe/gate multipliers baked into the LIGHTNING/HOLOGRID/HOLOPARALLAX
-    # signatures -- their composers define a strobe-free `emitMid` copy;
-    # (2) the flicker anim's 2-5 Hz domain jump, which rides `wuv` into mid
-    # AND flourish/grain -- those files drive the emission from smooth-domain
-    # terms only (texDetail stands in for a wuv-based mid); (3) the atlas
-    # domain itself (handled by the smooth `tuv` twin above).
-    mid_uses_wuv = any("wuv" in ln for ln in mid_lines)
-    jumped = anim == "flicker"
-    if family in STROBE_MID_FAMILIES and not (jumped and STROBE_MID_FAMILIES[family]):
-        emit_mid_term = "emitMid"
-    elif jumped:
-        emit_mid_term = "texDetail" if mid_uses_wuv else "mid"
-    else:
-        emit_mid_term = None  # pattern is already strobe-free: use it directly
+    # v10: the emission drives from `pattern` everywhere -- every former
+    # >2 Hz strobe/gate/jump source in the visible pattern was replaced by
+    # smooth <= ~2 Hz motion at the source (see the composers and the
+    # flicker anim block), so `pattern` itself is strobe-free now and the
+    # v7 emitMid/texDetail fallback machinery is gone.
     lines.append("    // [layer:emit:atlas_a]")
     lines.append("    // Emissive glow: atlas.a is an EMISSION mask (never transparency) --")
     lines.append("    // filament cores / cell edges / cracks / sparkles ADD a bright, hue-")
@@ -3652,8 +3734,10 @@ def emit_shader(asg: dict) -> str:
     lines.append("    // white, while dark palettes keep their full glow. Scaled by the")
     lines.append("    // family's own highlights and a slow day-quantized breath -- the glow")
     lines.append("    // is spatial and strobe-free by construction.")
-    lines.append("    float baseLuma = dot(baseCol, vec3(0.299, 0.587, 0.114));")
-    lines.append(f"    vec3 emitCol = clamp(mix(baseCol, vec3(1.0), {emit_lift} * (1.0 - {emit_white_guard} * baseLuma)), 0.0, 1.0);")
+    lines.append("    // (baseLuma/washHi were computed in the v10 wash-guard layer above;")
+    lines.append("    // washHi additionally cuts the white-mix AND the emissive add for")
+    lines.append("    // near-white palettes -- they glow in hue, never toward white.)")
+    lines.append(f"    vec3 emitCol = clamp(mix(baseCol, vec3(1.0), {emit_lift} * max(0.0, 1.0 - {emit_white_guard} * baseLuma - {wash_white} * washHi)), 0.0, 1.0);")
     if tile == STARFIELD_TILE:
         lines.append("    // near-black point-star tile: boost the sparse emission mask so the")
         lines.append("    // star families are not left flat")
@@ -3661,16 +3745,8 @@ def emit_shader(asg: dict) -> str:
         emit_mask = "emitMask"
     else:
         emit_mask = "atlas.a"
-    if emit_mid_term is None:
-        emit_drive = "clamp(pattern, 0.0, 1.0)"
-    else:
-        v5_par_term = f" + {v5_sp_w} * v5Par" if is_v5 else ""
-        lines.append("    // strobe-free emission drive (see the v7 note above): only smooth,")
-        lines.append("    // non-gated terms may modulate the emissive add")
-        lines.append(f"    float emitDrive = clamp({dw} * deepPat + {mw} * {emit_mid_term} + {rw} * rim{v5_par_term}, 0.0, 1.0);")
-        emit_drive = "emitDrive"
-    lines.append(f"    float emit = {emit_mask} * ({emit_e0} + {emit_e1} * {emit_drive}) * (1.0 - {emit_breathe_depth} * (0.5 + 0.5 * sin(time * {emit_breathe_speed}))) * atlasPoleW;")
-    lines.append(f"    rgb += emit * {emit_gain} * (1.0 - {emit_luma_guard} * baseLuma) * emitCol;")
+    lines.append(f"    float emit = {emit_mask} * ({emit_e0} + {emit_e1} * clamp(pattern, 0.0, 1.0)) * (1.0 - {emit_breathe_depth} * (0.5 + 0.5 * sin(time * {emit_breathe_speed}))) * atlasPoleW;")
+    lines.append(f"    rgb += emit * {emit_gain} * (1.0 - {emit_luma_guard} * baseLuma) * (1.0 - {wash_emit} * washHi) * emitCol;")
     if is_v5:
         lines.append("    // [layer:v5:softknee]")
         lines.append("    // v5 soft-knee highlight rolloff: channels over the knee compress")
@@ -3678,6 +3754,15 @@ def emit_shader(asg: dict) -> str:
         lines.append("    // exp(0) = 1), so hot crests keep hue separation right up to white.")
         lines.append(f"    vec3 v5Over = max(rgb - vec3({F(v5_knee)}), vec3(0.0));")
         lines.append(f"    rgb = min(rgb, vec3({F(v5_knee)})) + {F(1.0 - v5_knee)} * (1.0 - exp(-v5Over * {v5_knee_k}));")
+    lines.append("    // [layer:wash:knee]")
+    lines.append("    // v10 washHi-gated soft-knee: for near-white palettes every additive")
+    lines.append("    // path (fresnel glow, motif, emission, specular) lands >= 1.0 and CLIPS,")
+    lines.append("    // flattening the apex into one white sheet -- compress the overshoot")
+    lines.append("    // exponentially instead so crest/gap structure survives up to white.")
+    lines.append("    // Identity for dark palettes (washHi = 0 -> knee = 1.0).")
+    lines.append(f"    float washKnee = 1.0 - {F(wash_knee)} * washHi;")
+    lines.append("    vec3 washOver = max(rgb - vec3(washKnee), vec3(0.0));")
+    lines.append(f"    rgb = min(rgb, vec3(washKnee)) + (1.0 - washKnee) * (1.0 - exp(-washOver * {wash_knee_k}));")
     lines.append("    // Presence BODY alpha (family-tuned, v6 solidity lift): a firm membrane")
     lines.append("    // base even between features, a solid floor wherever the pattern is")
     lines.append("    // present, rising toward the ceiling on bright features, plus the deep")

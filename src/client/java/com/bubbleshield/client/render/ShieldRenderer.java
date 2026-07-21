@@ -84,8 +84,11 @@ public final class ShieldRenderer {
 			int argbPrimary = recolored ? colorOverride : def.argbPrimary();
 			int argbSecondary = recolored ? ContextModifier.deriveOverrideSecondary(colorOverride) : def.argbSecondary();
 
-			// Weaker shields render fainter.
-			float alphaBase = 0.25F + 0.5F * shield.healthFrac();
+			// Weaker shields render fainter. Full health reads as SOLID refractive
+			// glass (0.95): the translucent pipeline re-blends the shader's refracted
+			// scene sample over the straight background by (1 - a), so a low vertex
+			// alpha washes the visible refraction out entirely.
+			float alphaBase = 0.35F + 0.6F * shield.healthFrac();
 
 			// The synced shape picks the mesh; every variant shares the sphere's
 			// vertex conventions (POSITION_TEX_COLOR quads, UV in [0, 1], CPU-side
