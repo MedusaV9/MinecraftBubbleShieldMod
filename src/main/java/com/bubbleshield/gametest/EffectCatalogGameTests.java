@@ -44,14 +44,15 @@ import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Machine-enforcement of the 420-effect catalogue invariants: registry validity,
+ * Machine-enforcement of the 840-effect catalogue invariants: registry validity,
  * frozen-row golden values (PARAM_CYCLE + spot-checked V1/V2/350-milestone rows),
  * the uniqueness matrix, EN/DE lang parity incl. pairwise-distinct effect display
  * names, and the screen-fx JSON cross-check.
  */
 public class EffectCatalogGameTests {
 	/**
-	 * The 10 ghost/apparition behaviors added by the 420 milestone (rows 350..419).
+	 * The 10 ghost/apparition behaviors added by the 420 milestone (rows 350..419)
+	 * plus the 60 particle-only behaviors added by the 840 flip (rows 420..839).
 	 * They are pure particle apparitions, so {@link #runContainedMatrix} asserts
 	 * each of them visibly emits in every matrix cell (a vacuous pass would hide
 	 * a behavior that silently stopped emitting).
@@ -59,7 +60,23 @@ public class EffectCatalogGameTests {
 	private static final Set<String> GHOST_BEHAVIORS = Set.of(
 			"vex_wisps", "soul_procession", "phantom_flock", "sonic_ghosts",
 			"ender_watchers", "wandering_spirits", "graveyard_mist",
-			"spectral_shoal", "wraith_orbs", "seance_circle");
+			"spectral_shoal", "wraith_orbs", "seance_circle",
+			"banshee_wails", "ghost_riders", "spirit_lanterns", "haunted_portraits",
+			"poltergeist_toss", "wailing_choir", "grave_hands", "ecto_mist_maze",
+			"phantom_bells", "seance_table", "ghost_wolves", "spectral_stag",
+			"wisp_owls", "bone_fish", "carrion_crows", "styx_ferry", "soul_wells",
+			"chained_specters", "reaper_scythe", "purgatory_queue", "spirit_rain",
+			"ecto_fog_banks", "aurora_ghosts", "static_haunt", "moonbeam_shafts",
+			"creeper_effigies", "enderman_stalkers", "skeleton_army", "slime_ghosts",
+			"drowned_procession", "constellation_wheel", "comet_orrery",
+			"eclipse_disc", "meteor_shower_veil", "zodiac_beams", "dryad_bloom",
+			"mushroom_ring_sprites", "pollen_elementals", "vine_serpents",
+			"seasons_wheel", "clockwork_gears", "rune_forge", "alchemy_circles",
+			"mirror_maze", "arcane_turbines", "abyssal_jellies", "void_rifts_inside",
+			"leviathan_shadow", "anglerfish_lures", "singularity_heart",
+			"lantern_festival", "firework_regatta", "ghost_masquerade",
+			"drumline_golems", "chime_curtains", "sentinel_totems", "valkyrie_patrol",
+			"shield_maidens", "cerberus_watch", "genie_plumes");
 
 	/**
 	 * A dedicated (vanilla-default) test environment,
@@ -74,11 +91,11 @@ public class EffectCatalogGameTests {
 	@GameTest
 	public void allEffectsValid(GameTestHelper helper) {
 		EffectRegistry.validate();
-		helper.assertTrue(EffectRegistry.COUNT == 420, "catalogue should contain exactly 420 effects");
+		helper.assertTrue(EffectRegistry.COUNT == 840, "catalogue should contain exactly 840 effects");
 		helper.assertTrue(EffectRegistry.ALL.size() == EffectRegistry.COUNT, "registry should expose exactly " + EffectRegistry.COUNT + " effect definitions");
-		// All 60 behaviors are catalogue behaviors since the 420 milestone
-		// (60 x 7 variants = the exact cover of the 420 rows).
-		helper.assertTrue(InsideEffectBehavior.REGISTRY.size() == 60, "exactly 60 inside behaviors should be registered, found " + InsideEffectBehavior.REGISTRY.size());
+		// All 120 behaviors are catalogue behaviors since the 840 flip
+		// (120 x 7 variants = the exact cover of the 840 rows).
+		helper.assertTrue(InsideEffectBehavior.REGISTRY.size() == 120, "exactly 120 inside behaviors should be registered, found " + InsideEffectBehavior.REGISTRY.size());
 
 		// PARAM_CYCLE is FROZEN at the V1 catalogue size: retuning it would silently
 		// change the derived params (and the generated post-effect JSON uniforms) of
@@ -96,7 +113,7 @@ public class EffectCatalogGameTests {
 		assertFrozenRow(helper, 104, 0xFFFFE600, 0xFF3D0099, 0.7066667F, 1.4253333F);
 		assertFrozenRow(helper, 349, 0xFF1785E6, 0xFFE67717, 0.5733333F, 0.8186667F);
 
-		// Exact-cover usage rule: the 420-row catalogue uses every registered
+		// Exact-cover usage rule: the 840-row catalogue uses every registered
 		// behavior (each exactly CATALOGUE_VARIANTS = 7 times, per validate()).
 		Set<String> used = new HashSet<>();
 		for (EffectDefinition def : EffectRegistry.ALL) {
@@ -195,23 +212,23 @@ public class EffectCatalogGameTests {
 	/**
 	 * Ticks every effect's inside behavior directly for several game times and checks
 	 * that every effect's ambient sound id resolves in the vanilla sound registry.
-	 * Split into two id ranges (0..209 here, 210..419 in
+	 * Split into two id ranges (0..419 here, 420..839 in
 	 * {@link #allBehaviorsSmokeUpper}) so neither half's synchronous tick storm
-	 * dominates its batch at the 420-effect catalogue size. The full
+	 * dominates its batch at the 840-effect catalogue size. The full
 	 * behavior-x-variant matrix (both shapes, entities inside, particle-position
 	 * capture) lives in {@link #allBehaviorsContainedSphere} /
 	 * {@link #allBehaviorsContainedDome}.
 	 */
 	@GameTest(padding = 16)
 	public void allBehaviorsSmoke(GameTestHelper helper) {
-		smokeIdRange(helper, 0, 210);
+		smokeIdRange(helper, 0, 420);
 		helper.succeed();
 	}
 
-	/** Second half of the per-effect smoke: ids 210..419 (see {@link #allBehaviorsSmoke}). */
+	/** Second half of the per-effect smoke: ids 420..839 (see {@link #allBehaviorsSmoke}). */
 	@GameTest(padding = 16)
 	public void allBehaviorsSmokeUpper(GameTestHelper helper) {
-		smokeIdRange(helper, 210, 420);
+		smokeIdRange(helper, 420, 840);
 		helper.succeed();
 	}
 
@@ -270,7 +287,7 @@ public class EffectCatalogGameTests {
 	private static final int MAX_PARTICLES_PER_TICK = 128;
 
 	/**
-	 * Runs the full 60-behavior x 7-variant matrix (every entry of
+	 * Runs the full 120-behavior x 7-variant matrix (every entry of
 	 * {@code InsideEffectBehavior.REGISTRY}) under the given shape and asserts
 	 * containment/deny-list on every particle packet the server sent. The seven game
 	 * times cover every cadence the behaviors use (0 hits all modulo gates; 10..30
@@ -528,14 +545,14 @@ public class EffectCatalogGameTests {
 	}
 
 	/**
-	 * The surface-family axis is complete: 40 technique families exist and every one of
+	 * The surface-family axis is complete: 60 technique families exist and every one of
 	 * them is used by the catalogue. The bubble shader files themselves live in the CLIENT
 	 * source set (not on this dedicated-server classpath), so their GLSL is verified
 	 * out-of-band by {@code tools/validate_shaders.py} (glslangValidator) plus the build.
 	 */
 	@GameTest
 	public void surfaceTemplateCatalogComplete(GameTestHelper helper) {
-		helper.assertTrue(SurfaceTemplate.values().length == 40, "exactly 40 surface families should exist, found " + SurfaceTemplate.values().length);
+		helper.assertTrue(SurfaceTemplate.values().length == 60, "exactly 60 surface families should exist, found " + SurfaceTemplate.values().length);
 
 		Set<SurfaceTemplate> used = new HashSet<>();
 		for (EffectDefinition def : EffectRegistry.ALL) {
@@ -549,7 +566,7 @@ public class EffectCatalogGameTests {
 	}
 
 	/**
-	 * The screen-family axis is complete: 20 technique families exist and every one of
+	 * The screen-family axis is complete: 28 technique families exist and every one of
 	 * them is used by the catalogue. The families are metadata (like the surface
 	 * families) -- the actual per-effect sfx shaders behind them are checked by
 	 * {@code ShieldGameTests.postEffectAssetsExist}, {@link #screenTemplateMatchesJson}
@@ -557,7 +574,7 @@ public class EffectCatalogGameTests {
 	 */
 	@GameTest
 	public void screenTemplateCatalogComplete(GameTestHelper helper) {
-		helper.assertTrue(EffectRegistry.SCREEN_TEMPLATES.size() == 20, "exactly 20 screen families should exist, found " + EffectRegistry.SCREEN_TEMPLATES.size());
+		helper.assertTrue(EffectRegistry.SCREEN_TEMPLATES.size() == 28, "exactly 28 screen families should exist, found " + EffectRegistry.SCREEN_TEMPLATES.size());
 
 		Set<String> used = new HashSet<>();
 		for (EffectDefinition def : EffectRegistry.ALL) {
@@ -576,9 +593,11 @@ public class EffectCatalogGameTests {
 	 * also runs at mod init; this test keeps the remaining pairwise-uniqueness axes,
 	 * plus the global "(surface, screenTemplate) pair used at most 3 times" cap and
 	 * the per-family "no repeated behavior id" rule. The cap of 3 is the tightest
-	 * the 420-row table satisfies: three legacy pairs (frozen ids 0..104) already
-	 * sit at 3 and neither expansion (105..349 nor 350..419, whose rows only use
-	 * the 16 new surface families) pushes any pair past it.
+	 * the 840-row table satisfies: three legacy pairs (frozen ids 0..104) already
+	 * sit at 3, neither the 105..349 nor the 350..419 expansion pushes any pair
+	 * past it, and the 840-flip rows 420..839 (which only use the 20 v5 surface
+	 * families) land exactly on 3 per new pair by construction (i % 20 vs i % 28
+	 * collide once per lcm = 140 indices, and 420 / 140 = 3).
 	 */
 	@GameTest
 	public void uniquenessMatrixHolds(GameTestHelper helper) {
@@ -645,7 +664,7 @@ public class EffectCatalogGameTests {
 
 	/**
 	 * Every axis label used by the effect-picker tooltips resolves to a lang key:
-	 * 40 surface families, 60 registered inside behaviors, 7 guard styles and 6
+	 * 60 surface families, 120 registered inside behaviors, 7 guard styles and 6
 	 * context profiles. Keys are derived from the live enums/registry so the
 	 * tooltip composition in {@code EffectPickerScreen} and the lang files cannot
 	 * drift apart.
@@ -659,7 +678,7 @@ public class EffectCatalogGameTests {
 			helper.assertTrue(enKeys.contains(key), "missing lang key: " + key);
 		}
 
-		helper.assertTrue(InsideEffectBehavior.REGISTRY.size() == 60, "expected 60 registered behaviors");
+		helper.assertTrue(InsideEffectBehavior.REGISTRY.size() == 120, "expected 120 registered behaviors");
 		for (String behaviorId : InsideEffectBehavior.REGISTRY.keySet()) {
 			String key = "behavior.bubbleshield." + behaviorId;
 			helper.assertTrue(enKeys.contains(key), "missing lang key: " + key);

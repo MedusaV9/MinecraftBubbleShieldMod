@@ -1,0 +1,87 @@
+{
+    "targets": {
+        "swap": {}
+    },
+    "passes": [
+        {
+            "vertex_shader": "minecraft:core/screenquad",
+            "fragment_shader": "bubbleshield:screenfx/sfx_722",
+            "inputs": [
+                {
+                    "sampler_name": "In",
+                    "target": "minecraft:main"
+                }
+            ],
+            "output": "swap",
+            "uniforms": {
+                "FxConfig": [
+                    {
+                        "name": "Primary",
+                        "type": "vec4",
+                        "value": [
+                            0.3451,
+                            0.0706,
+                            0.7216,
+                            1.0
+                        ]
+                    },
+                    {
+                        "name": "Secondary",
+                        "type": "vec4",
+                        "value": [
+                            0.2471,
+                            0.0,
+                            0.302,
+                            1.0
+                        ]
+                    },
+                    {
+                        "name": "ParamsA",
+                        "type": "vec4",
+                        "value": [
+                            8.964,
+                            0.44,
+                            0.0,
+                            0.0
+                        ]
+                    },
+                    {
+                        "name": "ParamsB",
+                        "type": "vec4",
+                        "value": [
+                            0.2205,
+                            1.2236,
+                            0.3,
+                            0.35
+                        ]
+                    }
+                ]
+            }
+        },
+        {
+            "vertex_shader": "minecraft:core/screenquad",
+            "fragment_shader": "minecraft:post/blit",
+            "inputs": [
+                {
+                    "sampler_name": "In",
+                    "target": "swap"
+                }
+            ],
+            "output": "minecraft:main",
+            "uniforms": {
+                "BlitConfig": [
+                    {
+                        "name": "ColorModulate",
+                        "type": "vec4",
+                        "value": [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0
+                        ]
+                    }
+                ]
+            }
+        }
+    ]
+}

@@ -3,9 +3,9 @@ package com.bubbleshield.effect.behaviors;
 import com.bubbleshield.effect.InsideEffectBehavior;
 
 /**
- * Registers the 60 built-in {@link InsideEffectBehavior} implementations, each
- * used by the 420-effect catalogue exactly 7 times (variants 0..6 -- an exact
- * 60 x 7 cover enforced by
+ * Registers the 120 built-in {@link InsideEffectBehavior} implementations, each
+ * used by the 840-effect catalogue exactly 7 times (variants 0..6 -- an exact
+ * 120 x 7 cover enforced by
  * {@link com.bubbleshield.effect.EffectRegistry#validate()}).
  */
 public final class EffectBehaviors {
@@ -86,5 +86,68 @@ public final class EffectBehaviors {
 		InsideEffectBehavior.register(SpectralShoal.ID, new SpectralShoal());
 		InsideEffectBehavior.register(WraithOrbs.ID, new WraithOrbs());
 		InsideEffectBehavior.register(SeanceCircle.ID, new SeanceCircle());
+
+		// The 60 behaviors added by the 840 milestone, covered by rows 420..839
+		// (variants 0..6 each; row assignment order = this append order).
+		InsideEffectBehavior.register(BansheeWails.ID, new BansheeWails());
+		InsideEffectBehavior.register(GhostRiders.ID, new GhostRiders());
+		InsideEffectBehavior.register(SpiritLanterns.ID, new SpiritLanterns());
+		InsideEffectBehavior.register(HauntedPortraits.ID, new HauntedPortraits());
+		InsideEffectBehavior.register(PoltergeistToss.ID, new PoltergeistToss());
+		InsideEffectBehavior.register(WailingChoir.ID, new WailingChoir());
+		InsideEffectBehavior.register(GraveHands.ID, new GraveHands());
+		InsideEffectBehavior.register(EctoMistMaze.ID, new EctoMistMaze());
+		InsideEffectBehavior.register(PhantomBells.ID, new PhantomBells());
+		InsideEffectBehavior.register(SeanceTable.ID, new SeanceTable());
+		InsideEffectBehavior.register(GhostWolves.ID, new GhostWolves());
+		InsideEffectBehavior.register(SpectralStag.ID, new SpectralStag());
+		InsideEffectBehavior.register(WispOwls.ID, new WispOwls());
+		InsideEffectBehavior.register(BoneFish.ID, new BoneFish());
+		InsideEffectBehavior.register(CarrionCrows.ID, new CarrionCrows());
+		InsideEffectBehavior.register(StyxFerry.ID, new StyxFerry());
+		InsideEffectBehavior.register(SoulWells.ID, new SoulWells());
+		InsideEffectBehavior.register(ChainedSpecters.ID, new ChainedSpecters());
+		InsideEffectBehavior.register(ReaperScythe.ID, new ReaperScythe());
+		InsideEffectBehavior.register(PurgatoryQueue.ID, new PurgatoryQueue());
+		InsideEffectBehavior.register(SpiritRain.ID, new SpiritRain());
+		InsideEffectBehavior.register(EctoFogBanks.ID, new EctoFogBanks());
+		InsideEffectBehavior.register(AuroraGhosts.ID, new AuroraGhosts());
+		InsideEffectBehavior.register(StaticHaunt.ID, new StaticHaunt());
+		InsideEffectBehavior.register(MoonbeamShafts.ID, new MoonbeamShafts());
+		InsideEffectBehavior.register(CreeperEffigies.ID, new CreeperEffigies());
+		InsideEffectBehavior.register(EndermanStalkers.ID, new EndermanStalkers());
+		InsideEffectBehavior.register(SkeletonArmy.ID, new SkeletonArmy());
+		InsideEffectBehavior.register(SlimeGhosts.ID, new SlimeGhosts());
+		InsideEffectBehavior.register(DrownedProcession.ID, new DrownedProcession());
+		InsideEffectBehavior.register(ConstellationWheel.ID, new ConstellationWheel());
+		InsideEffectBehavior.register(CometOrrery.ID, new CometOrrery());
+		InsideEffectBehavior.register(EclipseDisc.ID, new EclipseDisc());
+		InsideEffectBehavior.register(MeteorShowerVeil.ID, new MeteorShowerVeil());
+		InsideEffectBehavior.register(ZodiacBeams.ID, new ZodiacBeams());
+		InsideEffectBehavior.register(DryadBloom.ID, new DryadBloom());
+		InsideEffectBehavior.register(MushroomRingSprites.ID, new MushroomRingSprites());
+		InsideEffectBehavior.register(PollenElementals.ID, new PollenElementals());
+		InsideEffectBehavior.register(VineSerpents.ID, new VineSerpents());
+		InsideEffectBehavior.register(SeasonsWheel.ID, new SeasonsWheel());
+		InsideEffectBehavior.register(ClockworkGears.ID, new ClockworkGears());
+		InsideEffectBehavior.register(RuneForge.ID, new RuneForge());
+		InsideEffectBehavior.register(AlchemyCircles.ID, new AlchemyCircles());
+		InsideEffectBehavior.register(MirrorMaze.ID, new MirrorMaze());
+		InsideEffectBehavior.register(ArcaneTurbines.ID, new ArcaneTurbines());
+		InsideEffectBehavior.register(AbyssalJellies.ID, new AbyssalJellies());
+		InsideEffectBehavior.register(VoidRiftsInside.ID, new VoidRiftsInside());
+		InsideEffectBehavior.register(LeviathanShadow.ID, new LeviathanShadow());
+		InsideEffectBehavior.register(AnglerfishLures.ID, new AnglerfishLures());
+		InsideEffectBehavior.register(SingularityHeart.ID, new SingularityHeart());
+		InsideEffectBehavior.register(LanternFestival.ID, new LanternFestival());
+		InsideEffectBehavior.register(FireworkRegatta.ID, new FireworkRegatta());
+		InsideEffectBehavior.register(GhostMasquerade.ID, new GhostMasquerade());
+		InsideEffectBehavior.register(DrumlineGolems.ID, new DrumlineGolems());
+		InsideEffectBehavior.register(ChimeCurtains.ID, new ChimeCurtains());
+		InsideEffectBehavior.register(SentinelTotems.ID, new SentinelTotems());
+		InsideEffectBehavior.register(ValkyriePatrol.ID, new ValkyriePatrol());
+		InsideEffectBehavior.register(ShieldMaidens.ID, new ShieldMaidens());
+		InsideEffectBehavior.register(CerberusWatch.ID, new CerberusWatch());
+		InsideEffectBehavior.register(GeniePlumes.ID, new GeniePlumes());
 	}
 }

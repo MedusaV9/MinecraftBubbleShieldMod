@@ -99,7 +99,7 @@ REGISTRY_JAVA = REPO_ROOT / "src/main/java/com/bubbleshield/effect/EffectRegistr
 DEFAULT_MANIFEST = REPO_ROOT / "tools/screen_manifest.json"
 CLASSPATH_MANIFEST = REPO_ROOT / "src/main/resources/assets/bubbleshield/screen_manifest.json"
 
-COUNT = 420
+COUNT = 840
 GLOBAL_SEED = 0x5C4EE7F1
 MAX_UV_OFFSET = 0.02  # gameplay-safety bound for any scene-sample displacement
 
@@ -108,9 +108,8 @@ FAMILIES = [
     "bloomglow", "ripple", "scanlines", "edgeglow", "frostlens", "heathaze",
     "posterize", "radialblur", "glitch", "duotone",
     "kaleido", "huedrift", "dreamblur", "moire",
-    # v5 families: DORMANT until the next catalogue flip adds EffectRegistry
-    # rows that reference them (no current row does, so they emit nothing and
-    # every existing sfx byte is untouched).
+    # v5 families: referenced only by the 840-flip rows 420..839, so every
+    # pre-flip sfx byte (ids 0..419) is untouched by regeneration.
     "spectral", "aberration", "underwater", "thermal",
     "sketch", "starburst", "vhs", "gloom",
 ]

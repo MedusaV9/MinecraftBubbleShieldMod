@@ -195,11 +195,12 @@ BUBBLE_DIR = REPO_ROOT / "src/client/resources/assets/bubbleshield/shaders/bubbl
 REGISTRY_JAVA = REPO_ROOT / "src/main/java/com/bubbleshield/effect/EffectRegistry.java"
 DEFAULT_MANIFEST = REPO_ROOT / "tools/surface_manifest.json"
 
-COUNT = 420
+COUNT = 840
 GLOBAL_SEED = 0xB0BB7E5D
 
-# The 40 SurfaceTemplate enum names (enum order): the 16 originals, the 8 added
-# for the 350 milestone and the 16 added for the 420 milestone.
+# The 60 SurfaceTemplate enum names (enum order): the 16 originals, the 8 added
+# for the 350 milestone, the 16 added for the 420 milestone and the 20 v5
+# families added for the 840 flip.
 FAMILIES = [
     "PLASMA", "HEX", "WAVES", "AURORA", "SPARKLE", "RINGS", "VORONOI", "ARCS",
     "SCALES", "STARFIELD", "VORTEX", "INTERFERENCE", "KALEIDO", "CIRCUIT",
@@ -210,8 +211,8 @@ FAMILIES = [
     "GALAXYSWIRL", "RIBBONAURORA", "FROSTFERN", "BIOLUME", "HOLOGRID",
     "PORTALVOID", "EMBERSTORM", "SHARDTESS", "SACREDGEO", "VOIDTENDRIL",
     "CRYSTALREFRACT",
-    # 20 v5 technique families (append-only; no registry row references them
-    # yet, so regenerating leaves fx_000..fx_419 byte-identical -- the
+    # 20 v5 technique families (append-only; only rows 420..839 reference
+    # them, so regenerating leaves fx_000..fx_419 byte-identical -- the
     # assignment table reads each id's family from EffectRegistry.java).
     "SPECTRALVEIL", "RAYMARCHFOG", "PRISMDISPERSE", "HOLOPARALLAX",
     "ORBITTRAP", "CRYSTALSDF", "FLUIDINK", "IRISFILM", "AETHERSMOKE",
@@ -2677,8 +2678,12 @@ def emit_shader(asg: dict) -> str:
 
     source = "\n".join(lines) + "\n"
     n = source.count("\n")
-    if not 110 <= n <= 420:
-        sys.exit(f"fx_{effect_id:03d}: emitted {n} lines, outside the 110..420 sanity bounds")
+    # Upper bound raised 420 -> 500 for the 840 flip: the v5 quality layer
+    # (backface densify/dim + slope parallax + ghost alpha + dither + soft
+    # knee) adds ~40 lines to the v5-family files, which were dormant (never
+    # emitted) when the old ceiling was tuned. Ids 0..419 are unaffected.
+    if not 110 <= n <= 500:
+        sys.exit(f"fx_{effect_id:03d}: emitted {n} lines, outside the 110..500 sanity bounds")
     return source
 
 

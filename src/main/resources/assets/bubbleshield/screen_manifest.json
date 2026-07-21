@@ -3221,6 +3221,96 @@
     "seed": "4bb759a20d320108",
     "variant": "diag"
   },
+  "420": {
+    "family": "tint",
+    "file": "sfx_420.fsh",
+    "lines": 81,
+    "motion": "drift",
+    "overlay": "sparkle",
+    "seed": "d11cf7330a6d6ea6",
+    "variant": "splitlat"
+  },
+  "421": {
+    "family": "wobble",
+    "file": "sfx_421.fsh",
+    "lines": 85,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "86fb65ee802df669",
+    "variant": "diag"
+  },
+  "422": {
+    "family": "vignette",
+    "file": "sfx_422.fsh",
+    "lines": 89,
+    "motion": "drift",
+    "overlay": "grain",
+    "seed": "0fe1e3155e3007ae",
+    "variant": "noisy"
+  },
+  "423": {
+    "family": "chroma",
+    "file": "sfx_423.fsh",
+    "lines": 87,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "a27511b6e347a62c",
+    "variant": "rotating"
+  },
+  "424": {
+    "family": "pixelate",
+    "file": "sfx_424.fsh",
+    "lines": 90,
+    "motion": "steady",
+    "overlay": "grain",
+    "seed": "e8b0af86545bbb2f",
+    "variant": "wide"
+  },
+  "425": {
+    "family": "desat",
+    "file": "sfx_425.fsh",
+    "lines": 67,
+    "motion": "surge",
+    "overlay": "none",
+    "seed": "58527471fff5baed",
+    "variant": "shadows"
+  },
+  "426": {
+    "family": "bloomglow",
+    "file": "sfx_426.fsh",
+    "lines": 84,
+    "motion": "drift",
+    "overlay": "none",
+    "seed": "6b9d3b7fb9eff0eb",
+    "variant": "diag"
+  },
+  "427": {
+    "family": "ripple",
+    "file": "sfx_427.fsh",
+    "lines": 106,
+    "motion": "pulse",
+    "overlay": "none",
+    "seed": "221dcca72d5d4d4e",
+    "variant": "pond"
+  },
+  "428": {
+    "family": "scanlines",
+    "file": "sfx_428.fsh",
+    "lines": 98,
+    "motion": "steady",
+    "overlay": "pulseglow",
+    "seed": "b02b9b03e4e04f36",
+    "variant": "vertical"
+  },
+  "429": {
+    "family": "edgeglow",
+    "file": "sfx_429.fsh",
+    "lines": 101,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "76cce8159f606ca0",
+    "variant": "sobel"
+  },
   "43": {
     "family": "frostlens",
     "file": "sfx_043.fsh",
@@ -3229,6 +3319,96 @@
     "overlay": "grain",
     "seed": "831cd3c582f0a916",
     "variant": "creep"
+  },
+  "430": {
+    "family": "frostlens",
+    "file": "sfx_430.fsh",
+    "lines": 113,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "14bef70387177d1c",
+    "variant": "sheet"
+  },
+  "431": {
+    "family": "heathaze",
+    "file": "sfx_431.fsh",
+    "lines": 104,
+    "motion": "surge",
+    "overlay": "none",
+    "seed": "32b85c4320f83660",
+    "variant": "columns"
+  },
+  "432": {
+    "family": "posterize",
+    "file": "sfx_432.fsh",
+    "lines": 67,
+    "motion": "pulse",
+    "overlay": "none",
+    "seed": "47dd862847018b60",
+    "variant": "lumaonly"
+  },
+  "433": {
+    "family": "radialblur",
+    "file": "sfx_433.fsh",
+    "lines": 83,
+    "motion": "steady",
+    "overlay": "none",
+    "seed": "276eef20a4050608",
+    "variant": "pulsezoom"
+  },
+  "434": {
+    "family": "glitch",
+    "file": "sfx_434.fsh",
+    "lines": 101,
+    "motion": "steady",
+    "overlay": "none",
+    "seed": "c719cea66f72e73e",
+    "variant": "blocks"
+  },
+  "435": {
+    "family": "duotone",
+    "file": "sfx_435.fsh",
+    "lines": 78,
+    "motion": "pulse",
+    "overlay": "sparkle",
+    "seed": "39b14a6394128b76",
+    "variant": "hard"
+  },
+  "436": {
+    "family": "kaleido",
+    "file": "sfx_436.fsh",
+    "lines": 97,
+    "motion": "steady",
+    "overlay": "none",
+    "seed": "86945a93eba711cf",
+    "variant": "wedge6"
+  },
+  "437": {
+    "family": "huedrift",
+    "file": "sfx_437.fsh",
+    "lines": 81,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "4ab71539cc8b96cf",
+    "variant": "radial"
+  },
+  "438": {
+    "family": "dreamblur",
+    "file": "sfx_438.fsh",
+    "lines": 96,
+    "motion": "steady",
+    "overlay": "grain",
+    "seed": "36e3554959fef994",
+    "variant": "cross5"
+  },
+  "439": {
+    "family": "moire",
+    "file": "sfx_439.fsh",
+    "lines": 81,
+    "motion": "surge",
+    "overlay": "grain",
+    "seed": "b13284c1b86f40a1",
+    "variant": "linlin"
   },
   "44": {
     "family": "wobble",
@@ -3239,6 +3419,96 @@
     "seed": "a971a7097d28e810",
     "variant": "harmonic"
   },
+  "440": {
+    "family": "spectral",
+    "file": "sfx_440.fsh",
+    "lines": 86,
+    "motion": "drift",
+    "overlay": "none",
+    "seed": "08b4712cdb49db49",
+    "variant": "twin"
+  },
+  "441": {
+    "family": "aberration",
+    "file": "sfx_441.fsh",
+    "lines": 82,
+    "motion": "pulse",
+    "overlay": "none",
+    "seed": "a166069f5dc40f45",
+    "variant": "barrel"
+  },
+  "442": {
+    "family": "underwater",
+    "file": "sfx_442.fsh",
+    "lines": 120,
+    "motion": "pulse",
+    "overlay": "pulseglow",
+    "seed": "94c390a22ac0b23f",
+    "variant": "surgewash"
+  },
+  "443": {
+    "family": "thermal",
+    "file": "sfx_443.fsh",
+    "lines": 96,
+    "motion": "drift",
+    "overlay": "sparkle",
+    "seed": "c58d4e650b133a55",
+    "variant": "classic"
+  },
+  "444": {
+    "family": "sketch",
+    "file": "sfx_444.fsh",
+    "lines": 110,
+    "motion": "steady",
+    "overlay": "pulseglow",
+    "seed": "69991792860c2737",
+    "variant": "charcoal"
+  },
+  "445": {
+    "family": "starburst",
+    "file": "sfx_445.fsh",
+    "lines": 99,
+    "motion": "steady",
+    "overlay": "grain",
+    "seed": "6a581793d6121785",
+    "variant": "spinning"
+  },
+  "446": {
+    "family": "vhs",
+    "file": "sfx_446.fsh",
+    "lines": 110,
+    "motion": "pulse",
+    "overlay": "sparkle",
+    "seed": "508917211b2fc3d3",
+    "variant": "headswitch"
+  },
+  "447": {
+    "family": "gloom",
+    "file": "sfx_447.fsh",
+    "lines": 79,
+    "motion": "steady",
+    "overlay": "pulseglow",
+    "seed": "8f59e739337a8de8",
+    "variant": "heartbeat"
+  },
+  "448": {
+    "family": "tint",
+    "file": "sfx_448.fsh",
+    "lines": 79,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "df9ee61fc83e8607",
+    "variant": "splitlat"
+  },
+  "449": {
+    "family": "wobble",
+    "file": "sfx_449.fsh",
+    "lines": 85,
+    "motion": "pulse",
+    "overlay": "pulseglow",
+    "seed": "8bbc5dd63914d30f",
+    "variant": "sincos"
+  },
   "45": {
     "family": "desat",
     "file": "sfx_045.fsh",
@@ -3247,6 +3517,96 @@
     "overlay": "none",
     "seed": "a10914650d29a4e2",
     "variant": "shadows"
+  },
+  "450": {
+    "family": "vignette",
+    "file": "sfx_450.fsh",
+    "lines": 83,
+    "motion": "pulse",
+    "overlay": "none",
+    "seed": "9c246e79839cfc17",
+    "variant": "noisy"
+  },
+  "451": {
+    "family": "chroma",
+    "file": "sfx_451.fsh",
+    "lines": 91,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "98f8f90e639e3630",
+    "variant": "linear"
+  },
+  "452": {
+    "family": "pixelate",
+    "file": "sfx_452.fsh",
+    "lines": 85,
+    "motion": "pulse",
+    "overlay": "pulseglow",
+    "seed": "570723cdab3cf96d",
+    "variant": "square"
+  },
+  "453": {
+    "family": "desat",
+    "file": "sfx_453.fsh",
+    "lines": 79,
+    "motion": "surge",
+    "overlay": "sparkle",
+    "seed": "aeaedf2c11dc9f21",
+    "variant": "shadows"
+  },
+  "454": {
+    "family": "bloomglow",
+    "file": "sfx_454.fsh",
+    "lines": 95,
+    "motion": "surge",
+    "overlay": "grain",
+    "seed": "930d803ae1bd4817",
+    "variant": "ring"
+  },
+  "455": {
+    "family": "ripple",
+    "file": "sfx_455.fsh",
+    "lines": 111,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "0410d7f70d81787a",
+    "variant": "pond"
+  },
+  "456": {
+    "family": "scanlines",
+    "file": "sfx_456.fsh",
+    "lines": 105,
+    "motion": "pulse",
+    "overlay": "sparkle",
+    "seed": "7960b5ca4e18262d",
+    "variant": "vertical"
+  },
+  "457": {
+    "family": "edgeglow",
+    "file": "sfx_457.fsh",
+    "lines": 102,
+    "motion": "surge",
+    "overlay": "grain",
+    "seed": "a3b8905f34b67c01",
+    "variant": "thick"
+  },
+  "458": {
+    "family": "frostlens",
+    "file": "sfx_458.fsh",
+    "lines": 114,
+    "motion": "surge",
+    "overlay": "grain",
+    "seed": "0b2d55de2cd32c15",
+    "variant": "sheet"
+  },
+  "459": {
+    "family": "heathaze",
+    "file": "sfx_459.fsh",
+    "lines": 103,
+    "motion": "surge",
+    "overlay": "sparkle",
+    "seed": "8cdc027fe0eb91c0",
+    "variant": "embers"
   },
   "46": {
     "family": "pixelate",
@@ -3257,6 +3617,96 @@
     "seed": "23e7b6678f3a6d2a",
     "variant": "square"
   },
+  "460": {
+    "family": "posterize",
+    "file": "sfx_460.fsh",
+    "lines": 79,
+    "motion": "pulse",
+    "overlay": "sparkle",
+    "seed": "f0e16d4aae1b7a42",
+    "variant": "banded"
+  },
+  "461": {
+    "family": "radialblur",
+    "file": "sfx_461.fsh",
+    "lines": 96,
+    "motion": "drift",
+    "overlay": "sparkle",
+    "seed": "904fb9f6af47dce0",
+    "variant": "pulsezoom"
+  },
+  "462": {
+    "family": "glitch",
+    "file": "sfx_462.fsh",
+    "lines": 105,
+    "motion": "steady",
+    "overlay": "pulseglow",
+    "seed": "95029dcab2ae0497",
+    "variant": "rowcol"
+  },
+  "463": {
+    "family": "duotone",
+    "file": "sfx_463.fsh",
+    "lines": 77,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "cbd51a43c06bc85d",
+    "variant": "soft"
+  },
+  "464": {
+    "family": "kaleido",
+    "file": "sfx_464.fsh",
+    "lines": 109,
+    "motion": "pulse",
+    "overlay": "sparkle",
+    "seed": "4ec0272f70bb6fb7",
+    "variant": "wedge6"
+  },
+  "465": {
+    "family": "huedrift",
+    "file": "sfx_465.fsh",
+    "lines": 81,
+    "motion": "surge",
+    "overlay": "pulseglow",
+    "seed": "834ce455dcd42c60",
+    "variant": "radial"
+  },
+  "466": {
+    "family": "dreamblur",
+    "file": "sfx_466.fsh",
+    "lines": 98,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "25080c731fb37562",
+    "variant": "glowdream"
+  },
+  "467": {
+    "family": "moire",
+    "file": "sfx_467.fsh",
+    "lines": 81,
+    "motion": "drift",
+    "overlay": "grain",
+    "seed": "16aa591e9e48341c",
+    "variant": "linring"
+  },
+  "468": {
+    "family": "spectral",
+    "file": "sfx_468.fsh",
+    "lines": 86,
+    "motion": "steady",
+    "overlay": "none",
+    "seed": "5eaf601cc7cf01f9",
+    "variant": "orbit"
+  },
+  "469": {
+    "family": "aberration",
+    "file": "sfx_469.fsh",
+    "lines": 96,
+    "motion": "drift",
+    "overlay": "sparkle",
+    "seed": "dff6296a0d72bf75",
+    "variant": "cornered"
+  },
   "47": {
     "family": "scanlines",
     "file": "sfx_047.fsh",
@@ -3265,6 +3715,96 @@
     "overlay": "grain",
     "seed": "0912b01f725dc802",
     "variant": "rolling"
+  },
+  "470": {
+    "family": "underwater",
+    "file": "sfx_470.fsh",
+    "lines": 121,
+    "motion": "surge",
+    "overlay": "grain",
+    "seed": "37e69c1bf3f5464e",
+    "variant": "surgewash"
+  },
+  "471": {
+    "family": "thermal",
+    "file": "sfx_471.fsh",
+    "lines": 96,
+    "motion": "drift",
+    "overlay": "grain",
+    "seed": "e6b624000c1ad85a",
+    "variant": "inverted"
+  },
+  "472": {
+    "family": "sketch",
+    "file": "sfx_472.fsh",
+    "lines": 99,
+    "motion": "drift",
+    "overlay": "grain",
+    "seed": "ed44c4880c392f48",
+    "variant": "blueprint"
+  },
+  "473": {
+    "family": "starburst",
+    "file": "sfx_473.fsh",
+    "lines": 100,
+    "motion": "surge",
+    "overlay": "grain",
+    "seed": "97ac169655e60693",
+    "variant": "four"
+  },
+  "474": {
+    "family": "vhs",
+    "file": "sfx_474.fsh",
+    "lines": 112,
+    "motion": "steady",
+    "overlay": "grain",
+    "seed": "cc02a01fc5327c12",
+    "variant": "worn"
+  },
+  "475": {
+    "family": "gloom",
+    "file": "sfx_475.fsh",
+    "lines": 74,
+    "motion": "pulse",
+    "overlay": "none",
+    "seed": "d8acd92b53df1d51",
+    "variant": "heartbeat"
+  },
+  "476": {
+    "family": "tint",
+    "file": "sfx_476.fsh",
+    "lines": 80,
+    "motion": "pulse",
+    "overlay": "sparkle",
+    "seed": "3af2622e763d42b2",
+    "variant": "splitlat"
+  },
+  "477": {
+    "family": "wobble",
+    "file": "sfx_477.fsh",
+    "lines": 86,
+    "motion": "surge",
+    "overlay": "pulseglow",
+    "seed": "8f869dc126cd7aff",
+    "variant": "sincos"
+  },
+  "478": {
+    "family": "vignette",
+    "file": "sfx_478.fsh",
+    "lines": 89,
+    "motion": "steady",
+    "overlay": "sparkle",
+    "seed": "b1d323d48cc705b6",
+    "variant": "noisy"
+  },
+  "479": {
+    "family": "chroma",
+    "file": "sfx_479.fsh",
+    "lines": 92,
+    "motion": "steady",
+    "overlay": "grain",
+    "seed": "5dcb914218834ad5",
+    "variant": "rotating"
   },
   "48": {
     "family": "edgeglow",
@@ -3275,6 +3815,96 @@
     "seed": "17a7324c815fcce0",
     "variant": "thick"
   },
+  "480": {
+    "family": "pixelate",
+    "file": "sfx_480.fsh",
+    "lines": 86,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "d93f91be8ea0b674",
+    "variant": "breathe"
+  },
+  "481": {
+    "family": "desat",
+    "file": "sfx_481.fsh",
+    "lines": 72,
+    "motion": "surge",
+    "overlay": "pulseglow",
+    "seed": "2f6db446a84a9166",
+    "variant": "shadows"
+  },
+  "482": {
+    "family": "bloomglow",
+    "file": "sfx_482.fsh",
+    "lines": 89,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "445a706985a1f931",
+    "variant": "diag"
+  },
+  "483": {
+    "family": "ripple",
+    "file": "sfx_483.fsh",
+    "lines": 112,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "01c4b772ab6506a7",
+    "variant": "pond"
+  },
+  "484": {
+    "family": "scanlines",
+    "file": "sfx_484.fsh",
+    "lines": 82,
+    "motion": "surge",
+    "overlay": "sparkle",
+    "seed": "7a4ec767d4e06c75",
+    "variant": "grid"
+  },
+  "485": {
+    "family": "edgeglow",
+    "file": "sfx_485.fsh",
+    "lines": 91,
+    "motion": "pulse",
+    "overlay": "none",
+    "seed": "2dbd518a282d8c80",
+    "variant": "duo"
+  },
+  "486": {
+    "family": "frostlens",
+    "file": "sfx_486.fsh",
+    "lines": 114,
+    "motion": "drift",
+    "overlay": "grain",
+    "seed": "10c0501ed5fa0ccc",
+    "variant": "sheet"
+  },
+  "487": {
+    "family": "heathaze",
+    "file": "sfx_487.fsh",
+    "lines": 109,
+    "motion": "steady",
+    "overlay": "sparkle",
+    "seed": "85eff5fca22d95c0",
+    "variant": "columns"
+  },
+  "488": {
+    "family": "posterize",
+    "file": "sfx_488.fsh",
+    "lines": 81,
+    "motion": "surge",
+    "overlay": "pulseglow",
+    "seed": "ace8cede91a36579",
+    "variant": "dither"
+  },
+  "489": {
+    "family": "radialblur",
+    "file": "sfx_489.fsh",
+    "lines": 98,
+    "motion": "surge",
+    "overlay": "sparkle",
+    "seed": "c0de8564db628ef1",
+    "variant": "spin"
+  },
   "49": {
     "family": "vignette",
     "file": "sfx_049.fsh",
@@ -3283,6 +3913,96 @@
     "overlay": "sparkle",
     "seed": "5641b82a6d0907a8",
     "variant": "noisy"
+  },
+  "490": {
+    "family": "glitch",
+    "file": "sfx_490.fsh",
+    "lines": 100,
+    "motion": "steady",
+    "overlay": "none",
+    "seed": "3917e076550893d3",
+    "variant": "rowcol"
+  },
+  "491": {
+    "family": "duotone",
+    "file": "sfx_491.fsh",
+    "lines": 67,
+    "motion": "drift",
+    "overlay": "none",
+    "seed": "c7e704f089559c78",
+    "variant": "soft"
+  },
+  "492": {
+    "family": "kaleido",
+    "file": "sfx_492.fsh",
+    "lines": 108,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "c3321e5daaa7d3bd",
+    "variant": "wedge4"
+  },
+  "493": {
+    "family": "huedrift",
+    "file": "sfx_493.fsh",
+    "lines": 87,
+    "motion": "pulse",
+    "overlay": "sparkle",
+    "seed": "c9295e8a86e24cc6",
+    "variant": "radial"
+  },
+  "494": {
+    "family": "dreamblur",
+    "file": "sfx_494.fsh",
+    "lines": 96,
+    "motion": "steady",
+    "overlay": "pulseglow",
+    "seed": "b980732d5178afb3",
+    "variant": "cross5"
+  },
+  "495": {
+    "family": "moire",
+    "file": "sfx_495.fsh",
+    "lines": 84,
+    "motion": "drift",
+    "overlay": "sparkle",
+    "seed": "557fcb7893de4c01",
+    "variant": "ringring"
+  },
+  "496": {
+    "family": "spectral",
+    "file": "sfx_496.fsh",
+    "lines": 98,
+    "motion": "pulse",
+    "overlay": "sparkle",
+    "seed": "d7d597e1a13b2787",
+    "variant": "orbit"
+  },
+  "497": {
+    "family": "aberration",
+    "file": "sfx_497.fsh",
+    "lines": 89,
+    "motion": "pulse",
+    "overlay": "pulseglow",
+    "seed": "45f883027aba2666",
+    "variant": "breathing"
+  },
+  "498": {
+    "family": "underwater",
+    "file": "sfx_498.fsh",
+    "lines": 120,
+    "motion": "steady",
+    "overlay": "pulseglow",
+    "seed": "d6b3a7f67ef02f6b",
+    "variant": "surgewash"
+  },
+  "499": {
+    "family": "thermal",
+    "file": "sfx_499.fsh",
+    "lines": 95,
+    "motion": "pulse",
+    "overlay": "pulseglow",
+    "seed": "7b62629a63ec4d2a",
+    "variant": "inverted"
   },
   "5": {
     "family": "wobble",
@@ -3302,6 +4022,96 @@
     "seed": "51747f813a2134f8",
     "variant": "thick"
   },
+  "500": {
+    "family": "sketch",
+    "file": "sfx_500.fsh",
+    "lines": 85,
+    "motion": "pulse",
+    "overlay": "none",
+    "seed": "2cd7b6b100165da6",
+    "variant": "ink"
+  },
+  "501": {
+    "family": "starburst",
+    "file": "sfx_501.fsh",
+    "lines": 88,
+    "motion": "surge",
+    "overlay": "none",
+    "seed": "ed986f48da20aa70",
+    "variant": "five"
+  },
+  "502": {
+    "family": "vhs",
+    "file": "sfx_502.fsh",
+    "lines": 114,
+    "motion": "surge",
+    "overlay": "pulseglow",
+    "seed": "546dce0bcbf30b8e",
+    "variant": "dropout"
+  },
+  "503": {
+    "family": "gloom",
+    "file": "sfx_503.fsh",
+    "lines": 79,
+    "motion": "pulse",
+    "overlay": "none",
+    "seed": "e4fe7b773d170672",
+    "variant": "hollow"
+  },
+  "504": {
+    "family": "tint",
+    "file": "sfx_504.fsh",
+    "lines": 77,
+    "motion": "pulse",
+    "overlay": "sparkle",
+    "seed": "f01f1ca2a5823d0a",
+    "variant": "grade"
+  },
+  "505": {
+    "family": "wobble",
+    "file": "sfx_505.fsh",
+    "lines": 79,
+    "motion": "pulse",
+    "overlay": "none",
+    "seed": "7969dd234ea469ae",
+    "variant": "harmonic"
+  },
+  "506": {
+    "family": "vignette",
+    "file": "sfx_506.fsh",
+    "lines": 77,
+    "motion": "steady",
+    "overlay": "sparkle",
+    "seed": "258c875a59a789ef",
+    "variant": "round"
+  },
+  "507": {
+    "family": "chroma",
+    "file": "sfx_507.fsh",
+    "lines": 82,
+    "motion": "drift",
+    "overlay": "none",
+    "seed": "e9056fe563fd93a4",
+    "variant": "rotating"
+  },
+  "508": {
+    "family": "pixelate",
+    "file": "sfx_508.fsh",
+    "lines": 91,
+    "motion": "surge",
+    "overlay": "grain",
+    "seed": "99478a8fbeeb9c49",
+    "variant": "wide"
+  },
+  "509": {
+    "family": "desat",
+    "file": "sfx_509.fsh",
+    "lines": 66,
+    "motion": "surge",
+    "overlay": "none",
+    "seed": "7c4bbfe250c3a049",
+    "variant": "flat"
+  },
   "51": {
     "family": "bloomglow",
     "file": "sfx_051.fsh",
@@ -3310,6 +4120,96 @@
     "overlay": "grain",
     "seed": "826dde793ea2ae93",
     "variant": "cross"
+  },
+  "510": {
+    "family": "bloomglow",
+    "file": "sfx_510.fsh",
+    "lines": 96,
+    "motion": "surge",
+    "overlay": "sparkle",
+    "seed": "596f10c5c4d81a8a",
+    "variant": "diag"
+  },
+  "511": {
+    "family": "ripple",
+    "file": "sfx_511.fsh",
+    "lines": 106,
+    "motion": "drift",
+    "overlay": "grain",
+    "seed": "d13713065258a97b",
+    "variant": "twin"
+  },
+  "512": {
+    "family": "scanlines",
+    "file": "sfx_512.fsh",
+    "lines": 82,
+    "motion": "pulse",
+    "overlay": "pulseglow",
+    "seed": "d5f29cbbd9388f83",
+    "variant": "rolling"
+  },
+  "513": {
+    "family": "edgeglow",
+    "file": "sfx_513.fsh",
+    "lines": 95,
+    "motion": "steady",
+    "overlay": "pulseglow",
+    "seed": "f41b61559d3eec4e",
+    "variant": "thick"
+  },
+  "514": {
+    "family": "frostlens",
+    "file": "sfx_514.fsh",
+    "lines": 115,
+    "motion": "surge",
+    "overlay": "sparkle",
+    "seed": "390954ace3e7526c",
+    "variant": "sheet"
+  },
+  "515": {
+    "family": "heathaze",
+    "file": "sfx_515.fsh",
+    "lines": 99,
+    "motion": "surge",
+    "overlay": "pulseglow",
+    "seed": "854f7d282b356def",
+    "variant": "rising"
+  },
+  "516": {
+    "family": "posterize",
+    "file": "sfx_516.fsh",
+    "lines": 81,
+    "motion": "pulse",
+    "overlay": "sparkle",
+    "seed": "f29bb68bdcd4baa8",
+    "variant": "dither"
+  },
+  "517": {
+    "family": "radialblur",
+    "file": "sfx_517.fsh",
+    "lines": 87,
+    "motion": "pulse",
+    "overlay": "none",
+    "seed": "7b2414d832c504cb",
+    "variant": "zoomspin"
+  },
+  "518": {
+    "family": "glitch",
+    "file": "sfx_518.fsh",
+    "lines": 110,
+    "motion": "drift",
+    "overlay": "sparkle",
+    "seed": "e3be17563ceab217",
+    "variant": "rgbdrift"
+  },
+  "519": {
+    "family": "duotone",
+    "file": "sfx_519.fsh",
+    "lines": 67,
+    "motion": "surge",
+    "overlay": "none",
+    "seed": "e7e0811dc1991f44",
+    "variant": "soft"
   },
   "52": {
     "family": "pixelate",
@@ -3320,6 +4220,96 @@
     "seed": "6f530734f5f89729",
     "variant": "breathe"
   },
+  "520": {
+    "family": "kaleido",
+    "file": "sfx_520.fsh",
+    "lines": 100,
+    "motion": "drift",
+    "overlay": "sparkle",
+    "seed": "613aebaac32e6c53",
+    "variant": "mirror"
+  },
+  "521": {
+    "family": "huedrift",
+    "file": "sfx_521.fsh",
+    "lines": 87,
+    "motion": "surge",
+    "overlay": "grain",
+    "seed": "52a1c12c66bc696c",
+    "variant": "split"
+  },
+  "522": {
+    "family": "dreamblur",
+    "file": "sfx_522.fsh",
+    "lines": 99,
+    "motion": "drift",
+    "overlay": "grain",
+    "seed": "c92df9d3bfabf0f7",
+    "variant": "glowdream"
+  },
+  "523": {
+    "family": "moire",
+    "file": "sfx_523.fsh",
+    "lines": 81,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "8ff30bfd7c13fb40",
+    "variant": "rotmoire"
+  },
+  "524": {
+    "family": "spectral",
+    "file": "sfx_524.fsh",
+    "lines": 100,
+    "motion": "drift",
+    "overlay": "grain",
+    "seed": "f7715202f8f50dfa",
+    "variant": "triple"
+  },
+  "525": {
+    "family": "aberration",
+    "file": "sfx_525.fsh",
+    "lines": 94,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "501e0126d2da1bda",
+    "variant": "cornered"
+  },
+  "526": {
+    "family": "underwater",
+    "file": "sfx_526.fsh",
+    "lines": 114,
+    "motion": "surge",
+    "overlay": "none",
+    "seed": "9068f68e3605399a",
+    "variant": "shallows"
+  },
+  "527": {
+    "family": "thermal",
+    "file": "sfx_527.fsh",
+    "lines": 92,
+    "motion": "drift",
+    "overlay": "none",
+    "seed": "0ebf67b385ef780e",
+    "variant": "hotspots"
+  },
+  "528": {
+    "family": "sketch",
+    "file": "sfx_528.fsh",
+    "lines": 96,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "96f3bfec17d3c782",
+    "variant": "ink"
+  },
+  "529": {
+    "family": "starburst",
+    "file": "sfx_529.fsh",
+    "lines": 92,
+    "motion": "pulse",
+    "overlay": "pulseglow",
+    "seed": "7d73ebd5a35a8045",
+    "variant": "six"
+  },
   "53": {
     "family": "desat",
     "file": "sfx_053.fsh",
@@ -3328,6 +4318,96 @@
     "overlay": "grain",
     "seed": "754f92f79d884808",
     "variant": "flat"
+  },
+  "530": {
+    "family": "vhs",
+    "file": "sfx_530.fsh",
+    "lines": 99,
+    "motion": "drift",
+    "overlay": "none",
+    "seed": "ce7b0337642573e6",
+    "variant": "headswitch"
+  },
+  "531": {
+    "family": "gloom",
+    "file": "sfx_531.fsh",
+    "lines": 96,
+    "motion": "pulse",
+    "overlay": "sparkle",
+    "seed": "aa6cf8beb8d1c848",
+    "variant": "creeping"
+  },
+  "532": {
+    "family": "tint",
+    "file": "sfx_532.fsh",
+    "lines": 76,
+    "motion": "steady",
+    "overlay": "grain",
+    "seed": "e0b57beb52b23c38",
+    "variant": "grade"
+  },
+  "533": {
+    "family": "wobble",
+    "file": "sfx_533.fsh",
+    "lines": 80,
+    "motion": "surge",
+    "overlay": "none",
+    "seed": "62a619779a277465",
+    "variant": "diag"
+  },
+  "534": {
+    "family": "vignette",
+    "file": "sfx_534.fsh",
+    "lines": 66,
+    "motion": "drift",
+    "overlay": "none",
+    "seed": "cc9a1ecdfd79573c",
+    "variant": "round"
+  },
+  "535": {
+    "family": "chroma",
+    "file": "sfx_535.fsh",
+    "lines": 81,
+    "motion": "steady",
+    "overlay": "none",
+    "seed": "bb41391df8810706",
+    "variant": "rotating"
+  },
+  "536": {
+    "family": "pixelate",
+    "file": "sfx_536.fsh",
+    "lines": 91,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "4ef74620b52207da",
+    "variant": "square"
+  },
+  "537": {
+    "family": "desat",
+    "file": "sfx_537.fsh",
+    "lines": 72,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "795797f6110c8b6f",
+    "variant": "twotone"
+  },
+  "538": {
+    "family": "bloomglow",
+    "file": "sfx_538.fsh",
+    "lines": 89,
+    "motion": "surge",
+    "overlay": "pulseglow",
+    "seed": "7315470f2c2ac7ff",
+    "variant": "ring"
+  },
+  "539": {
+    "family": "ripple",
+    "file": "sfx_539.fsh",
+    "lines": 100,
+    "motion": "drift",
+    "overlay": "grain",
+    "seed": "396af65f08e70935",
+    "variant": "linear"
   },
   "54": {
     "family": "wobble",
@@ -3338,6 +4418,96 @@
     "seed": "329f960702f327ac",
     "variant": "sincos"
   },
+  "540": {
+    "family": "scanlines",
+    "file": "sfx_540.fsh",
+    "lines": 105,
+    "motion": "surge",
+    "overlay": "grain",
+    "seed": "174aa3249a89436a",
+    "variant": "vertical"
+  },
+  "541": {
+    "family": "edgeglow",
+    "file": "sfx_541.fsh",
+    "lines": 92,
+    "motion": "drift",
+    "overlay": "none",
+    "seed": "fdcd0617fde083be",
+    "variant": "duo"
+  },
+  "542": {
+    "family": "frostlens",
+    "file": "sfx_542.fsh",
+    "lines": 114,
+    "motion": "steady",
+    "overlay": "sparkle",
+    "seed": "1b2f05ce1dcf1a55",
+    "variant": "sheet"
+  },
+  "543": {
+    "family": "heathaze",
+    "file": "sfx_543.fsh",
+    "lines": 86,
+    "motion": "surge",
+    "overlay": "none",
+    "seed": "5c8f548362c153b4",
+    "variant": "full"
+  },
+  "544": {
+    "family": "posterize",
+    "file": "sfx_544.fsh",
+    "lines": 73,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "6bf5b8e0352f640c",
+    "variant": "lumaonly"
+  },
+  "545": {
+    "family": "radialblur",
+    "file": "sfx_545.fsh",
+    "lines": 95,
+    "motion": "surge",
+    "overlay": "grain",
+    "seed": "3a243145637f4cb6",
+    "variant": "pulsezoom"
+  },
+  "546": {
+    "family": "glitch",
+    "file": "sfx_546.fsh",
+    "lines": 106,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "d03075d35504ed29",
+    "variant": "tear"
+  },
+  "547": {
+    "family": "duotone",
+    "file": "sfx_547.fsh",
+    "lines": 73,
+    "motion": "surge",
+    "overlay": "pulseglow",
+    "seed": "73567bb0bd69d347",
+    "variant": "shifting"
+  },
+  "548": {
+    "family": "kaleido",
+    "file": "sfx_548.fsh",
+    "lines": 98,
+    "motion": "drift",
+    "overlay": "none",
+    "seed": "c598cfcf80636e22",
+    "variant": "wedge6"
+  },
+  "549": {
+    "family": "huedrift",
+    "file": "sfx_549.fsh",
+    "lines": 85,
+    "motion": "steady",
+    "overlay": "grain",
+    "seed": "3a0601daa76f7a22",
+    "variant": "global"
+  },
   "55": {
     "family": "scanlines",
     "file": "sfx_055.fsh",
@@ -3346,6 +4516,96 @@
     "overlay": "grain",
     "seed": "f8673d43b0e637d5",
     "variant": "vertical"
+  },
+  "550": {
+    "family": "dreamblur",
+    "file": "sfx_550.fsh",
+    "lines": 96,
+    "motion": "pulse",
+    "overlay": "pulseglow",
+    "seed": "8503437b9a9b98a6",
+    "variant": "cross5"
+  },
+  "551": {
+    "family": "moire",
+    "file": "sfx_551.fsh",
+    "lines": 82,
+    "motion": "drift",
+    "overlay": "grain",
+    "seed": "b4ae979d254167fe",
+    "variant": "rotmoire"
+  },
+  "552": {
+    "family": "spectral",
+    "file": "sfx_552.fsh",
+    "lines": 85,
+    "motion": "pulse",
+    "overlay": "none",
+    "seed": "61164ac452841aad",
+    "variant": "twin"
+  },
+  "553": {
+    "family": "aberration",
+    "file": "sfx_553.fsh",
+    "lines": 89,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "f270615a57b50895",
+    "variant": "cornered"
+  },
+  "554": {
+    "family": "underwater",
+    "file": "sfx_554.fsh",
+    "lines": 122,
+    "motion": "pulse",
+    "overlay": "sparkle",
+    "seed": "d9e0c4d5c0215906",
+    "variant": "shafted"
+  },
+  "555": {
+    "family": "thermal",
+    "file": "sfx_555.fsh",
+    "lines": 97,
+    "motion": "pulse",
+    "overlay": "sparkle",
+    "seed": "7310447061d897c6",
+    "variant": "banded"
+  },
+  "556": {
+    "family": "sketch",
+    "file": "sfx_556.fsh",
+    "lines": 101,
+    "motion": "steady",
+    "overlay": "grain",
+    "seed": "117e72395387bf85",
+    "variant": "crosshatch"
+  },
+  "557": {
+    "family": "starburst",
+    "file": "sfx_557.fsh",
+    "lines": 93,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "7b88040b087f7c70",
+    "variant": "six"
+  },
+  "558": {
+    "family": "vhs",
+    "file": "sfx_558.fsh",
+    "lines": 114,
+    "motion": "surge",
+    "overlay": "grain",
+    "seed": "0ce56d5236094729",
+    "variant": "dropout"
+  },
+  "559": {
+    "family": "gloom",
+    "file": "sfx_559.fsh",
+    "lines": 91,
+    "motion": "steady",
+    "overlay": "sparkle",
+    "seed": "58bd2185b3e31014",
+    "variant": "hollow"
   },
   "56": {
     "family": "chroma",
@@ -3356,6 +4616,96 @@
     "seed": "b383d33f6fdee2be",
     "variant": "zoned"
   },
+  "560": {
+    "family": "tint",
+    "file": "sfx_560.fsh",
+    "lines": 77,
+    "motion": "steady",
+    "overlay": "grain",
+    "seed": "09965844e93c5c54",
+    "variant": "breathe"
+  },
+  "561": {
+    "family": "wobble",
+    "file": "sfx_561.fsh",
+    "lines": 86,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "445b2eb74fccac08",
+    "variant": "sincos"
+  },
+  "562": {
+    "family": "vignette",
+    "file": "sfx_562.fsh",
+    "lines": 71,
+    "motion": "surge",
+    "overlay": "pulseglow",
+    "seed": "7f40ae38cc3eb692",
+    "variant": "bands"
+  },
+  "563": {
+    "family": "chroma",
+    "file": "sfx_563.fsh",
+    "lines": 92,
+    "motion": "steady",
+    "overlay": "sparkle",
+    "seed": "045d265f6512659c",
+    "variant": "radial"
+  },
+  "564": {
+    "family": "pixelate",
+    "file": "sfx_564.fsh",
+    "lines": 94,
+    "motion": "drift",
+    "overlay": "sparkle",
+    "seed": "a567ee42b67fd294",
+    "variant": "diamond"
+  },
+  "565": {
+    "family": "desat",
+    "file": "sfx_565.fsh",
+    "lines": 71,
+    "motion": "steady",
+    "overlay": "pulseglow",
+    "seed": "1de5dd555755b7bd",
+    "variant": "shadows"
+  },
+  "566": {
+    "family": "bloomglow",
+    "file": "sfx_566.fsh",
+    "lines": 89,
+    "motion": "surge",
+    "overlay": "pulseglow",
+    "seed": "cb2b72156c266327",
+    "variant": "cross"
+  },
+  "567": {
+    "family": "ripple",
+    "file": "sfx_567.fsh",
+    "lines": 88,
+    "motion": "pulse",
+    "overlay": "none",
+    "seed": "3ffaf348aea37a93",
+    "variant": "linear"
+  },
+  "568": {
+    "family": "scanlines",
+    "file": "sfx_568.fsh",
+    "lines": 83,
+    "motion": "surge",
+    "overlay": "pulseglow",
+    "seed": "95bbaba5664a8a35",
+    "variant": "rolling"
+  },
+  "569": {
+    "family": "edgeglow",
+    "file": "sfx_569.fsh",
+    "lines": 102,
+    "motion": "pulse",
+    "overlay": "sparkle",
+    "seed": "2e1e6d3fd35a0fc9",
+    "variant": "sobel"
+  },
   "57": {
     "family": "wobble",
     "file": "sfx_057.fsh",
@@ -3364,6 +4714,96 @@
     "overlay": "sparkle",
     "seed": "7404bcfa9b50dab5",
     "variant": "sincos"
+  },
+  "570": {
+    "family": "frostlens",
+    "file": "sfx_570.fsh",
+    "lines": 112,
+    "motion": "pulse",
+    "overlay": "sparkle",
+    "seed": "897e21cd21181b3d",
+    "variant": "creep"
+  },
+  "571": {
+    "family": "heathaze",
+    "file": "sfx_571.fsh",
+    "lines": 109,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "0a992bf0f38adc30",
+    "variant": "columns"
+  },
+  "572": {
+    "family": "posterize",
+    "file": "sfx_572.fsh",
+    "lines": 78,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "f110c904f98a62a1",
+    "variant": "banded"
+  },
+  "573": {
+    "family": "radialblur",
+    "file": "sfx_573.fsh",
+    "lines": 87,
+    "motion": "steady",
+    "overlay": "pulseglow",
+    "seed": "314ff4b49f0c7aeb",
+    "variant": "zoom"
+  },
+  "574": {
+    "family": "glitch",
+    "file": "sfx_574.fsh",
+    "lines": 113,
+    "motion": "surge",
+    "overlay": "sparkle",
+    "seed": "3b192316dabe6b3e",
+    "variant": "tear"
+  },
+  "575": {
+    "family": "duotone",
+    "file": "sfx_575.fsh",
+    "lines": 74,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "d93a6d631a14063a",
+    "variant": "tritone"
+  },
+  "576": {
+    "family": "kaleido",
+    "file": "sfx_576.fsh",
+    "lines": 103,
+    "motion": "surge",
+    "overlay": "pulseglow",
+    "seed": "7a55daee2efa4697",
+    "variant": "wedge4"
+  },
+  "577": {
+    "family": "huedrift",
+    "file": "sfx_577.fsh",
+    "lines": 87,
+    "motion": "drift",
+    "overlay": "grain",
+    "seed": "7354047fb1735332",
+    "variant": "radial"
+  },
+  "578": {
+    "family": "dreamblur",
+    "file": "sfx_578.fsh",
+    "lines": 98,
+    "motion": "drift",
+    "overlay": "sparkle",
+    "seed": "d04ab57bbb0863c9",
+    "variant": "cross5"
+  },
+  "579": {
+    "family": "moire",
+    "file": "sfx_579.fsh",
+    "lines": 82,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "e52929aed585322f",
+    "variant": "ringring"
   },
   "58": {
     "family": "heathaze",
@@ -3374,6 +4814,96 @@
     "seed": "d3356abbece138e4",
     "variant": "columns"
   },
+  "580": {
+    "family": "spectral",
+    "file": "sfx_580.fsh",
+    "lines": 101,
+    "motion": "surge",
+    "overlay": "sparkle",
+    "seed": "e5f6dbc8e7f9ac6d",
+    "variant": "triple"
+  },
+  "581": {
+    "family": "aberration",
+    "file": "sfx_581.fsh",
+    "lines": 95,
+    "motion": "steady",
+    "overlay": "sparkle",
+    "seed": "26aba998419254ce",
+    "variant": "cornered"
+  },
+  "582": {
+    "family": "underwater",
+    "file": "sfx_582.fsh",
+    "lines": 120,
+    "motion": "surge",
+    "overlay": "sparkle",
+    "seed": "63c32a3513e3f801",
+    "variant": "shallows"
+  },
+  "583": {
+    "family": "thermal",
+    "file": "sfx_583.fsh",
+    "lines": 94,
+    "motion": "steady",
+    "overlay": "pulseglow",
+    "seed": "01feca0f9987bd1f",
+    "variant": "classic"
+  },
+  "584": {
+    "family": "sketch",
+    "file": "sfx_584.fsh",
+    "lines": 98,
+    "motion": "surge",
+    "overlay": "sparkle",
+    "seed": "864e5b524806b615",
+    "variant": "ink"
+  },
+  "585": {
+    "family": "starburst",
+    "file": "sfx_585.fsh",
+    "lines": 88,
+    "motion": "pulse",
+    "overlay": "none",
+    "seed": "645016bbe9f83609",
+    "variant": "spinning"
+  },
+  "586": {
+    "family": "vhs",
+    "file": "sfx_586.fsh",
+    "lines": 103,
+    "motion": "steady",
+    "overlay": "pulseglow",
+    "seed": "91a7a5381ba043dc",
+    "variant": "headswitch"
+  },
+  "587": {
+    "family": "gloom",
+    "file": "sfx_587.fsh",
+    "lines": 97,
+    "motion": "surge",
+    "overlay": "sparkle",
+    "seed": "97b50356e13c75e3",
+    "variant": "creeping"
+  },
+  "588": {
+    "family": "tint",
+    "file": "sfx_588.fsh",
+    "lines": 66,
+    "motion": "steady",
+    "overlay": "none",
+    "seed": "df77b2dcedcaca81",
+    "variant": "breathe"
+  },
+  "589": {
+    "family": "wobble",
+    "file": "sfx_589.fsh",
+    "lines": 90,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "ff5410dbcb2d3ae6",
+    "variant": "diag"
+  },
   "59": {
     "family": "frostlens",
     "file": "sfx_059.fsh",
@@ -3382,6 +4912,96 @@
     "overlay": "sparkle",
     "seed": "7fc54e57098e6366",
     "variant": "veins"
+  },
+  "590": {
+    "family": "vignette",
+    "file": "sfx_590.fsh",
+    "lines": 70,
+    "motion": "pulse",
+    "overlay": "pulseglow",
+    "seed": "c9061e85d49acd51",
+    "variant": "round"
+  },
+  "591": {
+    "family": "chroma",
+    "file": "sfx_591.fsh",
+    "lines": 80,
+    "motion": "steady",
+    "overlay": "none",
+    "seed": "3a65c868e1e96765",
+    "variant": "radial"
+  },
+  "592": {
+    "family": "pixelate",
+    "file": "sfx_592.fsh",
+    "lines": 92,
+    "motion": "surge",
+    "overlay": "grain",
+    "seed": "d9544e3ab478370b",
+    "variant": "breathe"
+  },
+  "593": {
+    "family": "desat",
+    "file": "sfx_593.fsh",
+    "lines": 78,
+    "motion": "steady",
+    "overlay": "sparkle",
+    "seed": "c6920076e7cfbae8",
+    "variant": "shadows"
+  },
+  "594": {
+    "family": "bloomglow",
+    "file": "sfx_594.fsh",
+    "lines": 94,
+    "motion": "steady",
+    "overlay": "grain",
+    "seed": "051c534a57cb47bd",
+    "variant": "ring"
+  },
+  "595": {
+    "family": "ripple",
+    "file": "sfx_595.fsh",
+    "lines": 101,
+    "motion": "drift",
+    "overlay": "sparkle",
+    "seed": "419051defc3f5159",
+    "variant": "center"
+  },
+  "596": {
+    "family": "scanlines",
+    "file": "sfx_596.fsh",
+    "lines": 106,
+    "motion": "steady",
+    "overlay": "sparkle",
+    "seed": "5d52b7c5550977cb",
+    "variant": "horizontal"
+  },
+  "597": {
+    "family": "edgeglow",
+    "file": "sfx_597.fsh",
+    "lines": 97,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "d70ab5a6d391cf4e",
+    "variant": "duo"
+  },
+  "598": {
+    "family": "frostlens",
+    "file": "sfx_598.fsh",
+    "lines": 112,
+    "motion": "surge",
+    "overlay": "pulseglow",
+    "seed": "33334e7a659a63ec",
+    "variant": "creep"
+  },
+  "599": {
+    "family": "heathaze",
+    "file": "sfx_599.fsh",
+    "lines": 103,
+    "motion": "steady",
+    "overlay": "none",
+    "seed": "955e7283bfa37e20",
+    "variant": "columns"
   },
   "6": {
     "family": "chroma",
@@ -3401,6 +5021,96 @@
     "seed": "3bfe01db89de5abb",
     "variant": "twin"
   },
+  "600": {
+    "family": "posterize",
+    "file": "sfx_600.fsh",
+    "lines": 78,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "de9d212d9fb2fc83",
+    "variant": "lumaonly"
+  },
+  "601": {
+    "family": "radialblur",
+    "file": "sfx_601.fsh",
+    "lines": 93,
+    "motion": "surge",
+    "overlay": "pulseglow",
+    "seed": "0a8cadac22891531",
+    "variant": "zoomspin"
+  },
+  "602": {
+    "family": "glitch",
+    "file": "sfx_602.fsh",
+    "lines": 111,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "2f3cc79fe46b6073",
+    "variant": "tear"
+  },
+  "603": {
+    "family": "duotone",
+    "file": "sfx_603.fsh",
+    "lines": 79,
+    "motion": "surge",
+    "overlay": "grain",
+    "seed": "a30a829d2b4120dd",
+    "variant": "shifting"
+  },
+  "604": {
+    "family": "kaleido",
+    "file": "sfx_604.fsh",
+    "lines": 98,
+    "motion": "surge",
+    "overlay": "none",
+    "seed": "f9f0a22b4db2fc92",
+    "variant": "wedge4"
+  },
+  "605": {
+    "family": "huedrift",
+    "file": "sfx_605.fsh",
+    "lines": 80,
+    "motion": "steady",
+    "overlay": "pulseglow",
+    "seed": "a9cc7bd2f8dc426d",
+    "variant": "radial"
+  },
+  "606": {
+    "family": "dreamblur",
+    "file": "sfx_606.fsh",
+    "lines": 98,
+    "motion": "drift",
+    "overlay": "grain",
+    "seed": "ed87e2999b242f85",
+    "variant": "edgehalo"
+  },
+  "607": {
+    "family": "moire",
+    "file": "sfx_607.fsh",
+    "lines": 74,
+    "motion": "pulse",
+    "overlay": "pulseglow",
+    "seed": "95a3a1590e804d1c",
+    "variant": "linring"
+  },
+  "608": {
+    "family": "spectral",
+    "file": "sfx_608.fsh",
+    "lines": 91,
+    "motion": "steady",
+    "overlay": "pulseglow",
+    "seed": "87be521f966b3133",
+    "variant": "fade"
+  },
+  "609": {
+    "family": "aberration",
+    "file": "sfx_609.fsh",
+    "lines": 84,
+    "motion": "drift",
+    "overlay": "none",
+    "seed": "6448f250911a834a",
+    "variant": "cornered"
+  },
   "61": {
     "family": "tint",
     "file": "sfx_061.fsh",
@@ -3409,6 +5119,96 @@
     "overlay": "sparkle",
     "seed": "1fab669e2755aba0",
     "variant": "splitlat"
+  },
+  "610": {
+    "family": "underwater",
+    "file": "sfx_610.fsh",
+    "lines": 122,
+    "motion": "steady",
+    "overlay": "sparkle",
+    "seed": "7735a0057e52a701",
+    "variant": "shafted"
+  },
+  "611": {
+    "family": "thermal",
+    "file": "sfx_611.fsh",
+    "lines": 97,
+    "motion": "drift",
+    "overlay": "sparkle",
+    "seed": "5ed3d0e0b7428055",
+    "variant": "inverted"
+  },
+  "612": {
+    "family": "sketch",
+    "file": "sfx_612.fsh",
+    "lines": 93,
+    "motion": "surge",
+    "overlay": "pulseglow",
+    "seed": "7f11c19bfafc0e3a",
+    "variant": "blueprint"
+  },
+  "613": {
+    "family": "starburst",
+    "file": "sfx_613.fsh",
+    "lines": 88,
+    "motion": "surge",
+    "overlay": "none",
+    "seed": "e92b99c2650f53c0",
+    "variant": "six"
+  },
+  "614": {
+    "family": "vhs",
+    "file": "sfx_614.fsh",
+    "lines": 113,
+    "motion": "steady",
+    "overlay": "pulseglow",
+    "seed": "d0de0ebcead54c09",
+    "variant": "dropout"
+  },
+  "615": {
+    "family": "gloom",
+    "file": "sfx_615.fsh",
+    "lines": 77,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "f390b6b3950d1a6c",
+    "variant": "dusk"
+  },
+  "616": {
+    "family": "tint",
+    "file": "sfx_616.fsh",
+    "lines": 78,
+    "motion": "drift",
+    "overlay": "sparkle",
+    "seed": "dd3463dafdb69f75",
+    "variant": "grade"
+  },
+  "617": {
+    "family": "wobble",
+    "file": "sfx_617.fsh",
+    "lines": 90,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "181f45b0a9b6a182",
+    "variant": "harmonic"
+  },
+  "618": {
+    "family": "vignette",
+    "file": "sfx_618.fsh",
+    "lines": 70,
+    "motion": "steady",
+    "overlay": "pulseglow",
+    "seed": "7b23d8b995bc004f",
+    "variant": "bands"
+  },
+  "619": {
+    "family": "chroma",
+    "file": "sfx_619.fsh",
+    "lines": 86,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "50c6d8e255edfbb5",
+    "variant": "radial"
   },
   "62": {
     "family": "pixelate",
@@ -3419,6 +5219,96 @@
     "seed": "7f9bedff1c6604e8",
     "variant": "breathe"
   },
+  "620": {
+    "family": "pixelate",
+    "file": "sfx_620.fsh",
+    "lines": 92,
+    "motion": "pulse",
+    "overlay": "sparkle",
+    "seed": "1f2914e45dca9c10",
+    "variant": "square"
+  },
+  "621": {
+    "family": "desat",
+    "file": "sfx_621.fsh",
+    "lines": 71,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "c51a4226f55d6b25",
+    "variant": "flat"
+  },
+  "622": {
+    "family": "bloomglow",
+    "file": "sfx_622.fsh",
+    "lines": 91,
+    "motion": "surge",
+    "overlay": "pulseglow",
+    "seed": "7afd07991a451e8a",
+    "variant": "starburst"
+  },
+  "623": {
+    "family": "ripple",
+    "file": "sfx_623.fsh",
+    "lines": 101,
+    "motion": "drift",
+    "overlay": "sparkle",
+    "seed": "6a0759068da6fb45",
+    "variant": "linear"
+  },
+  "624": {
+    "family": "scanlines",
+    "file": "sfx_624.fsh",
+    "lines": 107,
+    "motion": "drift",
+    "overlay": "sparkle",
+    "seed": "2fec05ebeb943cb6",
+    "variant": "horizontal"
+  },
+  "625": {
+    "family": "edgeglow",
+    "file": "sfx_625.fsh",
+    "lines": 90,
+    "motion": "steady",
+    "overlay": "none",
+    "seed": "9512467874a57620",
+    "variant": "thick"
+  },
+  "626": {
+    "family": "frostlens",
+    "file": "sfx_626.fsh",
+    "lines": 113,
+    "motion": "steady",
+    "overlay": "pulseglow",
+    "seed": "e5972997e6ff05e5",
+    "variant": "sheet"
+  },
+  "627": {
+    "family": "heathaze",
+    "file": "sfx_627.fsh",
+    "lines": 90,
+    "motion": "pulse",
+    "overlay": "pulseglow",
+    "seed": "f3a9a5709998ca23",
+    "variant": "full"
+  },
+  "628": {
+    "family": "posterize",
+    "file": "sfx_628.fsh",
+    "lines": 68,
+    "motion": "drift",
+    "overlay": "none",
+    "seed": "66e4558dfb19c61e",
+    "variant": "lumaonly"
+  },
+  "629": {
+    "family": "radialblur",
+    "file": "sfx_629.fsh",
+    "lines": 85,
+    "motion": "steady",
+    "overlay": "none",
+    "seed": "9a28493e41167a06",
+    "variant": "spin"
+  },
   "63": {
     "family": "wobble",
     "file": "sfx_063.fsh",
@@ -3427,6 +5317,96 @@
     "overlay": "sparkle",
     "seed": "acc1c482db7f6acb",
     "variant": "sincos"
+  },
+  "630": {
+    "family": "glitch",
+    "file": "sfx_630.fsh",
+    "lines": 112,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "f68a9b45572d4b54",
+    "variant": "blocks"
+  },
+  "631": {
+    "family": "duotone",
+    "file": "sfx_631.fsh",
+    "lines": 80,
+    "motion": "drift",
+    "overlay": "sparkle",
+    "seed": "8a5ddd794fd8397e",
+    "variant": "shifting"
+  },
+  "632": {
+    "family": "kaleido",
+    "file": "sfx_632.fsh",
+    "lines": 109,
+    "motion": "pulse",
+    "overlay": "sparkle",
+    "seed": "38e5d41225d6b0b7",
+    "variant": "wedge4"
+  },
+  "633": {
+    "family": "huedrift",
+    "file": "sfx_633.fsh",
+    "lines": 85,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "831bda2d4520da9d",
+    "variant": "waves"
+  },
+  "634": {
+    "family": "dreamblur",
+    "file": "sfx_634.fsh",
+    "lines": 91,
+    "motion": "steady",
+    "overlay": "none",
+    "seed": "97bad8f490bd60f8",
+    "variant": "cross5"
+  },
+  "635": {
+    "family": "moire",
+    "file": "sfx_635.fsh",
+    "lines": 83,
+    "motion": "surge",
+    "overlay": "grain",
+    "seed": "f2bb193603d4122f",
+    "variant": "ringring"
+  },
+  "636": {
+    "family": "spectral",
+    "file": "sfx_636.fsh",
+    "lines": 91,
+    "motion": "pulse",
+    "overlay": "pulseglow",
+    "seed": "7b4ccfad398876c0",
+    "variant": "fade"
+  },
+  "637": {
+    "family": "aberration",
+    "file": "sfx_637.fsh",
+    "lines": 95,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "a3c1474beb24e09b",
+    "variant": "breathing"
+  },
+  "638": {
+    "family": "underwater",
+    "file": "sfx_638.fsh",
+    "lines": 119,
+    "motion": "steady",
+    "overlay": "sparkle",
+    "seed": "0828f75cc9d833a1",
+    "variant": "deep"
+  },
+  "639": {
+    "family": "thermal",
+    "file": "sfx_639.fsh",
+    "lines": 96,
+    "motion": "steady",
+    "overlay": "grain",
+    "seed": "bf424f615075f155",
+    "variant": "banded"
   },
   "64": {
     "family": "bloomglow",
@@ -3437,6 +5417,96 @@
     "seed": "ea1e13b0d091e9eb",
     "variant": "ring"
   },
+  "640": {
+    "family": "sketch",
+    "file": "sfx_640.fsh",
+    "lines": 102,
+    "motion": "drift",
+    "overlay": "grain",
+    "seed": "06e6aa31eb5a19ab",
+    "variant": "crosshatch"
+  },
+  "641": {
+    "family": "starburst",
+    "file": "sfx_641.fsh",
+    "lines": 99,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "797b457fab9d80b8",
+    "variant": "spinning"
+  },
+  "642": {
+    "family": "vhs",
+    "file": "sfx_642.fsh",
+    "lines": 104,
+    "motion": "surge",
+    "overlay": "pulseglow",
+    "seed": "88178bca2befc493",
+    "variant": "headswitch"
+  },
+  "643": {
+    "family": "gloom",
+    "file": "sfx_643.fsh",
+    "lines": 86,
+    "motion": "drift",
+    "overlay": "grain",
+    "seed": "b96d81fa57b68767",
+    "variant": "heartbeat"
+  },
+  "644": {
+    "family": "tint",
+    "file": "sfx_644.fsh",
+    "lines": 72,
+    "motion": "surge",
+    "overlay": "pulseglow",
+    "seed": "b95faa0bf8b0ac55",
+    "variant": "breathe"
+  },
+  "645": {
+    "family": "wobble",
+    "file": "sfx_645.fsh",
+    "lines": 91,
+    "motion": "steady",
+    "overlay": "sparkle",
+    "seed": "60f0515f54e0a1ea",
+    "variant": "harmonic"
+  },
+  "646": {
+    "family": "vignette",
+    "file": "sfx_646.fsh",
+    "lines": 79,
+    "motion": "steady",
+    "overlay": "sparkle",
+    "seed": "3c8f8ea289983988",
+    "variant": "box"
+  },
+  "647": {
+    "family": "chroma",
+    "file": "sfx_647.fsh",
+    "lines": 93,
+    "motion": "drift",
+    "overlay": "sparkle",
+    "seed": "7b2b3fb03e0329a3",
+    "variant": "linear"
+  },
+  "648": {
+    "family": "pixelate",
+    "file": "sfx_648.fsh",
+    "lines": 93,
+    "motion": "surge",
+    "overlay": "sparkle",
+    "seed": "63cf90da33ef0f9b",
+    "variant": "breathe"
+  },
+  "649": {
+    "family": "desat",
+    "file": "sfx_649.fsh",
+    "lines": 79,
+    "motion": "drift",
+    "overlay": "sparkle",
+    "seed": "cbfb70d9adec0ff4",
+    "variant": "shadows"
+  },
   "65": {
     "family": "desat",
     "file": "sfx_065.fsh",
@@ -3445,6 +5515,96 @@
     "overlay": "sparkle",
     "seed": "119044485058c62a",
     "variant": "shadows"
+  },
+  "650": {
+    "family": "bloomglow",
+    "file": "sfx_650.fsh",
+    "lines": 96,
+    "motion": "surge",
+    "overlay": "sparkle",
+    "seed": "3f879a1595576ef3",
+    "variant": "cross"
+  },
+  "651": {
+    "family": "ripple",
+    "file": "sfx_651.fsh",
+    "lines": 93,
+    "motion": "pulse",
+    "overlay": "pulseglow",
+    "seed": "77d29f2003947bb9",
+    "variant": "center"
+  },
+  "652": {
+    "family": "scanlines",
+    "file": "sfx_652.fsh",
+    "lines": 90,
+    "motion": "drift",
+    "overlay": "sparkle",
+    "seed": "54c6d5bb0a386d6c",
+    "variant": "rolling"
+  },
+  "653": {
+    "family": "edgeglow",
+    "file": "sfx_653.fsh",
+    "lines": 96,
+    "motion": "surge",
+    "overlay": "pulseglow",
+    "seed": "376327dbe24d1555",
+    "variant": "thick"
+  },
+  "654": {
+    "family": "frostlens",
+    "file": "sfx_654.fsh",
+    "lines": 115,
+    "motion": "drift",
+    "overlay": "sparkle",
+    "seed": "d9e3d0e7f7c4ceb7",
+    "variant": "sheet"
+  },
+  "655": {
+    "family": "heathaze",
+    "file": "sfx_655.fsh",
+    "lines": 102,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "3c9b540df072a6bd",
+    "variant": "embers"
+  },
+  "656": {
+    "family": "posterize",
+    "file": "sfx_656.fsh",
+    "lines": 81,
+    "motion": "drift",
+    "overlay": "grain",
+    "seed": "e5dbb2f186f190a2",
+    "variant": "dither"
+  },
+  "657": {
+    "family": "radialblur",
+    "file": "sfx_657.fsh",
+    "lines": 83,
+    "motion": "pulse",
+    "overlay": "none",
+    "seed": "587544074a0626c6",
+    "variant": "pulsezoom"
+  },
+  "658": {
+    "family": "glitch",
+    "file": "sfx_658.fsh",
+    "lines": 106,
+    "motion": "surge",
+    "overlay": "pulseglow",
+    "seed": "d9d3d566df08f401",
+    "variant": "tear"
+  },
+  "659": {
+    "family": "duotone",
+    "file": "sfx_659.fsh",
+    "lines": 69,
+    "motion": "surge",
+    "overlay": "none",
+    "seed": "08135f235c037081",
+    "variant": "tritone"
   },
   "66": {
     "family": "edgeglow",
@@ -3455,6 +5615,96 @@
     "seed": "d0a246640929aa11",
     "variant": "thick"
   },
+  "660": {
+    "family": "kaleido",
+    "file": "sfx_660.fsh",
+    "lines": 97,
+    "motion": "steady",
+    "overlay": "none",
+    "seed": "b51970b96f2a4d49",
+    "variant": "wedge8"
+  },
+  "661": {
+    "family": "huedrift",
+    "file": "sfx_661.fsh",
+    "lines": 86,
+    "motion": "steady",
+    "overlay": "grain",
+    "seed": "b163fb4818b4fbfb",
+    "variant": "radial"
+  },
+  "662": {
+    "family": "dreamblur",
+    "file": "sfx_662.fsh",
+    "lines": 99,
+    "motion": "surge",
+    "overlay": "grain",
+    "seed": "35c8098b9dd9cdfe",
+    "variant": "soft9"
+  },
+  "663": {
+    "family": "moire",
+    "file": "sfx_663.fsh",
+    "lines": 71,
+    "motion": "pulse",
+    "overlay": "none",
+    "seed": "5c43bbcd43232a00",
+    "variant": "ringring"
+  },
+  "664": {
+    "family": "spectral",
+    "file": "sfx_664.fsh",
+    "lines": 87,
+    "motion": "surge",
+    "overlay": "none",
+    "seed": "ebb4a72620650f46",
+    "variant": "fade"
+  },
+  "665": {
+    "family": "aberration",
+    "file": "sfx_665.fsh",
+    "lines": 94,
+    "motion": "steady",
+    "overlay": "sparkle",
+    "seed": "5e52b6715f315bce",
+    "variant": "pincushion"
+  },
+  "666": {
+    "family": "underwater",
+    "file": "sfx_666.fsh",
+    "lines": 116,
+    "motion": "drift",
+    "overlay": "none",
+    "seed": "b4dcb53cfe36aa4a",
+    "variant": "surgewash"
+  },
+  "667": {
+    "family": "thermal",
+    "file": "sfx_667.fsh",
+    "lines": 96,
+    "motion": "steady",
+    "overlay": "grain",
+    "seed": "be3b495a1a4357e9",
+    "variant": "hotspots"
+  },
+  "668": {
+    "family": "sketch",
+    "file": "sfx_668.fsh",
+    "lines": 96,
+    "motion": "steady",
+    "overlay": "grain",
+    "seed": "03c2662c312e5022",
+    "variant": "ink"
+  },
+  "669": {
+    "family": "starburst",
+    "file": "sfx_669.fsh",
+    "lines": 101,
+    "motion": "drift",
+    "overlay": "sparkle",
+    "seed": "14f32bc98f19d876",
+    "variant": "four"
+  },
   "67": {
     "family": "scanlines",
     "file": "sfx_067.fsh",
@@ -3463,6 +5713,96 @@
     "overlay": "grain",
     "seed": "fbfe9561d296c533",
     "variant": "grid"
+  },
+  "670": {
+    "family": "vhs",
+    "file": "sfx_670.fsh",
+    "lines": 121,
+    "motion": "surge",
+    "overlay": "grain",
+    "seed": "badbc47104d1e8ae",
+    "variant": "tracking"
+  },
+  "671": {
+    "family": "gloom",
+    "file": "sfx_671.fsh",
+    "lines": 91,
+    "motion": "surge",
+    "overlay": "grain",
+    "seed": "11dbf24cff8010f6",
+    "variant": "hollow"
+  },
+  "672": {
+    "family": "tint",
+    "file": "sfx_672.fsh",
+    "lines": 79,
+    "motion": "surge",
+    "overlay": "sparkle",
+    "seed": "5fba87c4d53f48fc",
+    "variant": "radial"
+  },
+  "673": {
+    "family": "wobble",
+    "file": "sfx_673.fsh",
+    "lines": 80,
+    "motion": "pulse",
+    "overlay": "none",
+    "seed": "7c45851a124b3963",
+    "variant": "sincos"
+  },
+  "674": {
+    "family": "vignette",
+    "file": "sfx_674.fsh",
+    "lines": 78,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "315a6b44312eeaf1",
+    "variant": "box"
+  },
+  "675": {
+    "family": "chroma",
+    "file": "sfx_675.fsh",
+    "lines": 82,
+    "motion": "drift",
+    "overlay": "none",
+    "seed": "ee5e1b1b61ec4002",
+    "variant": "zoned"
+  },
+  "676": {
+    "family": "pixelate",
+    "file": "sfx_676.fsh",
+    "lines": 87,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "76c536aae84db7b7",
+    "variant": "diamond"
+  },
+  "677": {
+    "family": "desat",
+    "file": "sfx_677.fsh",
+    "lines": 77,
+    "motion": "steady",
+    "overlay": "grain",
+    "seed": "168abf3c640a4f48",
+    "variant": "twotone"
+  },
+  "678": {
+    "family": "bloomglow",
+    "file": "sfx_678.fsh",
+    "lines": 96,
+    "motion": "drift",
+    "overlay": "sparkle",
+    "seed": "032ae7c3ed1a9d18",
+    "variant": "cross"
+  },
+  "679": {
+    "family": "ripple",
+    "file": "sfx_679.fsh",
+    "lines": 100,
+    "motion": "surge",
+    "overlay": "pulseglow",
+    "seed": "1a0e33b5c5a1125c",
+    "variant": "twin"
   },
   "68": {
     "family": "vignette",
@@ -3473,6 +5813,96 @@
     "seed": "983b3310f0f0cbb6",
     "variant": "box"
   },
+  "680": {
+    "family": "scanlines",
+    "file": "sfx_680.fsh",
+    "lines": 100,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "66537db23baafcbc",
+    "variant": "horizontal"
+  },
+  "681": {
+    "family": "edgeglow",
+    "file": "sfx_681.fsh",
+    "lines": 91,
+    "motion": "drift",
+    "overlay": "none",
+    "seed": "7bcc731573f2e7ca",
+    "variant": "sobel"
+  },
+  "682": {
+    "family": "frostlens",
+    "file": "sfx_682.fsh",
+    "lines": 114,
+    "motion": "surge",
+    "overlay": "pulseglow",
+    "seed": "597c804298e4c059",
+    "variant": "sheet"
+  },
+  "683": {
+    "family": "heathaze",
+    "file": "sfx_683.fsh",
+    "lines": 102,
+    "motion": "surge",
+    "overlay": "pulseglow",
+    "seed": "78c307d5fa787eb4",
+    "variant": "embers"
+  },
+  "684": {
+    "family": "posterize",
+    "file": "sfx_684.fsh",
+    "lines": 80,
+    "motion": "pulse",
+    "overlay": "pulseglow",
+    "seed": "9ff0a0c82001c4bd",
+    "variant": "dither"
+  },
+  "685": {
+    "family": "radialblur",
+    "file": "sfx_685.fsh",
+    "lines": 88,
+    "motion": "steady",
+    "overlay": "pulseglow",
+    "seed": "6945c448fd6ded21",
+    "variant": "pulsezoom"
+  },
+  "686": {
+    "family": "glitch",
+    "file": "sfx_686.fsh",
+    "lines": 112,
+    "motion": "pulse",
+    "overlay": "sparkle",
+    "seed": "16ec4938fa2606d8",
+    "variant": "tear"
+  },
+  "687": {
+    "family": "duotone",
+    "file": "sfx_687.fsh",
+    "lines": 73,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "cd0e58cfb7fec0c3",
+    "variant": "shifting"
+  },
+  "688": {
+    "family": "kaleido",
+    "file": "sfx_688.fsh",
+    "lines": 109,
+    "motion": "surge",
+    "overlay": "grain",
+    "seed": "cf05a801d92f9f51",
+    "variant": "wedge4"
+  },
+  "689": {
+    "family": "huedrift",
+    "file": "sfx_689.fsh",
+    "lines": 87,
+    "motion": "drift",
+    "overlay": "grain",
+    "seed": "684de3255ed34ffd",
+    "variant": "split"
+  },
   "69": {
     "family": "chroma",
     "file": "sfx_069.fsh",
@@ -3481,6 +5911,96 @@
     "overlay": "pulseglow",
     "seed": "17ec1b909cc75eb9",
     "variant": "radial"
+  },
+  "690": {
+    "family": "dreamblur",
+    "file": "sfx_690.fsh",
+    "lines": 99,
+    "motion": "drift",
+    "overlay": "sparkle",
+    "seed": "cd438621a5efbbed",
+    "variant": "edgehalo"
+  },
+  "691": {
+    "family": "moire",
+    "file": "sfx_691.fsh",
+    "lines": 83,
+    "motion": "drift",
+    "overlay": "sparkle",
+    "seed": "24a63118c3d5e390",
+    "variant": "rotmoire"
+  },
+  "692": {
+    "family": "spectral",
+    "file": "sfx_692.fsh",
+    "lines": 97,
+    "motion": "steady",
+    "overlay": "sparkle",
+    "seed": "893edda5b446987e",
+    "variant": "twin"
+  },
+  "693": {
+    "family": "aberration",
+    "file": "sfx_693.fsh",
+    "lines": 90,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "b654bc26b81373cc",
+    "variant": "breathing"
+  },
+  "694": {
+    "family": "underwater",
+    "file": "sfx_694.fsh",
+    "lines": 120,
+    "motion": "drift",
+    "overlay": "sparkle",
+    "seed": "c96fb8a9e8d883bb",
+    "variant": "shallows"
+  },
+  "695": {
+    "family": "thermal",
+    "file": "sfx_695.fsh",
+    "lines": 96,
+    "motion": "pulse",
+    "overlay": "pulseglow",
+    "seed": "dfb56d22a134c32f",
+    "variant": "hotspots"
+  },
+  "696": {
+    "family": "sketch",
+    "file": "sfx_696.fsh",
+    "lines": 95,
+    "motion": "pulse",
+    "overlay": "pulseglow",
+    "seed": "1c99a3a1d28924fa",
+    "variant": "crosshatch"
+  },
+  "697": {
+    "family": "starburst",
+    "file": "sfx_697.fsh",
+    "lines": 99,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "7e960507188fbd82",
+    "variant": "four"
+  },
+  "698": {
+    "family": "vhs",
+    "file": "sfx_698.fsh",
+    "lines": 109,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "53cb3ef0d8b6459b",
+    "variant": "headswitch"
+  },
+  "699": {
+    "family": "gloom",
+    "file": "sfx_699.fsh",
+    "lines": 82,
+    "motion": "steady",
+    "overlay": "grain",
+    "seed": "563cbe15eb9722ce",
+    "variant": "dusk"
   },
   "7": {
     "family": "heathaze",
@@ -3500,6 +6020,96 @@
     "seed": "537fada23dcdf8fb",
     "variant": "columns"
   },
+  "700": {
+    "family": "tint",
+    "file": "sfx_700.fsh",
+    "lines": 70,
+    "motion": "pulse",
+    "overlay": "pulseglow",
+    "seed": "2ac73b93479275bf",
+    "variant": "grade"
+  },
+  "701": {
+    "family": "wobble",
+    "file": "sfx_701.fsh",
+    "lines": 80,
+    "motion": "drift",
+    "overlay": "none",
+    "seed": "2e19556274bbb1e8",
+    "variant": "harmonic"
+  },
+  "702": {
+    "family": "vignette",
+    "file": "sfx_702.fsh",
+    "lines": 88,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "002d91b141852f91",
+    "variant": "noisy"
+  },
+  "703": {
+    "family": "chroma",
+    "file": "sfx_703.fsh",
+    "lines": 92,
+    "motion": "steady",
+    "overlay": "grain",
+    "seed": "d39c3f3c7c1f3c3a",
+    "variant": "zoned"
+  },
+  "704": {
+    "family": "pixelate",
+    "file": "sfx_704.fsh",
+    "lines": 92,
+    "motion": "steady",
+    "overlay": "sparkle",
+    "seed": "476593b5679c8cf1",
+    "variant": "breathe"
+  },
+  "705": {
+    "family": "desat",
+    "file": "sfx_705.fsh",
+    "lines": 67,
+    "motion": "surge",
+    "overlay": "none",
+    "seed": "aab213463ae96647",
+    "variant": "tunnel"
+  },
+  "706": {
+    "family": "bloomglow",
+    "file": "sfx_706.fsh",
+    "lines": 89,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "702d65e23f6df632",
+    "variant": "cross"
+  },
+  "707": {
+    "family": "ripple",
+    "file": "sfx_707.fsh",
+    "lines": 106,
+    "motion": "steady",
+    "overlay": "none",
+    "seed": "9a3abb9f373a8bf1",
+    "variant": "pond"
+  },
+  "708": {
+    "family": "scanlines",
+    "file": "sfx_708.fsh",
+    "lines": 69,
+    "motion": "pulse",
+    "overlay": "none",
+    "seed": "4ac09f22726b8c35",
+    "variant": "grid"
+  },
+  "709": {
+    "family": "edgeglow",
+    "file": "sfx_709.fsh",
+    "lines": 96,
+    "motion": "pulse",
+    "overlay": "pulseglow",
+    "seed": "906e138436b9f62b",
+    "variant": "pulse"
+  },
   "71": {
     "family": "vignette",
     "file": "sfx_071.fsh",
@@ -3508,6 +6118,96 @@
     "overlay": "sparkle",
     "seed": "0687087f1b29b7fb",
     "variant": "box"
+  },
+  "710": {
+    "family": "frostlens",
+    "file": "sfx_710.fsh",
+    "lines": 114,
+    "motion": "pulse",
+    "overlay": "sparkle",
+    "seed": "5f16b16a5047f8f2",
+    "variant": "sheet"
+  },
+  "711": {
+    "family": "heathaze",
+    "file": "sfx_711.fsh",
+    "lines": 105,
+    "motion": "steady",
+    "overlay": "sparkle",
+    "seed": "486a9d326f98e55e",
+    "variant": "rising"
+  },
+  "712": {
+    "family": "posterize",
+    "file": "sfx_712.fsh",
+    "lines": 80,
+    "motion": "steady",
+    "overlay": "grain",
+    "seed": "31a1fb00a7db78d1",
+    "variant": "dither"
+  },
+  "713": {
+    "family": "radialblur",
+    "file": "sfx_713.fsh",
+    "lines": 95,
+    "motion": "drift",
+    "overlay": "grain",
+    "seed": "6e413be8b0bb856a",
+    "variant": "pulsezoom"
+  },
+  "714": {
+    "family": "glitch",
+    "file": "sfx_714.fsh",
+    "lines": 111,
+    "motion": "steady",
+    "overlay": "grain",
+    "seed": "6194954831f3c4f1",
+    "variant": "rowcol"
+  },
+  "715": {
+    "family": "duotone",
+    "file": "sfx_715.fsh",
+    "lines": 72,
+    "motion": "steady",
+    "overlay": "pulseglow",
+    "seed": "ca2f5c76eba3847e",
+    "variant": "shifting"
+  },
+  "716": {
+    "family": "kaleido",
+    "file": "sfx_716.fsh",
+    "lines": 93,
+    "motion": "surge",
+    "overlay": "pulseglow",
+    "seed": "6fbb907105b04f35",
+    "variant": "mirror"
+  },
+  "717": {
+    "family": "huedrift",
+    "file": "sfx_717.fsh",
+    "lines": 75,
+    "motion": "steady",
+    "overlay": "none",
+    "seed": "1518e9730edf65f5",
+    "variant": "split"
+  },
+  "718": {
+    "family": "dreamblur",
+    "file": "sfx_718.fsh",
+    "lines": 100,
+    "motion": "drift",
+    "overlay": "sparkle",
+    "seed": "39644e2503cb418a",
+    "variant": "soft9"
+  },
+  "719": {
+    "family": "moire",
+    "file": "sfx_719.fsh",
+    "lines": 75,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "3d913a68d3f0990c",
+    "variant": "linlin"
   },
   "72": {
     "family": "frostlens",
@@ -3518,6 +6218,96 @@
     "seed": "c20bd90aaa554e05",
     "variant": "creep"
   },
+  "720": {
+    "family": "spectral",
+    "file": "sfx_720.fsh",
+    "lines": 94,
+    "motion": "surge",
+    "overlay": "pulseglow",
+    "seed": "08c8410b09b2cc47",
+    "variant": "triple"
+  },
+  "721": {
+    "family": "aberration",
+    "file": "sfx_721.fsh",
+    "lines": 88,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "e3e58ae76e9e4615",
+    "variant": "pincushion"
+  },
+  "722": {
+    "family": "underwater",
+    "file": "sfx_722.fsh",
+    "lines": 121,
+    "motion": "surge",
+    "overlay": "pulseglow",
+    "seed": "8146a31162bf9adf",
+    "variant": "surgewash"
+  },
+  "723": {
+    "family": "thermal",
+    "file": "sfx_723.fsh",
+    "lines": 97,
+    "motion": "drift",
+    "overlay": "grain",
+    "seed": "d6574cb29c141ce8",
+    "variant": "hotspots"
+  },
+  "724": {
+    "family": "sketch",
+    "file": "sfx_724.fsh",
+    "lines": 106,
+    "motion": "drift",
+    "overlay": "none",
+    "seed": "0af57e856458f154",
+    "variant": "charcoal"
+  },
+  "725": {
+    "family": "starburst",
+    "file": "sfx_725.fsh",
+    "lines": 100,
+    "motion": "surge",
+    "overlay": "sparkle",
+    "seed": "b4e0b348a729e635",
+    "variant": "six"
+  },
+  "726": {
+    "family": "vhs",
+    "file": "sfx_726.fsh",
+    "lines": 112,
+    "motion": "steady",
+    "overlay": "pulseglow",
+    "seed": "6ba7ce06bdf241f3",
+    "variant": "worn"
+  },
+  "727": {
+    "family": "gloom",
+    "file": "sfx_727.fsh",
+    "lines": 80,
+    "motion": "surge",
+    "overlay": "pulseglow",
+    "seed": "c73d35eab84096c4",
+    "variant": "heartbeat"
+  },
+  "728": {
+    "family": "tint",
+    "file": "sfx_728.fsh",
+    "lines": 80,
+    "motion": "drift",
+    "overlay": "grain",
+    "seed": "88e6f27064209a89",
+    "variant": "splitlat"
+  },
+  "729": {
+    "family": "wobble",
+    "file": "sfx_729.fsh",
+    "lines": 97,
+    "motion": "drift",
+    "overlay": "grain",
+    "seed": "891fc9836fa9690e",
+    "variant": "swirl"
+  },
   "73": {
     "family": "pixelate",
     "file": "sfx_073.fsh",
@@ -3526,6 +6316,96 @@
     "overlay": "none",
     "seed": "cbc4d6d5950e4f7c",
     "variant": "wide"
+  },
+  "730": {
+    "family": "vignette",
+    "file": "sfx_730.fsh",
+    "lines": 90,
+    "motion": "drift",
+    "overlay": "sparkle",
+    "seed": "15d637e7882d5cfc",
+    "variant": "noisy"
+  },
+  "731": {
+    "family": "chroma",
+    "file": "sfx_731.fsh",
+    "lines": 86,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "5bad95d9327e0d45",
+    "variant": "linear"
+  },
+  "732": {
+    "family": "pixelate",
+    "file": "sfx_732.fsh",
+    "lines": 80,
+    "motion": "pulse",
+    "overlay": "none",
+    "seed": "3e06635a0f1412fd",
+    "variant": "breathe"
+  },
+  "733": {
+    "family": "desat",
+    "file": "sfx_733.fsh",
+    "lines": 71,
+    "motion": "steady",
+    "overlay": "pulseglow",
+    "seed": "cc8908691883eba8",
+    "variant": "twotone"
+  },
+  "734": {
+    "family": "bloomglow",
+    "file": "sfx_734.fsh",
+    "lines": 94,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "4fa066bfd5ab5bb2",
+    "variant": "ring"
+  },
+  "735": {
+    "family": "ripple",
+    "file": "sfx_735.fsh",
+    "lines": 99,
+    "motion": "steady",
+    "overlay": "grain",
+    "seed": "837de98785be9127",
+    "variant": "linear"
+  },
+  "736": {
+    "family": "scanlines",
+    "file": "sfx_736.fsh",
+    "lines": 93,
+    "motion": "steady",
+    "overlay": "none",
+    "seed": "3b7448acd9bfb123",
+    "variant": "vertical"
+  },
+  "737": {
+    "family": "edgeglow",
+    "file": "sfx_737.fsh",
+    "lines": 95,
+    "motion": "pulse",
+    "overlay": "pulseglow",
+    "seed": "3ff1d140119e88cf",
+    "variant": "sobel"
+  },
+  "738": {
+    "family": "frostlens",
+    "file": "sfx_738.fsh",
+    "lines": 114,
+    "motion": "surge",
+    "overlay": "sparkle",
+    "seed": "5585b09ff9e3e126",
+    "variant": "breath"
+  },
+  "739": {
+    "family": "heathaze",
+    "file": "sfx_739.fsh",
+    "lines": 105,
+    "motion": "drift",
+    "overlay": "grain",
+    "seed": "21684a89e0f8d2a8",
+    "variant": "rising"
   },
   "74": {
     "family": "ripple",
@@ -3536,6 +6416,96 @@
     "seed": "d05b39d5a15b55af",
     "variant": "twin"
   },
+  "740": {
+    "family": "posterize",
+    "file": "sfx_740.fsh",
+    "lines": 66,
+    "motion": "steady",
+    "overlay": "none",
+    "seed": "386ac241ad26498f",
+    "variant": "breathe"
+  },
+  "741": {
+    "family": "radialblur",
+    "file": "sfx_741.fsh",
+    "lines": 98,
+    "motion": "drift",
+    "overlay": "sparkle",
+    "seed": "963f4baedf556e8a",
+    "variant": "spin"
+  },
+  "742": {
+    "family": "glitch",
+    "file": "sfx_742.fsh",
+    "lines": 114,
+    "motion": "drift",
+    "overlay": "sparkle",
+    "seed": "f4f45a3cc3cf701c",
+    "variant": "blocks"
+  },
+  "743": {
+    "family": "duotone",
+    "file": "sfx_743.fsh",
+    "lines": 67,
+    "motion": "steady",
+    "overlay": "none",
+    "seed": "3db3622a6116d7a3",
+    "variant": "shifting"
+  },
+  "744": {
+    "family": "kaleido",
+    "file": "sfx_744.fsh",
+    "lines": 108,
+    "motion": "steady",
+    "overlay": "grain",
+    "seed": "bdcc29526103b860",
+    "variant": "wedge8"
+  },
+  "745": {
+    "family": "huedrift",
+    "file": "sfx_745.fsh",
+    "lines": 87,
+    "motion": "steady",
+    "overlay": "sparkle",
+    "seed": "20aeb26224f99e9e",
+    "variant": "radial"
+  },
+  "746": {
+    "family": "dreamblur",
+    "file": "sfx_746.fsh",
+    "lines": 99,
+    "motion": "surge",
+    "overlay": "grain",
+    "seed": "25a1f28fd5347d1d",
+    "variant": "glowdream"
+  },
+  "747": {
+    "family": "moire",
+    "file": "sfx_747.fsh",
+    "lines": 70,
+    "motion": "surge",
+    "overlay": "none",
+    "seed": "b31af8a3ff083fb0",
+    "variant": "linring"
+  },
+  "748": {
+    "family": "spectral",
+    "file": "sfx_748.fsh",
+    "lines": 91,
+    "motion": "surge",
+    "overlay": "pulseglow",
+    "seed": "b23e4f9c70f2f05d",
+    "variant": "twin"
+  },
+  "749": {
+    "family": "aberration",
+    "file": "sfx_749.fsh",
+    "lines": 95,
+    "motion": "drift",
+    "overlay": "grain",
+    "seed": "d94450925a853ae0",
+    "variant": "cornered"
+  },
   "75": {
     "family": "posterize",
     "file": "sfx_075.fsh",
@@ -3544,6 +6514,96 @@
     "overlay": "sparkle",
     "seed": "e8bb6b9da71d54d9",
     "variant": "lumaonly"
+  },
+  "750": {
+    "family": "underwater",
+    "file": "sfx_750.fsh",
+    "lines": 121,
+    "motion": "pulse",
+    "overlay": "sparkle",
+    "seed": "6b4caedd3c141fd1",
+    "variant": "surgewash"
+  },
+  "751": {
+    "family": "thermal",
+    "file": "sfx_751.fsh",
+    "lines": 96,
+    "motion": "steady",
+    "overlay": "sparkle",
+    "seed": "9749a099a4df9b9d",
+    "variant": "inverted"
+  },
+  "752": {
+    "family": "sketch",
+    "file": "sfx_752.fsh",
+    "lines": 105,
+    "motion": "pulse",
+    "overlay": "none",
+    "seed": "d6c63122a67812cf",
+    "variant": "charcoal"
+  },
+  "753": {
+    "family": "starburst",
+    "file": "sfx_753.fsh",
+    "lines": 99,
+    "motion": "steady",
+    "overlay": "grain",
+    "seed": "622335c75541ce83",
+    "variant": "four"
+  },
+  "754": {
+    "family": "vhs",
+    "file": "sfx_754.fsh",
+    "lines": 114,
+    "motion": "steady",
+    "overlay": "pulseglow",
+    "seed": "0e1a34d56109cf15",
+    "variant": "tracking"
+  },
+  "755": {
+    "family": "gloom",
+    "file": "sfx_755.fsh",
+    "lines": 90,
+    "motion": "pulse",
+    "overlay": "none",
+    "seed": "cf302c1b3bd7c40c",
+    "variant": "creeping"
+  },
+  "756": {
+    "family": "tint",
+    "file": "sfx_756.fsh",
+    "lines": 77,
+    "motion": "steady",
+    "overlay": "sparkle",
+    "seed": "d23b87e11d798efd",
+    "variant": "grade"
+  },
+  "757": {
+    "family": "wobble",
+    "file": "sfx_757.fsh",
+    "lines": 91,
+    "motion": "steady",
+    "overlay": "grain",
+    "seed": "e24c332be8921236",
+    "variant": "sincos"
+  },
+  "758": {
+    "family": "vignette",
+    "file": "sfx_758.fsh",
+    "lines": 89,
+    "motion": "surge",
+    "overlay": "pulseglow",
+    "seed": "d3c8ab5f0b7935eb",
+    "variant": "noisy"
+  },
+  "759": {
+    "family": "chroma",
+    "file": "sfx_759.fsh",
+    "lines": 81,
+    "motion": "drift",
+    "overlay": "none",
+    "seed": "8e9750644ab30046",
+    "variant": "radial"
   },
   "76": {
     "family": "duotone",
@@ -3554,6 +6614,96 @@
     "seed": "2d5da0a9568d5859",
     "variant": "soft"
   },
+  "760": {
+    "family": "pixelate",
+    "file": "sfx_760.fsh",
+    "lines": 93,
+    "motion": "drift",
+    "overlay": "sparkle",
+    "seed": "f78927b6ffd84300",
+    "variant": "square"
+  },
+  "761": {
+    "family": "desat",
+    "file": "sfx_761.fsh",
+    "lines": 78,
+    "motion": "surge",
+    "overlay": "grain",
+    "seed": "4a302ef8244d9eb0",
+    "variant": "tunnel"
+  },
+  "762": {
+    "family": "bloomglow",
+    "file": "sfx_762.fsh",
+    "lines": 84,
+    "motion": "surge",
+    "overlay": "none",
+    "seed": "35aabaf55a916b6c",
+    "variant": "cross"
+  },
+  "763": {
+    "family": "ripple",
+    "file": "sfx_763.fsh",
+    "lines": 89,
+    "motion": "surge",
+    "overlay": "none",
+    "seed": "125f34ad796a1e18",
+    "variant": "linear"
+  },
+  "764": {
+    "family": "scanlines",
+    "file": "sfx_764.fsh",
+    "lines": 106,
+    "motion": "drift",
+    "overlay": "grain",
+    "seed": "bbc9325e504b1989",
+    "variant": "horizontal"
+  },
+  "765": {
+    "family": "edgeglow",
+    "file": "sfx_765.fsh",
+    "lines": 103,
+    "motion": "drift",
+    "overlay": "grain",
+    "seed": "6ef63634ce4dfc5c",
+    "variant": "duo"
+  },
+  "766": {
+    "family": "frostlens",
+    "file": "sfx_766.fsh",
+    "lines": 109,
+    "motion": "surge",
+    "overlay": "none",
+    "seed": "7b360410abd8ed1f",
+    "variant": "sheet"
+  },
+  "767": {
+    "family": "heathaze",
+    "file": "sfx_767.fsh",
+    "lines": 98,
+    "motion": "steady",
+    "overlay": "pulseglow",
+    "seed": "55051b68feee22fb",
+    "variant": "rising"
+  },
+  "768": {
+    "family": "posterize",
+    "file": "sfx_768.fsh",
+    "lines": 79,
+    "motion": "drift",
+    "overlay": "sparkle",
+    "seed": "d860afdffef013a7",
+    "variant": "breathe"
+  },
+  "769": {
+    "family": "radialblur",
+    "file": "sfx_769.fsh",
+    "lines": 83,
+    "motion": "drift",
+    "overlay": "none",
+    "seed": "41a52954662c0a98",
+    "variant": "zoom"
+  },
   "77": {
     "family": "heathaze",
     "file": "sfx_077.fsh",
@@ -3562,6 +6712,96 @@
     "overlay": "pulseglow",
     "seed": "c567ab87744aed4b",
     "variant": "full"
+  },
+  "770": {
+    "family": "glitch",
+    "file": "sfx_770.fsh",
+    "lines": 102,
+    "motion": "drift",
+    "overlay": "none",
+    "seed": "8f0c6de957875fbe",
+    "variant": "blocks"
+  },
+  "771": {
+    "family": "duotone",
+    "file": "sfx_771.fsh",
+    "lines": 77,
+    "motion": "steady",
+    "overlay": "grain",
+    "seed": "74390eae31013d84",
+    "variant": "soft"
+  },
+  "772": {
+    "family": "kaleido",
+    "file": "sfx_772.fsh",
+    "lines": 99,
+    "motion": "surge",
+    "overlay": "grain",
+    "seed": "cfa8009affdcf185",
+    "variant": "mirror"
+  },
+  "773": {
+    "family": "huedrift",
+    "file": "sfx_773.fsh",
+    "lines": 76,
+    "motion": "surge",
+    "overlay": "none",
+    "seed": "bc4d2055f1d1b76c",
+    "variant": "split"
+  },
+  "774": {
+    "family": "dreamblur",
+    "file": "sfx_774.fsh",
+    "lines": 97,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "e5c47a5f1d3b599d",
+    "variant": "cross5"
+  },
+  "775": {
+    "family": "moire",
+    "file": "sfx_775.fsh",
+    "lines": 74,
+    "motion": "steady",
+    "overlay": "pulseglow",
+    "seed": "0f39085aea43737b",
+    "variant": "linlin"
+  },
+  "776": {
+    "family": "spectral",
+    "file": "sfx_776.fsh",
+    "lines": 99,
+    "motion": "surge",
+    "overlay": "sparkle",
+    "seed": "76d34e8cbded100e",
+    "variant": "orbit"
+  },
+  "777": {
+    "family": "aberration",
+    "file": "sfx_777.fsh",
+    "lines": 83,
+    "motion": "drift",
+    "overlay": "none",
+    "seed": "0958e1e84a9b6292",
+    "variant": "barrel"
+  },
+  "778": {
+    "family": "underwater",
+    "file": "sfx_778.fsh",
+    "lines": 121,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "c82125f424a22cf1",
+    "variant": "shafted"
+  },
+  "779": {
+    "family": "thermal",
+    "file": "sfx_779.fsh",
+    "lines": 97,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "0e6dde147a5870b4",
+    "variant": "hotspots"
   },
   "78": {
     "family": "tint",
@@ -3572,6 +6812,96 @@
     "seed": "8bf1d846e31c4bff",
     "variant": "splitlat"
   },
+  "780": {
+    "family": "sketch",
+    "file": "sfx_780.fsh",
+    "lines": 101,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "5894ece3fef84d28",
+    "variant": "crosshatch"
+  },
+  "781": {
+    "family": "starburst",
+    "file": "sfx_781.fsh",
+    "lines": 98,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "f84a561f07138fef",
+    "variant": "five"
+  },
+  "782": {
+    "family": "vhs",
+    "file": "sfx_782.fsh",
+    "lines": 114,
+    "motion": "pulse",
+    "overlay": "pulseglow",
+    "seed": "e8ecd46e685366c7",
+    "variant": "tracking"
+  },
+  "783": {
+    "family": "gloom",
+    "file": "sfx_783.fsh",
+    "lines": 80,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "8640a9f4294bfb3f",
+    "variant": "heartbeat"
+  },
+  "784": {
+    "family": "tint",
+    "file": "sfx_784.fsh",
+    "lines": 77,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "fc30f77db9848431",
+    "variant": "breathe"
+  },
+  "785": {
+    "family": "wobble",
+    "file": "sfx_785.fsh",
+    "lines": 90,
+    "motion": "steady",
+    "overlay": "pulseglow",
+    "seed": "f5dc1f0d4126316a",
+    "variant": "swirl"
+  },
+  "786": {
+    "family": "vignette",
+    "file": "sfx_786.fsh",
+    "lines": 72,
+    "motion": "steady",
+    "overlay": "pulseglow",
+    "seed": "fb277674cf5da98c",
+    "variant": "box"
+  },
+  "787": {
+    "family": "chroma",
+    "file": "sfx_787.fsh",
+    "lines": 93,
+    "motion": "drift",
+    "overlay": "grain",
+    "seed": "1c6c473b94c1ff9f",
+    "variant": "zoned"
+  },
+  "788": {
+    "family": "pixelate",
+    "file": "sfx_788.fsh",
+    "lines": 91,
+    "motion": "steady",
+    "overlay": "sparkle",
+    "seed": "39ef0408410e5a04",
+    "variant": "wide"
+  },
+  "789": {
+    "family": "desat",
+    "file": "sfx_789.fsh",
+    "lines": 78,
+    "motion": "drift",
+    "overlay": "grain",
+    "seed": "3e9c19e0c5b8eed3",
+    "variant": "shadows"
+  },
   "79": {
     "family": "edgeglow",
     "file": "sfx_079.fsh",
@@ -3580,6 +6910,96 @@
     "overlay": "pulseglow",
     "seed": "f202252979be2f68",
     "variant": "sobel"
+  },
+  "790": {
+    "family": "bloomglow",
+    "file": "sfx_790.fsh",
+    "lines": 95,
+    "motion": "drift",
+    "overlay": "grain",
+    "seed": "1649527264e857ed",
+    "variant": "diag"
+  },
+  "791": {
+    "family": "ripple",
+    "file": "sfx_791.fsh",
+    "lines": 112,
+    "motion": "drift",
+    "overlay": "grain",
+    "seed": "6f75fe98aa3cd5cc",
+    "variant": "pond"
+  },
+  "792": {
+    "family": "scanlines",
+    "file": "sfx_792.fsh",
+    "lines": 94,
+    "motion": "pulse",
+    "overlay": "none",
+    "seed": "b8047abcdc1233a7",
+    "variant": "horizontal"
+  },
+  "793": {
+    "family": "edgeglow",
+    "file": "sfx_793.fsh",
+    "lines": 102,
+    "motion": "drift",
+    "overlay": "grain",
+    "seed": "85ec6d20026bdaa5",
+    "variant": "sobel"
+  },
+  "794": {
+    "family": "frostlens",
+    "file": "sfx_794.fsh",
+    "lines": 108,
+    "motion": "steady",
+    "overlay": "none",
+    "seed": "a6f84952876da9bd",
+    "variant": "sheet"
+  },
+  "795": {
+    "family": "heathaze",
+    "file": "sfx_795.fsh",
+    "lines": 97,
+    "motion": "surge",
+    "overlay": "none",
+    "seed": "a7bd5e9d83158ffd",
+    "variant": "embers"
+  },
+  "796": {
+    "family": "posterize",
+    "file": "sfx_796.fsh",
+    "lines": 77,
+    "motion": "steady",
+    "overlay": "grain",
+    "seed": "ae2d1ff4dc4f8f12",
+    "variant": "breathe"
+  },
+  "797": {
+    "family": "radialblur",
+    "file": "sfx_797.fsh",
+    "lines": 97,
+    "motion": "pulse",
+    "overlay": "sparkle",
+    "seed": "579c5c7b9e9e6207",
+    "variant": "spin"
+  },
+  "798": {
+    "family": "glitch",
+    "file": "sfx_798.fsh",
+    "lines": 105,
+    "motion": "pulse",
+    "overlay": "pulseglow",
+    "seed": "e1ae5d375bcd6c52",
+    "variant": "tear"
+  },
+  "799": {
+    "family": "duotone",
+    "file": "sfx_799.fsh",
+    "lines": 66,
+    "motion": "steady",
+    "overlay": "none",
+    "seed": "41d8ae2acbc5bc13",
+    "variant": "hard"
   },
   "8": {
     "family": "scanlines",
@@ -3599,6 +7019,96 @@
     "seed": "a661c613be4ce9b4",
     "variant": "hard"
   },
+  "800": {
+    "family": "kaleido",
+    "file": "sfx_800.fsh",
+    "lines": 109,
+    "motion": "steady",
+    "overlay": "sparkle",
+    "seed": "ae07d46762690d59",
+    "variant": "wedge8"
+  },
+  "801": {
+    "family": "huedrift",
+    "file": "sfx_801.fsh",
+    "lines": 87,
+    "motion": "steady",
+    "overlay": "sparkle",
+    "seed": "54a3109a3f08c569",
+    "variant": "split"
+  },
+  "802": {
+    "family": "dreamblur",
+    "file": "sfx_802.fsh",
+    "lines": 99,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "26d1cd80ec5f83a4",
+    "variant": "glowdream"
+  },
+  "803": {
+    "family": "moire",
+    "file": "sfx_803.fsh",
+    "lines": 82,
+    "motion": "steady",
+    "overlay": "sparkle",
+    "seed": "874ef600399528f5",
+    "variant": "rotmoire"
+  },
+  "804": {
+    "family": "spectral",
+    "file": "sfx_804.fsh",
+    "lines": 97,
+    "motion": "steady",
+    "overlay": "grain",
+    "seed": "e98859abc9218251",
+    "variant": "orbit"
+  },
+  "805": {
+    "family": "aberration",
+    "file": "sfx_805.fsh",
+    "lines": 88,
+    "motion": "surge",
+    "overlay": "pulseglow",
+    "seed": "12265796c2e4070a",
+    "variant": "pincushion"
+  },
+  "806": {
+    "family": "underwater",
+    "file": "sfx_806.fsh",
+    "lines": 121,
+    "motion": "drift",
+    "overlay": "grain",
+    "seed": "9b47f559e00e9372",
+    "variant": "surgewash"
+  },
+  "807": {
+    "family": "thermal",
+    "file": "sfx_807.fsh",
+    "lines": 97,
+    "motion": "steady",
+    "overlay": "sparkle",
+    "seed": "b27c9852282afaf7",
+    "variant": "banded"
+  },
+  "808": {
+    "family": "sketch",
+    "file": "sfx_808.fsh",
+    "lines": 95,
+    "motion": "steady",
+    "overlay": "pulseglow",
+    "seed": "c75570e3040e6611",
+    "variant": "crosshatch"
+  },
+  "809": {
+    "family": "starburst",
+    "file": "sfx_809.fsh",
+    "lines": 93,
+    "motion": "pulse",
+    "overlay": "pulseglow",
+    "seed": "9949c29b82fb4ea2",
+    "variant": "spinning"
+  },
   "81": {
     "family": "glitch",
     "file": "sfx_081.fsh",
@@ -3607,6 +7117,96 @@
     "overlay": "grain",
     "seed": "849a5076c855262a",
     "variant": "tear"
+  },
+  "810": {
+    "family": "vhs",
+    "file": "sfx_810.fsh",
+    "lines": 113,
+    "motion": "pulse",
+    "overlay": "sparkle",
+    "seed": "c6c555945a6bc5ad",
+    "variant": "worn"
+  },
+  "811": {
+    "family": "gloom",
+    "file": "sfx_811.fsh",
+    "lines": 95,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "620f09622579dd14",
+    "variant": "creeping"
+  },
+  "812": {
+    "family": "tint",
+    "file": "sfx_812.fsh",
+    "lines": 72,
+    "motion": "surge",
+    "overlay": "pulseglow",
+    "seed": "041fbf9281a523a1",
+    "variant": "radial"
+  },
+  "813": {
+    "family": "wobble",
+    "file": "sfx_813.fsh",
+    "lines": 81,
+    "motion": "drift",
+    "overlay": "none",
+    "seed": "53589efe7d169bf4",
+    "variant": "sincos"
+  },
+  "814": {
+    "family": "vignette",
+    "file": "sfx_814.fsh",
+    "lines": 72,
+    "motion": "pulse",
+    "overlay": "pulseglow",
+    "seed": "698d0654234c3a0b",
+    "variant": "box"
+  },
+  "815": {
+    "family": "chroma",
+    "file": "sfx_815.fsh",
+    "lines": 81,
+    "motion": "drift",
+    "overlay": "none",
+    "seed": "eff2d12b8ad0a72a",
+    "variant": "linear"
+  },
+  "816": {
+    "family": "pixelate",
+    "file": "sfx_816.fsh",
+    "lines": 81,
+    "motion": "drift",
+    "overlay": "none",
+    "seed": "3a324d4ed3543432",
+    "variant": "breathe"
+  },
+  "817": {
+    "family": "desat",
+    "file": "sfx_817.fsh",
+    "lines": 77,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "c92d2c08f64df553",
+    "variant": "tunnel"
+  },
+  "818": {
+    "family": "bloomglow",
+    "file": "sfx_818.fsh",
+    "lines": 95,
+    "motion": "steady",
+    "overlay": "sparkle",
+    "seed": "e6e6e10fbec2adf1",
+    "variant": "diag"
+  },
+  "819": {
+    "family": "ripple",
+    "file": "sfx_819.fsh",
+    "lines": 113,
+    "motion": "surge",
+    "overlay": "sparkle",
+    "seed": "168b1fa657c321ed",
+    "variant": "pond"
   },
   "82": {
     "family": "vignette",
@@ -3617,6 +7217,96 @@
     "seed": "bf379eb3e1cd4f48",
     "variant": "round"
   },
+  "820": {
+    "family": "scanlines",
+    "file": "sfx_820.fsh",
+    "lines": 107,
+    "motion": "surge",
+    "overlay": "sparkle",
+    "seed": "bcd76301c8754feb",
+    "variant": "horizontal"
+  },
+  "821": {
+    "family": "edgeglow",
+    "file": "sfx_821.fsh",
+    "lines": 104,
+    "motion": "drift",
+    "overlay": "sparkle",
+    "seed": "a80abb40461f63eb",
+    "variant": "duo"
+  },
+  "822": {
+    "family": "frostlens",
+    "file": "sfx_822.fsh",
+    "lines": 108,
+    "motion": "surge",
+    "overlay": "none",
+    "seed": "90b10d13800072a0",
+    "variant": "veins"
+  },
+  "823": {
+    "family": "heathaze",
+    "file": "sfx_823.fsh",
+    "lines": 97,
+    "motion": "drift",
+    "overlay": "none",
+    "seed": "688a1e866c4dd963",
+    "variant": "embers"
+  },
+  "824": {
+    "family": "posterize",
+    "file": "sfx_824.fsh",
+    "lines": 66,
+    "motion": "pulse",
+    "overlay": "none",
+    "seed": "96ef89215d09c94d",
+    "variant": "breathe"
+  },
+  "825": {
+    "family": "radialblur",
+    "file": "sfx_825.fsh",
+    "lines": 96,
+    "motion": "steady",
+    "overlay": "grain",
+    "seed": "525239426d3bf3cc",
+    "variant": "spin"
+  },
+  "826": {
+    "family": "glitch",
+    "file": "sfx_826.fsh",
+    "lines": 112,
+    "motion": "drift",
+    "overlay": "grain",
+    "seed": "646b5c4d7e4fa93d",
+    "variant": "rowcol"
+  },
+  "827": {
+    "family": "duotone",
+    "file": "sfx_827.fsh",
+    "lines": 72,
+    "motion": "pulse",
+    "overlay": "pulseglow",
+    "seed": "43eca1f781aaaf36",
+    "variant": "shifting"
+  },
+  "828": {
+    "family": "kaleido",
+    "file": "sfx_828.fsh",
+    "lines": 102,
+    "motion": "pulse",
+    "overlay": "pulseglow",
+    "seed": "6b0f50dc1a8be935",
+    "variant": "wedge6"
+  },
+  "829": {
+    "family": "huedrift",
+    "file": "sfx_829.fsh",
+    "lines": 81,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "5deab3367a0103f5",
+    "variant": "split"
+  },
   "83": {
     "family": "bloomglow",
     "file": "sfx_083.fsh",
@@ -3625,6 +7315,96 @@
     "overlay": "grain",
     "seed": "f7ca812890e01a22",
     "variant": "diag"
+  },
+  "830": {
+    "family": "dreamblur",
+    "file": "sfx_830.fsh",
+    "lines": 93,
+    "motion": "steady",
+    "overlay": "none",
+    "seed": "79ceaefc8990ccbb",
+    "variant": "soft9"
+  },
+  "831": {
+    "family": "moire",
+    "file": "sfx_831.fsh",
+    "lines": 70,
+    "motion": "surge",
+    "overlay": "none",
+    "seed": "78ad7f647cccbb82",
+    "variant": "linlin"
+  },
+  "832": {
+    "family": "spectral",
+    "file": "sfx_832.fsh",
+    "lines": 92,
+    "motion": "drift",
+    "overlay": "pulseglow",
+    "seed": "9ebe03b4610c7d75",
+    "variant": "fade"
+  },
+  "833": {
+    "family": "aberration",
+    "file": "sfx_833.fsh",
+    "lines": 96,
+    "motion": "surge",
+    "overlay": "sparkle",
+    "seed": "b76747f03df4f4a0",
+    "variant": "cornered"
+  },
+  "834": {
+    "family": "underwater",
+    "file": "sfx_834.fsh",
+    "lines": 118,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "52680c08653e4d6f",
+    "variant": "shallows"
+  },
+  "835": {
+    "family": "thermal",
+    "file": "sfx_835.fsh",
+    "lines": 90,
+    "motion": "pulse",
+    "overlay": "none",
+    "seed": "dd924a3f6773317b",
+    "variant": "inverted"
+  },
+  "836": {
+    "family": "sketch",
+    "file": "sfx_836.fsh",
+    "lines": 90,
+    "motion": "steady",
+    "overlay": "none",
+    "seed": "40b67ae175616fe5",
+    "variant": "crosshatch"
+  },
+  "837": {
+    "family": "starburst",
+    "file": "sfx_837.fsh",
+    "lines": 99,
+    "motion": "pulse",
+    "overlay": "sparkle",
+    "seed": "2a4cdc64e383b2cf",
+    "variant": "six"
+  },
+  "838": {
+    "family": "vhs",
+    "file": "sfx_838.fsh",
+    "lines": 120,
+    "motion": "pulse",
+    "overlay": "grain",
+    "seed": "1b33c1f4cd62e1cb",
+    "variant": "tracking"
+  },
+  "839": {
+    "family": "gloom",
+    "file": "sfx_839.fsh",
+    "lines": 84,
+    "motion": "pulse",
+    "overlay": "pulseglow",
+    "seed": "78e63a7d090a41e6",
+    "variant": "hollow"
   },
   "84": {
     "family": "scanlines",
