@@ -22,7 +22,8 @@
 			"com.bubbleshield.client.BubbleShieldClient"
 		],
 		"fabric-client-gametest": [
-			"com.bubbleshield.clienttest.ShaderScreenshotTest"
+			"com.bubbleshield.clienttest.ShaderScreenshotTest",
+			"com.bubbleshield.clienttest.VideoCaptureTest"
 		],
 		"fabric-gametest": [
 			"com.bubbleshield.gametest.ShieldGameTests",
