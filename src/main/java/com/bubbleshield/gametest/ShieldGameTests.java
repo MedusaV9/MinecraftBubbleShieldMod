@@ -311,6 +311,38 @@ public class ShieldGameTests {
 		helper.succeed();
 	}
 
+	/**
+	 * The shared surface atlas every bubble fragment shader samples via
+	 * {@code Sampler0} must ship on the classpath: ShieldPipelines binds
+	 * {@code textures/effect/surface_atlas.png} through
+	 * {@code RenderSetup.withTexture("Sampler0", ...)}, and a missing/corrupt
+	 * texture fails only at real client resource load — which the headless CI
+	 * VM cannot run, so this (with tools/validate_shaders.py's binding-contract
+	 * check) is the CI-visible guard. Asserts the PNG exists and starts with
+	 * the 8-byte PNG signature, and the .mcmeta sibling exists and parses as
+	 * JSON. The asset lives under src/main resources (like the post_effect
+	 * assets) exactly so this headless server-side test can see it.
+	 */
+	@GameTest
+	public void surfaceAtlasAssetShips(GameTestHelper helper) {
+		String atlasPath = "/assets/bubbleshield/textures/effect/surface_atlas.png";
+		byte[] pngSignature = {(byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
+		try (InputStream in = ShieldGameTests.class.getResourceAsStream(atlasPath)) {
+			helper.assertTrue(in != null, "missing surface atlas: " + atlasPath);
+			byte[] header = in.readNBytes(pngSignature.length);
+			helper.assertTrue(
+					java.util.Arrays.equals(header, pngSignature),
+					atlasPath + " does not start with the 8-byte PNG signature");
+		} catch (Exception e) {
+			throw helper.assertionException("failed to read " + atlasPath + ": " + e);
+		}
+
+		// readJsonResource asserts existence + JSON-parses the animation metadata.
+		readJsonResource(helper, atlasPath + ".mcmeta");
+
+		helper.succeed();
+	}
+
 	@GameTest
 	public void dataPackAssetsExist(GameTestHelper helper) {
 		JsonObject lootTable = readJsonResource(helper, "/data/bubbleshield/loot_table/blocks/bubble_shield_projector.json");

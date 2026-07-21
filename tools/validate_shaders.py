@@ -83,6 +83,31 @@ On top of that it enforces the generated-shader invariants:
   4-number value -- std140 wiring is positional, so a JSON/GLSL mismatch would
   silently scramble the uniforms at runtime.
 
+Sampler0 texture-binding contract (fail-closed; glslangValidator compiles a
+declared-but-unused sampler cleanly and never sees the Java side or the PNG,
+so a renamed RenderSetup key, a half-migrated shader or a missing/corrupt
+atlas would otherwise surface only at real client resource load -- which the
+GPU-less CI VM cannot run):
+
+* ShieldPipelines.java must reference BindGroupLayouts.SAMPLER0 (the bubble
+  snippet's sampler slot) AND bind the atlas via
+  RenderSetup .withTexture("Sampler0", <id>) where <id> resolves (directly or
+  through the assigned Identifier constant, cross-checked like
+  parse_beam_names) to BubbleShield.id("textures/effect/surface_atlas.png");
+* every fx_*.fsh must both DECLARE 'uniform sampler2D Sampler0;' and USE it
+  ('texture(Sampler0' present after comment stripping) -- a
+  declared-but-unused sampler is a hard failure (per-pipeline warning spam /
+  a half-migrated shader), as is sampling without a declaration;
+* no bubble fx (or beam) shader may carry a 'layout(binding' qualifier (it
+  fails to compile at #version 330; the binding comes from the bind group,
+  not from GLSL), and the beam shaders must NOT declare/sample Sampler0 at
+  all (their RenderSetup binds no texture);
+* the atlas itself must ship at
+  src/main/resources/assets/bubbleshield/textures/effect/surface_atlas.png as
+  a valid PNG (8-byte signature, 13-byte IHDR) with the expected geometry
+  (2048x2048, 8-bit, color-type 6 = truecolor+alpha RGBA), and its
+  .png.mcmeta sibling must be valid JSON.
+
 The full scan at COUNT=840 is 841 files under bubble/ (840 fx_*.fsh +
 surface.vsh) + 8 under beam/ + 840 under screenfx/ (sfx_*.fsh) = 1689
 compiles, plus 1688 vsh<->fsh link checks (the tallies scale with COUNT and
@@ -99,6 +124,7 @@ import hashlib
 import json
 import multiprocessing
 import re
+import struct
 import subprocess
 import sys
 import tempfile
@@ -152,6 +178,39 @@ LINE_COMMENT = re.compile(r"//[^\n]*")
 # scanning the raw sources is exact; function parameters never match because a
 # declaration must end in ';' right after the name).
 STAGE_IO = re.compile(r"^\s*(?:flat\s+|noperspective\s+|smooth\s+)?(in|out)\s+(\w+)\s+(\w+)\s*;", re.MULTILINE)
+
+# --- Sampler0 texture-binding contract (see module docstring) ---------------
+# The shipped surface atlas every bubble fx samples through Sampler0, plus its
+# .mcmeta sibling. Kept under src/main resources (like the post_effect assets)
+# so the headless gametest server classpath sees it for the asset-existence
+# gametest; this validator checks the same shipped copy.
+SURFACE_ATLAS_PNG = REPO_ROOT / "src/main/resources/assets/bubbleshield/textures/effect/surface_atlas.png"
+SURFACE_ATLAS_MCMETA = SURFACE_ATLAS_PNG.with_name(SURFACE_ATLAS_PNG.name + ".mcmeta")
+# The Identifier path ShieldPipelines must bind via withTexture("Sampler0", ...).
+SURFACE_ATLAS_ID_PATH = "textures/effect/surface_atlas.png"
+SURFACE_ATLAS_SIZE = (2048, 2048)  # 4x4 grid of 512px tiles
+SURFACE_ATLAS_BIT_DEPTH = 8
+SURFACE_ATLAS_COLOR_TYPE = 6  # truecolor + alpha (RGBA); A is the emission mask
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+# The uniform declaration every fx must carry, and the sampling call that must
+# consume it (both matched after comment stripping; a declared-but-unused
+# sampler is a hard failure, not a warning).
+SAMPLER0_DECL_RE = re.compile(r"^\s*uniform\s+sampler2D\s+Sampler0\s*;", re.MULTILINE)
+SAMPLER0_USE_RE = re.compile(r"\btexture\s*\(\s*Sampler0\b")
+SAMPLER0_ANY_RE = re.compile(r"\bSampler0\b")
+# layout(binding = N) needs #version 420 / ARB_shading_language_420pack; at the
+# bubble shaders' #version 330 it fails to compile on real drivers. The slot
+# comes from the SAMPLER0 bind group, never from GLSL.
+LAYOUT_BINDING_RE = re.compile(r"layout\s*\(\s*binding\b")
+# ShieldPipelines.java binding-chain patterns (searched after comment
+# stripping, so a javadoc mention can never satisfy the check): the direct
+# form withTexture("Sampler0", BubbleShield.id("...")), the indirect form
+# withTexture("Sampler0", CONSTANT) plus that constant's
+# CONSTANT = BubbleShield.id("...") assignment (cross-checked the same way
+# parse_beam_names cross-checks BEAM_STYLE_NAMES).
+WITH_TEXTURE_DIRECT_RE = re.compile(
+    r'\.withTexture\(\s*"Sampler0"\s*,\s*BubbleShield\.id\(\s*"([^"]+)"\s*\)\s*\)')
+WITH_TEXTURE_VAR_RE = re.compile(r'\.withTexture\(\s*"Sampler0"\s*,\s*(\w+)\s*\)')
 
 
 def parse_registry_count() -> int:
@@ -544,6 +603,133 @@ def check_screen_invariants(shaders: list[Path], count: int, skip_sfx: bool) -> 
     return errors
 
 
+def parse_png_ihdr(data: bytes) -> tuple[int, int, int, int] | str:
+    """(width, height, bit depth, color type) from the IHDR chunk, or an error
+    description string when the data is not a structurally valid PNG header."""
+    if data[:8] != PNG_SIGNATURE:
+        return "does not start with the 8-byte PNG signature"
+    if len(data) < 33:  # signature + IHDR length/type/13-byte payload/CRC
+        return "truncated before a complete IHDR chunk"
+    length, chunk_type = struct.unpack(">I4s", data[8:16])
+    if chunk_type != b"IHDR" or length != 13:
+        return f"first chunk is {chunk_type!r} with length {length}, expected a 13-byte IHDR"
+    width, height, bit_depth, color_type = struct.unpack(">IIBB", data[16:26])
+    return width, height, bit_depth, color_type
+
+
+def check_texture_binding(shaders: list[Path], beam_names: tuple[str, ...]) -> list[str]:
+    """The Sampler0 texture-binding contract, fail-closed (see module
+    docstring). glslangValidator compiles a declared-but-unused sampler
+    cleanly and never sees ShieldPipelines.java or the shipped PNG, so a
+    renamed withTexture key, a half-migrated shader or a missing/corrupt atlas
+    would otherwise surface only at real client resource load -- which the
+    GPU-less CI VM cannot run. Returns errors."""
+    errors: list[str] = []
+
+    # 1. The Java side of the chain: the bubble snippet must carry the
+    # SAMPLER0 bind group and the RenderSetup must bind the shipped atlas to
+    # the "Sampler0" key (comment-stripped source, so documentation mentions
+    # can never satisfy the check).
+    bound_path = None
+    if not SHIELD_PIPELINES_JAVA.is_file():
+        errors.append(f"ShieldPipelines.java not found: {SHIELD_PIPELINES_JAVA}")
+    else:
+        pipelines_src = strip_comments(SHIELD_PIPELINES_JAVA.read_text(encoding="utf-8"))
+        if "BindGroupLayouts.SAMPLER0" not in pipelines_src:
+            errors.append("ShieldPipelines.java no longer references BindGroupLayouts.SAMPLER0 "
+                          "(the bubble snippet lost its sampler bind group; every fx samples Sampler0)")
+        direct = WITH_TEXTURE_DIRECT_RE.search(pipelines_src)
+        if direct:
+            bound_path = direct.group(1)
+        else:
+            via_var = WITH_TEXTURE_VAR_RE.search(pipelines_src)
+            if not via_var:
+                errors.append("ShieldPipelines.java has no RenderSetup '.withTexture(\"Sampler0\", ...)' "
+                              "call (the surface atlas is no longer bound to the bubble pipelines; "
+                              "a renamed key fails at client resource load, invisible to glslang)")
+            else:
+                constant = via_var.group(1)
+                assign = re.search(
+                    rf'\b{re.escape(constant)}\s*=\s*BubbleShield\.id\(\s*"([^"]+)"\s*\)', pipelines_src)
+                if not assign:
+                    errors.append(f"ShieldPipelines.java: withTexture(\"Sampler0\", {constant}) found, but "
+                                  f"{constant} is not assigned from BubbleShield.id(\"...\") -- cannot "
+                                  "verify the bound atlas path (the Identifier constant drifted)")
+                else:
+                    bound_path = assign.group(1)
+        if bound_path is not None and bound_path != SURFACE_ATLAS_ID_PATH:
+            errors.append(f"ShieldPipelines.java: withTexture(\"Sampler0\", ...) binds \"{bound_path}\", "
+                          f"expected \"{SURFACE_ATLAS_ID_PATH}\"")
+
+    # 2. The GLSL side: every fx must both declare AND sample Sampler0 (a
+    # declared-but-unused sampler is per-pipeline warning spam and the
+    # signature of a half-migrated shader; sampling without a declaration
+    # cannot compile), no fx/beam shader may use layout(binding, and the beam
+    # shaders must stay Sampler0-free (their RenderSetup binds no texture).
+    fx_files = sorted(p for p in shaders if FX_NAME.match(p.name))
+    beam_files = sorted(p for p in shaders if p.name in beam_names)
+    for shader in fx_files:
+        text = strip_comments(shader.read_text(encoding="utf-8"))
+        declared = SAMPLER0_DECL_RE.search(text) is not None
+        used = SAMPLER0_USE_RE.search(text) is not None
+        if declared and not used:
+            errors.append(f"{shader.name}: declares 'uniform sampler2D Sampler0;' but never calls "
+                          "'texture(Sampler0' (declared-but-unused sampler: per-pipeline warning "
+                          "spam / half-migrated shader)")
+        elif used and not declared:
+            errors.append(f"{shader.name}: samples Sampler0 without the "
+                          "'uniform sampler2D Sampler0;' declaration")
+        elif not declared:
+            errors.append(f"{shader.name}: missing 'uniform sampler2D Sampler0;' + 'texture(Sampler0' "
+                          "(every bubble fx must sample the shared surface atlas)")
+        if LAYOUT_BINDING_RE.search(text):
+            errors.append(f"{shader.name}: 'layout(binding' qualifier found (fails to compile at "
+                          "#version 330; the slot comes from the SAMPLER0 bind group, not GLSL)")
+    for shader in beam_files:
+        text = strip_comments(shader.read_text(encoding="utf-8"))
+        if SAMPLER0_ANY_RE.search(text):
+            errors.append(f"{shader.name}: references Sampler0, but the beam RenderSetup binds no "
+                          "texture (BEAM_SNIPPET has no SAMPLER0 bind group)")
+        if LAYOUT_BINDING_RE.search(text):
+            errors.append(f"{shader.name}: 'layout(binding' qualifier found (fails to compile at "
+                          "#version 330; beam pipelines bind no sampler at all)")
+
+    # 3. The shipped atlas: a structurally valid PNG with the exact geometry
+    # the shaders' 4x4 tile math assumes, plus a valid-JSON .mcmeta sibling.
+    atlas_geometry = None
+    if not SURFACE_ATLAS_PNG.is_file():
+        errors.append(f"surface atlas is missing: {SURFACE_ATLAS_PNG.relative_to(REPO_ROOT)} "
+                      "(every bubble fx samples it; a missing texture fails at client resource load)")
+    else:
+        parsed = parse_png_ihdr(SURFACE_ATLAS_PNG.read_bytes())
+        if isinstance(parsed, str):
+            errors.append(f"{SURFACE_ATLAS_PNG.relative_to(REPO_ROOT)}: {parsed}")
+        else:
+            width, height, bit_depth, color_type = parsed
+            atlas_geometry = f"{width}x{height}"
+            if (width, height) != SURFACE_ATLAS_SIZE:
+                errors.append(f"{SURFACE_ATLAS_PNG.name}: {width}x{height}, expected "
+                              f"{SURFACE_ATLAS_SIZE[0]}x{SURFACE_ATLAS_SIZE[1]} "
+                              "(the shaders' 4x4 tile UV math assumes this geometry)")
+            if bit_depth != SURFACE_ATLAS_BIT_DEPTH or color_type != SURFACE_ATLAS_COLOR_TYPE:
+                errors.append(f"{SURFACE_ATLAS_PNG.name}: bit depth {bit_depth} / color type {color_type}, "
+                              f"expected {SURFACE_ATLAS_BIT_DEPTH} / {SURFACE_ATLAS_COLOR_TYPE} "
+                              "(truecolor+alpha RGBA; the A channel is the emission mask)")
+    if not SURFACE_ATLAS_MCMETA.is_file():
+        errors.append(f"surface atlas mcmeta is missing: {SURFACE_ATLAS_MCMETA.relative_to(REPO_ROOT)}")
+    else:
+        try:
+            json.loads(SURFACE_ATLAS_MCMETA.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as e:
+            errors.append(f"{SURFACE_ATLAS_MCMETA.name}: invalid JSON ({e})")
+
+    if not errors:
+        print(f"OK    Sampler0 texture-binding contract ({len(fx_files)} fx declare+sample Sampler0, "
+              f"{len(beam_files)} beam shaders Sampler0-free, no layout(binding, "
+              f"atlas {atlas_geometry} RGBA + valid mcmeta, ShieldPipelines binds \"{bound_path}\")")
+    return errors
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="compile/link-validate the mod's GLSL shaders")
     parser.add_argument("--serial", action="store_true",
@@ -635,6 +821,11 @@ def main() -> None:
     invariant_errors = inventory_errors
     invariant_errors += check_generated_invariants(shaders, count, skip_fx)
     invariant_errors += check_screen_invariants(shaders, count, skip_sfx)
+    # The Sampler0/atlas contract runs unconditionally: ShieldPipelines.java
+    # and the shipped atlas are hand-maintained (not generated), so even an
+    # --allow-empty run must verify them. With no fx generated yet the per-fx
+    # loop is simply empty.
+    invariant_errors += check_texture_binding(shaders, beam_names)
     for error in invariant_errors:
         print(f"FAIL  {error}")
 
