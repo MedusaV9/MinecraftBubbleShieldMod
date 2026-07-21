@@ -139,7 +139,26 @@ public final class BehaviorSupport {
 	 *       {@code q = center + 0.7 r * unit(dx, 0, dz)} (unit +x when on the axis)
 	 *       until the tube distance is {@code 0.98 * 0.3 r}. A point at tube
 	 *       distance 0 sits ON the ring circle (inside), so the projection never
-	 *       divides by zero.</li>
+	 *       divides by zero;</li>
+	 *   <li>PYRAMID — clamp {@code dy} into the 0.98-scaled
+	 *       {@code [-0.5 r, +0.9 r]} band, then per-axis clamp {@code (dx, dz)}
+	 *       into the 0.98-scaled pyramid's taper at that height
+	 *       ({@link ShieldGeometry#pyramidTaper} evaluated with {@code 0.98 r});</li>
+	 *   <li>LENS — homogeneous rescale of the whole offset by {@code 0.98 / norm}
+	 *       when the oblate norm {@code sqrt((dx^2 + dz^2) / r^2 + dy^2 / (0.45 r)^2)}
+	 *       exceeds 0.98 (direction-preserving, like DIAMOND);</li>
+	 *   <li>HOURGLASS — clamp {@code dy} into {@code ±0.8 * 0.98 r}, then rescale
+	 *       {@code (dx, dz)} onto {@code 0.98 *} the cone taper at that height
+	 *       ({@link ShieldGeometry#hourglassTaper}; the taper's slope is
+	 *       radius-invariant, so the 0.98 must multiply the taper itself — like the
+	 *       CYLINDER's {@code 0.6 * 0.98 r} — to keep a real margin under the
+	 *       {@code isInside} bound; near the waist this pulls the point onto the
+	 *       axis, the only inside region there);</li>
+	 *   <li>STAR — clamp {@code dy} into {@code ±0.55 * 0.98 r}, then rescale
+	 *       {@code (dx, dz)} onto {@code 0.98 * R(theta)}
+	 *       ({@link ShieldGeometry#starRadius}; theta is invariant under the
+	 *       positive rescale, so the projection is idempotent, and
+	 *       {@code R(theta) >= 0.30 * 0.98 r > 0} keeps the division safe).</li>
 	 * </ul>
 	 *
 	 * <p>Contract (gametested in {@code ShapeGameTests.containPointProperties}):
@@ -230,6 +249,77 @@ public final class BehaviorSupport {
 				double scale = maxTube / tubeDist;
 				return new Vec3(qx + tx * scale, center.y + dy * scale, qz + tz * scale);
 			}
+			case PYRAMID: {
+				double dx = point.x - center.x;
+				double dy = point.y - center.y;
+				double dz = point.z - center.z;
+				// The 0.98-scaled pyramid is exactly the pyramid of radius 0.98r
+				// (all its dimensions are linear in the radius).
+				double rs = radius * MAX_DIST_FRAC;
+				double clampedDy = Math.clamp(dy, -ShieldGeometry.PYRAMID_BASE_FRAC * rs, ShieldGeometry.PYRAMID_APEX_FRAC * rs);
+				double taper = ShieldGeometry.pyramidTaper(rs, clampedDy);
+				double clampedDx = Math.clamp(dx, -taper, taper);
+				double clampedDz = Math.clamp(dz, -taper, taper);
+				if (clampedDx == dx && clampedDy == dy && clampedDz == dz) {
+					return point;
+				}
+
+				return new Vec3(center.x + clampedDx, center.y + clampedDy, center.z + clampedDz);
+			}
+			case LENS: {
+				double dx = point.x - center.x;
+				double dy = point.y - center.y;
+				double dz = point.z - center.z;
+				double b = ShieldGeometry.LENS_HALF_HEIGHT_FRAC * radius;
+				double norm = Math.sqrt((dx * dx + dz * dz) / (radius * radius) + (dy * dy) / (b * b));
+				if (norm <= MAX_DIST_FRAC) {
+					return point;
+				}
+
+				// norm > 0.98 > 0: never a division by zero.
+				double scale = MAX_DIST_FRAC / norm;
+				return new Vec3(center.x + dx * scale, center.y + dy * scale, center.z + dz * scale);
+			}
+			case HOURGLASS: {
+				double dx = point.x - center.x;
+				double dy = point.y - center.y;
+				double dz = point.z - center.z;
+				double maxHalfHeight = ShieldGeometry.HOURGLASS_HALF_HEIGHT_FRAC * radius * MAX_DIST_FRAC;
+				double clampedDy = Math.clamp(dy, -maxHalfHeight, maxHalfHeight);
+				// The taper's slope is radius-invariant (hourglassTaper(0.98r, dy)
+				// == hourglassTaper(r, dy)), so the 0.98 must multiply the taper
+				// itself — like CYLINDER's 0.6 * 0.98r — to keep a real margin
+				// under the isInside bound.
+				double maxRho = ShieldGeometry.hourglassTaper(radius, clampedDy) * MAX_DIST_FRAC;
+				double rho = Math.sqrt(dx * dx + dz * dz);
+				if (clampedDy == dy && rho <= maxRho) {
+					return point;
+				}
+
+				// rho > maxRho >= 0 implies rho > 0, so the horizontal rescale is
+				// safe; near the waist (maxRho ~ 0) it pulls the point onto the axis.
+				double scale = rho > maxRho ? maxRho / rho : 1.0;
+				return new Vec3(center.x + dx * scale, center.y + clampedDy, center.z + dz * scale);
+			}
+			case STAR: {
+				double dx = point.x - center.x;
+				double dy = point.y - center.y;
+				double dz = point.z - center.z;
+				double rs = radius * MAX_DIST_FRAC;
+				double maxHalfHeight = ShieldGeometry.STAR_HALF_HEIGHT_FRAC * rs;
+				double clampedDy = Math.clamp(dy, -maxHalfHeight, maxHalfHeight);
+				// Theta (and so the lobe bound) is invariant under the positive
+				// horizontal rescale, which makes the projection idempotent.
+				double maxRho = ShieldGeometry.starRadius(rs, dx, dz);
+				double rho = Math.sqrt(dx * dx + dz * dz);
+				if (clampedDy == dy && rho <= maxRho) {
+					return point;
+				}
+
+				// maxRho >= 0.30 * 0.98r > 0, so rho > maxRho implies rho > 0.
+				double scale = rho > maxRho ? maxRho / rho : 1.0;
+				return new Vec3(center.x + dx * scale, center.y + clampedDy, center.z + dz * scale);
+			}
 		}
 
 		return containPoint(center, radius, point);
@@ -247,7 +337,14 @@ public final class BehaviorSupport {
 	 * exact worst-corner math for SPHERE/DOME/CYLINDER/CUBE/DIAMOND, and the
 	 * (conservative) circumscribed-ball Lipschitz bound for the non-convex RING
 	 * (torus tube distance is 1-Lipschitz, so {@code tubeDist(origin) + |h|} is a
-	 * safe upper bound for every point of the box).
+	 * safe upper bound for every point of the box). PYRAMID uses exact worst-corner
+	 * math with the taper evaluated at the box TOP (the tightest slice, since the
+	 * taper shrinks toward the apex); LENS uses the oblate-norm Lipschitz bound
+	 * {@code norm(origin) + |h| / (0.45 r) <= 0.98} (the norm's steepest axis is Y
+	 * with slope {@code 1 / (0.45 r)}); HOURGLASS conservatively requires the box
+	 * to sit inside ONE cone, bounded by the taper at the box's smallest
+	 * {@code |dy|} (the pinch-nearest slice); STAR conservatively uses the
+	 * inscribed cylinder of the minimum lobe radius {@code 0.30 * 0.98 r}.
 	 */
 	public static boolean spreadFits(ShieldShape shape, Vec3 center, double radius, Vec3 origin, double hx, double hy, double hz) {
 		double ax = Math.abs(origin.x - center.x);
@@ -288,6 +385,51 @@ public final class BehaviorSupport {
 				double tubeDist = Math.sqrt(ringDist * ringDist + dy * dy);
 				return tubeDist + Math.sqrt(hx * hx + hy * hy + hz * hz)
 						<= ShieldGeometry.RING_MINOR_FRAC * radius * MAX_DIST_FRAC;
+			}
+			case PYRAMID: {
+				// Exact worst-corner: the signed dy band, then the taper at the box
+				// TOP — the tightest cross-section, since the taper shrinks upward.
+				double dy = origin.y - center.y;
+				if (dy - hy < -ShieldGeometry.PYRAMID_BASE_FRAC * maxDist
+						|| dy + hy > ShieldGeometry.PYRAMID_APEX_FRAC * maxDist) {
+					return false;
+				}
+
+				double taper = ShieldGeometry.pyramidTaper(maxDist, dy + hy);
+				return ax + hx <= taper && az + hz <= taper;
+			}
+			case LENS: {
+				// The oblate norm is Lipschitz with constant 1 / (0.45 r) (its
+				// steepest axis is Y), so norm(origin) + |h| / (0.45 r) bounds the
+				// norm of every point of the box.
+				double dx = origin.x - center.x;
+				double dy = origin.y - center.y;
+				double dz = origin.z - center.z;
+				double b = ShieldGeometry.LENS_HALF_HEIGHT_FRAC * radius;
+				double norm = Math.sqrt((dx * dx + dz * dz) / (radius * radius) + (dy * dy) / (b * b));
+				return norm + Math.sqrt(hx * hx + hy * hy + hz * hz) / b <= MAX_DIST_FRAC;
+			}
+			case HOURGLASS: {
+				// Conservative inner bound: the whole box must sit inside ONE cone,
+				// so the taper at its smallest |dy| (the pinch-nearest slice) must
+				// cover the box's full horizontal reach. A box straddling the waist
+				// gets a zero taper and only fits when it has no horizontal extent.
+				double cx = ax + hx;
+				double cz = az + hz;
+				double minAbsDy = Math.max(0.0, ay - hy);
+				// The taper slope is radius-invariant, so the 0.98 margin must
+				// multiply the taper itself (mirrors the containPoint case).
+				return ay + hy <= ShieldGeometry.HOURGLASS_HALF_HEIGHT_FRAC * maxDist
+						&& Math.sqrt(cx * cx + cz * cz) <= ShieldGeometry.hourglassTaper(radius, minAbsDy) * MAX_DIST_FRAC;
+			}
+			case STAR: {
+				// Conservative inner-radius bound: the star prism always contains
+				// the inscribed cylinder of the minimum lobe radius 0.30 * 0.98r.
+				double cx = ax + hx;
+				double cz = az + hz;
+				double innerRho = (ShieldGeometry.STAR_RADIUS_MID_FRAC - ShieldGeometry.STAR_RADIUS_WAVE_FRAC) * maxDist;
+				return ay + hy <= ShieldGeometry.STAR_HALF_HEIGHT_FRAC * maxDist
+						&& Math.sqrt(cx * cx + cz * cz) <= innerRho;
 			}
 		}
 
@@ -426,7 +568,12 @@ public final class BehaviorSupport {
 	 * and its {@link #FLY_TOWARD_DIP} undershoot inside) for every shape at the
 	 * minimum shield radius 4: the vertical mid-dip point over the center — or,
 	 * for the holey RING, over the nearest ring-circle point so the emission keeps
-	 * its direction.
+	 * its direction. PYRAMID/LENS/HOURGLASS/STAR ride the default vertical
+	 * mid-dip anchor: the whole {@code center ± (0, 0.6, 0)} segment lies on the
+	 * axis, which is inside all four 0.98-scaled volumes at radius 4 (PYRAMID band
+	 * [-1.96, 3.528]; LENS norm 0.333; the HOURGLASS axis is inside both cones for
+	 * any in-band |dy| — including through the pinched waist; STAR band ±2.156) —
+	 * gametested in {@code ShapeGameTests.containPointProperties}.
 	 */
 	private static Vec3 flyTowardAnchor(ShieldShape shape, Vec3 center, double radius, Vec3 near) {
 		if (shape == ShieldShape.RING) {

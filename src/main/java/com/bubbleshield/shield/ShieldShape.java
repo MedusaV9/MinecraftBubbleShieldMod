@@ -5,7 +5,10 @@ package com.bubbleshield.shield;
  * {@link #DOME} is the upper hemisphere only (open below the projector's center plane);
  * {@link #CYLINDER} is an upright column; {@link #CUBE} an axis-aligned box;
  * {@link #DIAMOND} an octahedron (L1 ball); {@link #RING} a torus with a deliberately
- * passable central hole. Exact containment math (all shapes are subsets of the closed
+ * passable central hole; {@link #PYRAMID} an upright square pyramid; {@link #LENS} an
+ * oblate spheroid (flattened sphere); {@link #HOURGLASS} two cones tip-to-tip at the
+ * center (the pinched waist is a deliberately passable region); {@link #STAR} a
+ * six-lobed star prism. Exact containment math (all shapes are subsets of the closed
  * ball of the shield radius) lives in {@link ShieldGeometry}.
  *
  * <p>Ordinals are persisted (NBT) and synced (payload/menu data), so values are
@@ -18,7 +21,11 @@ public enum ShieldShape {
 	CYLINDER,
 	CUBE,
 	DIAMOND,
-	RING;
+	RING,
+	PYRAMID,
+	LENS,
+	HOURGLASS,
+	STAR;
 
 	private static final ShieldShape[] VALUES = values();
 
