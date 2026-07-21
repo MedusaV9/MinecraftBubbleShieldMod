@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Dev tool: hard validation gate for every mod GLSL shader + post-effect JSON.
 
-The VM is headless (no GPU), so shaders can never be run; this is the closest
-practical check. One invalid or missing surface shader crashes the whole client
-at resource load, so this gate is deliberately fail-CLOSED: the expected file
+The VM has no GPU driver; the only way to run shaders is the slow llvmpipe
+software-GL `runClientGameTest` screenshot harness (see AGENTS.md), so this is
+the fast, exhaustive check. One invalid or missing surface shader crashes the
+whole client at resource load, so this gate is deliberately fail-CLOSED: the expected file
 sets are derived from EffectRegistry.java's COUNT (not from whatever happens to
 be on disk), and any gap, extra, misplaced file or half-generated state is a
 hard failure.
@@ -82,9 +83,10 @@ On top of that it enforces the generated-shader invariants:
   4-number value -- std140 wiring is positional, so a JSON/GLSL mismatch would
   silently scramble the uniforms at runtime.
 
-The full scan at COUNT=420 is 421 files under bubble/ (420 fx_*.fsh +
-surface.vsh) + 4 under beam/ + 420 under screenfx/ (sfx_*.fsh) = 845
-compiles, plus 844 vsh<->fsh link checks.
+The full scan at COUNT=840 is 841 files under bubble/ (840 fx_*.fsh +
+surface.vsh) + 8 under beam/ + 840 under screenfx/ (sfx_*.fsh) = 1689
+compiles, plus 1688 vsh<->fsh link checks (the tallies scale with COUNT and
+the rendered-BeamStyle set).
 
 Exits nonzero when any shader fails to compile or link, any inventory entry is
 missing/extra/misplaced, or any invariant is violated. Usage:

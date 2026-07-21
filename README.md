@@ -1,7 +1,8 @@
 # Bubble Shield
 
 A [Fabric](https://fabricmc.net/) mod for Minecraft 26.2 that adds deployable **bubble shields**: translucent
-force-field spheres (or domes) projected from a furnace-like block that keep hostile players and their
+force-field bubbles in ten shapes (spheres, domes, cylinders, cubes, diamonds, rings, pyramids, lenses,
+hourglasses and stars) projected from a furnace-like block that keep hostile players and their
 projectiles out while letting your friends walk right through.
 
 ## What is a Bubble Shield?
@@ -13,8 +14,13 @@ raise a shield around it:
   buckets (1000 s). An active shield drains one fuel-second per second and collapses when fuel runs out
   (Eco mode and the Flux Capacitor slow this drain — see the exact rule below).
 - **Size**: the shield diameter is configurable in the projector GUI from 8 up to a maximum of **200 blocks**.
-- **Shape**: a GUI toggle switches between the classic full **sphere** and a **dome** (upper hemisphere only —
-  open below the projector's center plane, so anything at or below that height passes underneath freely).
+- **Shape**: a GUI cycle button picks one of **ten shapes** — the classic full **sphere**, a **dome** (upper
+  hemisphere only — open below the projector's center plane, so anything at or below that height passes
+  underneath freely), **cylinder**, **cube**, **diamond**, **ring** (open through the hole), **pyramid**,
+  **lens**, **hourglass** (open beside the pinched waist) and **star**.
+- **Beam style**: a GUI selector picks the central energy column rising from the projector — **None**,
+  **Auto** (each effect resolves to its own coherent preset) or one of the **8 rendered styles**: storm,
+  pulse, helix, prism, void, ember, runic and frost (each with its own hand-written beam shader).
 - **Whitelist**: the owner and any whitelisted players (added by name in the GUI, matched case-insensitively
   by name or UUID) pass through freely; everyone else is pushed back at the boundary. The shield surface
   dissolves in a bubble around approaching whitelisted players.
@@ -94,45 +100,48 @@ Projectiles from non-whitelisted shooters are intercepted at the surface, by typ
 - **Thrown items** (snowballs, potions, **ender pearls** — no teleporting through!) and shulker bullets:
   fizzle out, 2 damage.
 
-## The 420 effects
+## The 840 effects
 
-Every shield has one of **420 selectable effects** (ids 0–419, organized as 84 color families x 5 effects),
+Every shield has one of **840 selectable effects** (ids 0–839, organized as 168 color families x 5 effects),
 chosen in the projector GUI; hovering an effect button shows a tooltip describing its axes. Every effect is
 an individually authored row in a flat catalogue (`EffectRegistry`) that combines **seven axes**:
 
 1. **Palette**: a unique primary/secondary color pair.
 2. **Surface layer** (client): **its own dedicated procedural surface shader**
-   (`assets/bubbleshield/shaders/bubble/fx_000.fsh` … `fx_419.fsh`, one render pipeline per effect).
+   (`assets/bubbleshield/shaders/bubble/fx_000.fsh` … `fx_839.fsh`, one render pipeline per effect).
    Each shader is generated from a library of ShaderToy-/iq-derived techniques (domain-warped FBM,
    exact-border voronoi, voronoise, caustics, curl-flow advection, thin-film iridescence, truchet/hex/tri
    lattices, kaleidoscopic folds, cosine palettes, silhouette-rim estimation, Kaliset fractal folds,
    volumetric transmittance marches, liquid-chrome environment reflections, refractive crystal panes …)
    composed into at least three distinct depth layers (parallax deep field + signature mid structure +
-   rim/sparkle highlights), grouped into **40** technique families (the `SurfaceTemplate` metadata
+   rim/sparkle highlights), grouped into **60** technique families (the `SurfaceTemplate` metadata
    shown in tooltips).
-3. **Inside layer** (server): one of **60 behaviors** x 7 variants — particle domes/spirals/orbits, regen /
+3. **Inside layer** (server): one of **120 behaviors** x 7 variants — particle domes/spirals/orbits, regen /
    speed / haste / resistance / night-vision auras, slowness for hostile mobs, ember rain, snowfall, fireflies,
    mist, heartbeat and music pulses, rising souls, falling petals, bubble veils, static fields, meteor bursts,
    spore drift, enchantment streams, fire wards, intruder-freezing frost, purge pulses, leap/tide auras,
    ember guards, lucky charms, echo pulses, prismatic rays, void tendrils, honey drip, waxen glow, storm
    cages, gravity wells, aurora ribbons, sand devils, glass shards, moth swarms, rune orbits, dripping
    stalactites, geyser vents, static orbs, shadow veils, prism beams, pollen haze, tide pools, ember
-   spirals, comet tails, plus the ghost suite: vex wisps, soul processions, phantom flocks, sonic
-   ghosts, ender watchers, wandering spirits, graveyard mist, spectral shoals, wraith orbs and seance
-   circles.
+   spirals, comet tails, the ghost suite (vex wisps, soul processions, phantom flocks, sonic
+   ghosts, ender watchers, wandering spirits, graveyard mist, spectral shoals, wraith orbs, seance
+   circles), plus the 60 v5 additions (abyssal jellies, alchemy circles, banshee wails, clockwork
+   gears, comet orreries, eclipse discs, firework regattas, lantern festivals, mirror mazes,
+   skeleton armies, valkyrie patrols, zodiac beams and many more).
 4. **Guard style**: what happens to intruders expelled at the boundary — nothing, gust pushback, slowness,
    blindness, darkness, a glowing mark, or stinging magic damage.
 5. **Context profile**: how the effect reacts to the world — steady, blooming at night, charged by storms,
    scaling with the crowd inside, frenzying at low shield health, or hue-shifting with health.
 6. **Ambient sound**: a vanilla sound event with per-effect pitch and period, played from the projector.
 7. **Screen layer** (client): **its own dedicated full-screen post-processing shader** applied while you
-   stand inside the bubble (`assets/bubbleshield/shaders/screenfx/sfx_000.fsh` … `sfx_419.fsh`, wired
-   through `assets/bubbleshield/post_effect/effect_00.json` … `effect_419.json`), drawn from **20** screen
+   stand inside the bubble (`assets/bubbleshield/shaders/screenfx/sfx_000.fsh` … `sfx_839.fsh`, wired
+   through `assets/bubbleshield/post_effect/effect_00.json` … `effect_839.json`), drawn from **28** screen
    technique families — tint, wobble, vignette, chroma, pixelate, desat, bloomglow, ripple, scanlines,
    edgeglow, frostlens, heathaze, posterize, radialblur, glitch, duotone, kaleido refraction, hue drift,
-   dream blur and moiré interference.
+   dream blur, moiré interference, spectral, aberration, underwater, thermal, sketch, starburst, vhs
+   and gloom.
 
-**Uniqueness guarantee** (machine-enforced by `EffectRegistry.validate()` and the gametests): all 420 palette
+**Uniqueness guarantee** (machine-enforced by `EffectRegistry.validate()` and the gametests): all 840 palette
 pairs are pairwise distinct, every behavior is used exactly 7 times covering variants {0 … 6}, no color
 family repeats a surface family, screen family or behavior, no (surface family, screen family) pair appears
 more than 3 times across the whole catalogue, every (sound, pitch, period) triple is unique, and no two
@@ -141,7 +150,7 @@ generated shaders are byte-identical (each has its own structural technique stac
 
 ### Generated shaders: workflow
 
-All 840 per-effect shaders (420 `fx_*.fsh` surface + 420 `sfx_*.fsh` screen) and the 420 post-effect JSONs
+All 1680 per-effect shaders (840 `fx_*.fsh` surface + 840 `sfx_*.fsh` screen) and the 840 post-effect JSONs
 are emitted by deterministic, byte-stable generators — **never hand-edit generated `fx_*`/`sfx_*` files or
 `effect_*.json`**; edits there are overwritten by the next regeneration. The workflow is:
 
@@ -195,9 +204,9 @@ need one; a headless VM will not render them):
 Then create a world, place a Bubble Shield Projector, right-click it, add fuel, pick a diameter, shape and
 effect, and press *Activate*.
 
-Note for worlds from older alphas with smaller catalogues: effect ids are clamped into the current 0–349
-range and missing NBT fields default sensibly (shape = sphere, no core, no custom name/color), so old saves
-load fine, though a previously selected effect may map to a different look.
+Note for worlds from older alphas with smaller catalogues: effect ids are clamped into the current 0–839
+range and missing NBT fields default sensibly (shape = sphere, beam style = none, no core, no custom
+name/color), so old saves load fine, though a previously selected effect may map to a different look.
 
 ## License
 

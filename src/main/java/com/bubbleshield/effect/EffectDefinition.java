@@ -9,8 +9,11 @@ import com.bubbleshield.shield.BeamStyle;
  *
  * <p>Server-safe pure data: colors are packed ARGB ints, {@code surface} names the
  * technique family (tooltips/invariants; the actual per-effect fragment shader is
- * {@link #surfaceShaderId()}), {@code paramA}/{@code paramB} parameterize the
- * (client-side) surface renderer,
+ * {@link #surfaceShaderId()}), {@code paramA}/{@code paramB} are frozen per-id tuning
+ * scalars (paramA = 0.3 + 0.012 * id, unbounded above — ~10.37 at id 839; paramB
+ * cycles in ~0.4–1.39) consumed only by the frozen-row SHA-256 gametest hash and by
+ * tools/gen_post_effects.py, which bakes them into the static post_effect JSON
+ * uniforms — they are NOT read by the client-side surface renderer,
  * {@code insideBehaviorId}/{@code behaviorVariant}/{@code behaviorStrength} select and
  * tune the server-side {@link InsideEffectBehavior}, {@code guard} and {@code context}
  * pick the boundary-retaliation style and reactivity profile, the {@code ambient*}

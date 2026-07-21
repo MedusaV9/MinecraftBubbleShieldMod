@@ -167,7 +167,7 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 		return this.data.get(DATA_CAPACITOR) != 0;
 	}
 
-	/** @return the synced {@link com.bubbleshield.shield.BeamStyle} ordinal (16-bit safe: max ordinal 5). */
+	/** @return the synced {@link com.bubbleshield.shield.BeamStyle} ordinal (16-bit safe: max ordinal 9). */
 	public int beamStyle() {
 		return this.data.get(DATA_BEAM);
 	}

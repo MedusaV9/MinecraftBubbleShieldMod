@@ -48,7 +48,7 @@ public final class BeamMesh {
 	public static final float HALF_WIDTH = 1.4F;
 	/**
 	 * The height fraction {@code v} at which the beam crosses the bubble membrane
-	 * ({@code y = +radius}). Hardcoded identically in the four beam_*.fsh shaders
+	 * ({@code y = +radius}). Hardcoded identically in all eight beam_*.fsh shaders
 	 * (frozen contract: no custom uniforms), so keep the two in sync.
 	 */
 	public static final float APEX_V = 0.75F;
