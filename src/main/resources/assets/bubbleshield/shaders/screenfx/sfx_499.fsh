@@ -65,15 +65,24 @@ void main() {
 
     // Drifting hotspot field biases the reading before the ramp.
     float blob = vnoise(texCoord * 5.4548 + vec2(anim * 0.0606, anim * 0.0202));
-    // Inverted sensor: shadows read hot, highlights read cold.
+    // Inverted sensor: shadows read hot, highlights read cold. Dark
+    // scenes therefore read ~fully hot, so the blend cap is tighter
+    // (anti-whiteout: a black scene stays under ~0.5 output luma).
+    float thermalMix = clamp(strength, 0.0, 0.55);
     float heat = clamp(1.0 - baseLuma + (blob - 0.5) * 0.2487 * min(strength, 1.0), 0.0, 1.0);
     // False-color ramp: cold Secondary depths through the palette to a
-    // white-hot peak.
+    // capped hot peak (never pure white -- legibility ceiling).
     vec3 coldTone = Secondary.rgb * 0.2164;
     vec3 ramped = mix(coldTone, Secondary.rgb, smoothstep(0.0, 0.4935, heat));
     ramped = mix(ramped, Primary.rgb, smoothstep(0.4254, 0.7248, heat));
-    ramped = mix(ramped, vec3(1.0), smoothstep(0.8572, 1.0, heat));
-    vec3 outColor = mix(base, ramped, clamp(strength, 0.0, 1.0));
+    ramped = mix(ramped, vec3(0.8698), smoothstep(0.8572, 1.0, heat));
+    // Luma band: keep a fixed share of the real scene, ceiling the read
+    // hue-preservingly at 0.75 luma and floor it at 0.05 per channel so
+    // no palette/variant can white-out or black-out the screen.
+    vec3 toned = mix(base, ramped, thermalMix);
+    float tonedLuma = luma(toned);
+    toned *= min(tonedLuma, 0.75) / max(tonedLuma, 0.001);
+    vec3 outColor = max(toned, vec3(0.05));
 
     // Overlay: a faint breathing glow of the effect color at the rim.
     float oBreath = 0.5 + 0.5 * sin(anim * 0.7138 + ParamsB.x * 6.2831);

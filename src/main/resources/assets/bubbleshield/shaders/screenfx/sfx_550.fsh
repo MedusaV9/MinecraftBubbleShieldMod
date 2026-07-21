@@ -71,9 +71,12 @@ void main() {
         + sampleAt(texCoord + safeOffset(vec2(0.0, texel.y))) * 0.17
         + sampleAt(texCoord + safeOffset(vec2(0.0, -texel.y))) * 0.17;
     vec3 dream = mix(base, blurred * 1.0653, clamp(strength, 0.0, 0.85));
+    // Sparkles: rate-capped twinkle on an independent unit-rate clock
+    // (photosensitivity: the paramA-scaled anim reaches 3-5+ Hz here).
     vec2 cellUv = floor(texCoord * safeInSize / 13.2605);
     float tw = hash21(cellUv);
-    float twinkle = smoothstep(0.8046, 1.0, sin(anim * 1.5812 + tw * 6.2831) * 0.5 + 0.5) * step(0.9716, tw);
+    float twClock = GameTime * 1200.0 + ParamsB.x * 61.8;
+    float twinkle = smoothstep(0.8046, 1.0, sin(twClock * 6.4872 + tw * 6.2831) * 0.5 + 0.5) * step(0.9716, tw);
     vec3 outColor = dream + Primary.rgb * twinkle * 0.3106 * animAmp;
 
     // Overlay: a faint breathing glow of the effect color at the rim.

@@ -28,7 +28,14 @@ GLSL of every referenced sfx file):
 * ParamsA = [Speed, Strength, Scale, Aux] -- family-interpreted knobs, all
   derived from the FROZEN per-id derivation (paramA = 0.3 + 0.012 * id,
   paramB = 0.4 + ((id * 37) % PARAM_CYCLE) / PARAM_CYCLE; PARAM_CYCLE = 75,
-  mirrored from EffectRegistry -- keep in lockstep). Per family:
+  mirrored from EffectRegistry -- keep in lockstep). For the 840-flip ids
+  (>= V5_FLIP_START) the min()-clamped knobs and the SPEED_CLAMP families'
+  Speed are fed knob_param_a() -- the same V1 ramp re-derived from
+  id % PARAM_CYCLE, bounded to [0.3, 1.188] -- instead of the saturated raw
+  paramA (~5.3..10.4 there), restoring bounded per-id variety on axes that
+  would otherwise collapse to one constant while staying strictly below
+  every photosensitivity/aliasing ceiling; pre-flip ids are untouched by
+  construction. Per family:
       Speed     = paramA (animation rate), CLAMPED per family for the
                   flicker-prone techniques (glitch/scanlines/posterize
                   min(paramA, 1.55) -- photosensitivity: unclamped, ids near
@@ -78,6 +85,11 @@ EFFECT_COUNT = 840
 # generated uniforms of ids 0..74, which must stay stable across catalogue
 # expansions. Mirrors EffectRegistry.PARAM_CYCLE -- keep in lockstep.
 PARAM_CYCLE = 75
+
+# First id of the 840-flip rows. The knob-variety derivation below
+# (effective_param_a) applies from here on ONLY, so every pre-flip
+# effect_NN.json stays byte-identical across regeneration.
+V5_FLIP_START = 420
 
 GOLDEN = 0.6180339887
 
@@ -1176,15 +1188,41 @@ def uniform(name: str, type_: str, value) -> dict:
     return {"name": name, "type": type_, "value": value}
 
 
+def knob_param_a(effect_id: int, param_a: float) -> float:
+    """The paramA fed into the min()-clamped knob formulas (never the raw
+    Speed of the smooth families, which stays the frozen ramp).
+
+    For the pre-flip ids (< V5_FLIP_START) this IS param_a, so their JSON
+    stays byte-identical. For the 840-flip ids, param_a = 0.3 + 0.012 * id
+    reaches ~10.4 and every min(a, 1.55/2.0)-clamped knob saturates to one
+    constant (all vhs Speeds 1.55, all starburst/bloomglow Aux 0.7375, all
+    scanlines Scales 520, ...), collapsing per-id variety on those axes.
+    Re-deriving the knob from id % PARAM_CYCLE restores 75 distinct values
+    on the V1 ramp shape, bounded to [0.3, 1.188] -- strictly BELOW every
+    photosensitivity/aliasing ceiling (1.55 / 2.0), so all safety caps keep
+    holding by construction (and the min() clamps stay in place regardless)."""
+    if effect_id < V5_FLIP_START:
+        return param_a
+    return 0.3 + 0.012 * (effect_id % PARAM_CYCLE)
+
+
 def fx_config(effect_id: int, family: str, primary: list[float], secondary: list[float],
               param_a: float, param_b: float) -> dict:
     """Entry order must match the GLSL std140 FxConfig block member order."""
     strength_f, scale_f, aux_f, tint_mix = FAMILY_KNOBS[family]
+    knob_a = knob_param_a(effect_id, param_a)
+    # Speed: the SPEED_CLAMP families' ramp saturates at the clamp for every
+    # 840-flip id, so those take the bounded knob_a derivation (always under
+    # the clamp -- variety without touching the photosensitivity ceiling).
+    # The smooth families keep the frozen unclamped ramp.
+    speed_source = knob_a if family in SPEED_CLAMP else param_a
+    # Strength only ever reads param_b; Scale/Aux only read param_a through
+    # their min() clamps, so feeding knob_a de-saturates exactly those axes.
     params_a = [
-        round(min(param_a, SPEED_CLAMP.get(family, param_a)), 4),
-        round(strength_f(param_a, param_b), 5),
-        round(scale_f(param_a, param_b), 4),
-        round(aux_f(param_a, param_b), 4),
+        round(min(speed_source, SPEED_CLAMP.get(family, speed_source)), 4),
+        round(strength_f(knob_a, param_b), 5),
+        round(scale_f(knob_a, param_b), 4),
+        round(aux_f(knob_a, param_b), 4),
     ]
     params_b = [
         round((effect_id * GOLDEN) % 1.0, 4),

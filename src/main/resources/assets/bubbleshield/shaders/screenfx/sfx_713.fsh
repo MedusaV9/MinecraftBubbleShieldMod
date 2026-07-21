@@ -75,9 +75,14 @@ void main() {
     vec3 streaked = accum / 6.0000;
     vec3 outColor = mix(streaked, streaked * Primary.rgb, smoothstep(0.4, 0.8, centerDist) * ParamsB.z);
 
-    // Overlay: living film grain (frame counter wrapped at 256 so the
-    // hash input stays fp32-friendly across the whole GameTime day).
-    float grainFrame = mod(floor(anim * 8.6297), 256.0);
+    // Overlay: living film grain. Photosensitivity: the refresh ticks on
+    // an INDEPENDENT unit-rate clock (GameTime only, never the
+    // paramA-scaled anim, which would hard-refresh at up to ~100 Hz
+    // here); the baked per-id rate keeps every reroll under 2.5 Hz.
+    // The frame counter wraps at 256 so the hash input stays
+    // fp32-friendly across the whole GameTime day.
+    float grainClock = GameTime * 1200.0 + ParamsB.x * 61.8;
+    float grainFrame = mod(floor(grainClock * 2.4074), 256.0);
     outColor += (hash21(floor(texCoord * safeInSize) + vec2(grainFrame, 0.0)) - 0.5) * 0.0267;
 
     // Richness pass (v3): a bounded soft-contrast curve plus a vibrance

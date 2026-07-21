@@ -71,14 +71,22 @@ void main() {
         + sampleAt(texCoord + safeOffset(vec2(0.0, texel.y))) * 0.17
         + sampleAt(texCoord + safeOffset(vec2(0.0, -texel.y))) * 0.17;
     vec3 dream = mix(base, blurred * 1.0084, clamp(strength, 0.0, 0.85));
+    // Sparkles: rate-capped twinkle on an independent unit-rate clock
+    // (photosensitivity: the paramA-scaled anim reaches 3-5+ Hz here).
     vec2 cellUv = floor(texCoord * safeInSize / 15.4119);
     float tw = hash21(cellUv);
-    float twinkle = smoothstep(0.7540, 1.0, sin(anim * 2.2687 + tw * 6.2831) * 0.5 + 0.5) * step(0.9813, tw);
+    float twClock = GameTime * 1200.0 + ParamsB.x * 61.8;
+    float twinkle = smoothstep(0.7540, 1.0, sin(twClock * 10.6121 + tw * 6.2831) * 0.5 + 0.5) * step(0.9813, tw);
     vec3 outColor = dream + Primary.rgb * twinkle * 0.3426 * animAmp;
 
-    // Overlay: living film grain (frame counter wrapped at 256 so the
-    // hash input stays fp32-friendly across the whole GameTime day).
-    float grainFrame = mod(floor(anim * 6.8751), 256.0);
+    // Overlay: living film grain. Photosensitivity: the refresh ticks on
+    // an INDEPENDENT unit-rate clock (GameTime only, never the
+    // paramA-scaled anim, which would hard-refresh at up to ~100 Hz
+    // here); the baked per-id rate keeps every reroll under 2.5 Hz.
+    // The frame counter wraps at 256 so the hash input stays
+    // fp32-friendly across the whole GameTime day.
+    float grainClock = GameTime * 1200.0 + ParamsB.x * 61.8;
+    float grainFrame = mod(floor(grainClock * 1.9688), 256.0);
     outColor += (hash21(floor(texCoord * safeInSize) + vec2(grainFrame, 0.0)) - 0.5) * 0.0273;
 
     // Richness pass (v3): a bounded soft-contrast curve plus a vibrance

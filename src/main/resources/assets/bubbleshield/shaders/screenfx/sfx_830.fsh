@@ -73,9 +73,12 @@ void main() {
     }
     blurred /= 9.0;
     vec3 dream = mix(base, blurred * 1.0560, clamp(strength, 0.0, 0.85));
+    // Sparkles: rate-capped twinkle on an independent unit-rate clock
+    // (photosensitivity: the paramA-scaled anim reaches 3-5+ Hz here).
     vec2 cellUv = floor(texCoord * safeInSize / 14.6889);
     float tw = hash21(cellUv);
-    float twinkle = smoothstep(0.7918, 1.0, sin(anim * 1.6599 + tw * 6.2831) * 0.5 + 0.5) * step(0.9745, tw);
+    float twClock = GameTime * 1200.0 + ParamsB.x * 61.8;
+    float twinkle = smoothstep(0.7918, 1.0, sin(twClock * 6.9597 + tw * 6.2831) * 0.5 + 0.5) * step(0.9745, tw);
     vec3 outColor = dream + Primary.rgb * twinkle * 0.4379 * animAmp;
 
     // Richness pass (v3): a bounded soft-contrast curve plus a vibrance

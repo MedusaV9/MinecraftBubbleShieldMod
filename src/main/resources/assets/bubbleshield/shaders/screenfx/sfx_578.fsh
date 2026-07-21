@@ -72,15 +72,22 @@ void main() {
         + sampleAt(texCoord + safeOffset(vec2(0.0, texel.y))) * 0.17
         + sampleAt(texCoord + safeOffset(vec2(0.0, -texel.y))) * 0.17;
     vec3 dream = mix(base, blurred * 1.0474, clamp(strength, 0.0, 0.85));
+    // Sparkles: rate-capped twinkle on an independent unit-rate clock
+    // (photosensitivity: the paramA-scaled anim reaches 3-5+ Hz here).
     vec2 cellUv = floor(texCoord * safeInSize / 11.7639);
     float tw = hash21(cellUv);
-    float twinkle = smoothstep(0.8244, 1.0, sin(anim * 2.8504 + tw * 6.2831) * 0.5 + 0.5) * step(0.9664, tw);
+    float twClock = GameTime * 1200.0 + ParamsB.x * 61.8;
+    float twinkle = smoothstep(0.8244, 1.0, sin(twClock * 14.1026 + tw * 6.2831) * 0.5 + 0.5) * step(0.9664, tw);
     vec3 outColor = dream + Primary.rgb * twinkle * 0.4472 * animAmp;
 
-    // Overlay: sparse twinkling motes.
+    // Overlay: sparse twinkling motes. Photosensitivity: the twinkle
+    // sine runs on an INDEPENDENT unit-rate clock (GameTime only, never
+    // the paramA-scaled anim, which reaches ~3-5 Hz at these ids); the
+    // baked per-id rate keeps every flash cycle under 2.4 Hz.
     vec2 oCell = floor(texCoord * safeInSize / 17.7081);
     float oTw = hash21(oCell + vec2(37.0, 91.0));
-    float oTwinkle = smoothstep(0.8096, 1.0, sin(anim * 1.4258 + oTw * 6.2831) * 0.5 + 0.5) * step(0.9771, oTw);
+    float oClock = GameTime * 1200.0 + ParamsB.x * 61.8;
+    float oTwinkle = smoothstep(0.8096, 1.0, sin(oClock * 7.6932 + oTw * 6.2831) * 0.5 + 0.5) * step(0.9771, oTw);
     outColor += Secondary.rgb * oTwinkle * 0.3957;
 
     // Richness pass (v3): a bounded soft-contrast curve plus a vibrance

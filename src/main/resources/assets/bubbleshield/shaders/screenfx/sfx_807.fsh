@@ -66,20 +66,31 @@ void main() {
     // Drifting hotspot field biases the reading before the ramp.
     float blob = vnoise(texCoord * 4.7903 + vec2(anim * 0.0609, anim * 0.0238));
     // Quantized isotherm bands, like a cheap thermography readout.
+    float thermalMix = clamp(strength, 0.0, 0.85);
     float heat = clamp(baseLuma + (blob - 0.5) * 0.1971 * min(strength, 1.0), 0.0, 1.0);
     heat = floor(heat * 7.0000 + 0.5) / 7.0000;
     // False-color ramp: cold Secondary depths through the palette to a
-    // white-hot peak.
+    // capped hot peak (never pure white -- legibility ceiling).
     vec3 coldTone = Secondary.rgb * 0.1594;
     vec3 ramped = mix(coldTone, Secondary.rgb, smoothstep(0.0, 0.4591, heat));
     ramped = mix(ramped, Primary.rgb, smoothstep(0.3868, 0.8133, heat));
-    ramped = mix(ramped, vec3(1.0), smoothstep(0.8840, 1.0, heat));
-    vec3 outColor = mix(base, ramped, clamp(strength, 0.0, 1.0));
+    ramped = mix(ramped, vec3(0.8590), smoothstep(0.8840, 1.0, heat));
+    // Luma band: keep a fixed share of the real scene, ceiling the read
+    // hue-preservingly at 0.75 luma and floor it at 0.05 per channel so
+    // no palette/variant can white-out or black-out the screen.
+    vec3 toned = mix(base, ramped, thermalMix);
+    float tonedLuma = luma(toned);
+    toned *= min(tonedLuma, 0.75) / max(tonedLuma, 0.001);
+    vec3 outColor = max(toned, vec3(0.05));
 
-    // Overlay: sparse twinkling motes.
+    // Overlay: sparse twinkling motes. Photosensitivity: the twinkle
+    // sine runs on an INDEPENDENT unit-rate clock (GameTime only, never
+    // the paramA-scaled anim, which reaches ~3-5 Hz at these ids); the
+    // baked per-id rate keeps every flash cycle under 2.4 Hz.
     vec2 oCell = floor(texCoord * safeInSize / 16.5388);
     float oTw = hash21(oCell + vec2(37.0, 91.0));
-    float oTwinkle = smoothstep(0.8249, 1.0, sin(anim * 1.3241 + oTw * 6.2831) * 0.5 + 0.5) * step(0.9859, oTw);
+    float oClock = GameTime * 1200.0 + ParamsB.x * 61.8;
+    float oTwinkle = smoothstep(0.8249, 1.0, sin(oClock * 6.9310 + oTw * 6.2831) * 0.5 + 0.5) * step(0.9859, oTw);
     outColor += Secondary.rgb * oTwinkle * 0.2838;
 
     // Richness pass (v3): a bounded soft-contrast curve plus a vibrance

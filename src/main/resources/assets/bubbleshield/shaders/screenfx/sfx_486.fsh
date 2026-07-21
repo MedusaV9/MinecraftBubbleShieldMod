@@ -94,9 +94,14 @@ void main() {
     float glint = smoothstep(0.7890, 1.0, crystals) * (0.5 + 0.5 * sin(anim * 1.4759 + crystals * 37.0));
     vec3 outColor = mix(scene, frosted, frost) + iceColor * glint * frost * 0.4;
 
-    // Overlay: living film grain (frame counter wrapped at 256 so the
-    // hash input stays fp32-friendly across the whole GameTime day).
-    float grainFrame = mod(floor(anim * 5.0655), 256.0);
+    // Overlay: living film grain. Photosensitivity: the refresh ticks on
+    // an INDEPENDENT unit-rate clock (GameTime only, never the
+    // paramA-scaled anim, which would hard-refresh at up to ~100 Hz
+    // here); the baked per-id rate keeps every reroll under 2.5 Hz.
+    // The frame counter wraps at 256 so the hash input stays
+    // fp32-friendly across the whole GameTime day.
+    float grainClock = GameTime * 1200.0 + ParamsB.x * 61.8;
+    float grainFrame = mod(floor(grainClock * 1.5164), 256.0);
     outColor += (hash21(floor(texCoord * safeInSize) + vec2(grainFrame, 0.0)) - 0.5) * 0.0247;
 
     // Richness pass (v3): a bounded soft-contrast curve plus a vibrance

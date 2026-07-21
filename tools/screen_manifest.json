@@ -3224,7 +3224,7 @@
   "420": {
     "family": "tint",
     "file": "sfx_420.fsh",
-    "lines": 81,
+    "lines": 85,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "d11cf7330a6d6ea6",
@@ -3242,7 +3242,7 @@
   "422": {
     "family": "vignette",
     "file": "sfx_422.fsh",
-    "lines": 89,
+    "lines": 94,
     "motion": "drift",
     "overlay": "grain",
     "seed": "0fe1e3155e3007ae",
@@ -3260,7 +3260,7 @@
   "424": {
     "family": "pixelate",
     "file": "sfx_424.fsh",
-    "lines": 90,
+    "lines": 95,
     "motion": "steady",
     "overlay": "grain",
     "seed": "e8b0af86545bbb2f",
@@ -3305,7 +3305,7 @@
   "429": {
     "family": "edgeglow",
     "file": "sfx_429.fsh",
-    "lines": 101,
+    "lines": 106,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "76cce8159f606ca0",
@@ -3323,7 +3323,7 @@
   "430": {
     "family": "frostlens",
     "file": "sfx_430.fsh",
-    "lines": 113,
+    "lines": 118,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "14bef70387177d1c",
@@ -3368,7 +3368,7 @@
   "435": {
     "family": "duotone",
     "file": "sfx_435.fsh",
-    "lines": 78,
+    "lines": 82,
     "motion": "pulse",
     "overlay": "sparkle",
     "seed": "39b14a6394128b76",
@@ -3395,7 +3395,7 @@
   "438": {
     "family": "dreamblur",
     "file": "sfx_438.fsh",
-    "lines": 96,
+    "lines": 104,
     "motion": "steady",
     "overlay": "grain",
     "seed": "36e3554959fef994",
@@ -3404,7 +3404,7 @@
   "439": {
     "family": "moire",
     "file": "sfx_439.fsh",
-    "lines": 81,
+    "lines": 86,
     "motion": "surge",
     "overlay": "grain",
     "seed": "b13284c1b86f40a1",
@@ -3449,7 +3449,7 @@
   "443": {
     "family": "thermal",
     "file": "sfx_443.fsh",
-    "lines": 96,
+    "lines": 107,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "c58d4e650b133a55",
@@ -3467,7 +3467,7 @@
   "445": {
     "family": "starburst",
     "file": "sfx_445.fsh",
-    "lines": 99,
+    "lines": 104,
     "motion": "steady",
     "overlay": "grain",
     "seed": "6a581793d6121785",
@@ -3476,7 +3476,7 @@
   "446": {
     "family": "vhs",
     "file": "sfx_446.fsh",
-    "lines": 110,
+    "lines": 114,
     "motion": "pulse",
     "overlay": "sparkle",
     "seed": "508917211b2fc3d3",
@@ -3494,7 +3494,7 @@
   "448": {
     "family": "tint",
     "file": "sfx_448.fsh",
-    "lines": 79,
+    "lines": 84,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "df9ee61fc83e8607",
@@ -3530,7 +3530,7 @@
   "451": {
     "family": "chroma",
     "file": "sfx_451.fsh",
-    "lines": 91,
+    "lines": 96,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "98f8f90e639e3630",
@@ -3548,7 +3548,7 @@
   "453": {
     "family": "desat",
     "file": "sfx_453.fsh",
-    "lines": 79,
+    "lines": 83,
     "motion": "surge",
     "overlay": "sparkle",
     "seed": "aeaedf2c11dc9f21",
@@ -3557,7 +3557,7 @@
   "454": {
     "family": "bloomglow",
     "file": "sfx_454.fsh",
-    "lines": 95,
+    "lines": 100,
     "motion": "surge",
     "overlay": "grain",
     "seed": "930d803ae1bd4817",
@@ -3566,7 +3566,7 @@
   "455": {
     "family": "ripple",
     "file": "sfx_455.fsh",
-    "lines": 111,
+    "lines": 116,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "0410d7f70d81787a",
@@ -3575,7 +3575,7 @@
   "456": {
     "family": "scanlines",
     "file": "sfx_456.fsh",
-    "lines": 105,
+    "lines": 109,
     "motion": "pulse",
     "overlay": "sparkle",
     "seed": "7960b5ca4e18262d",
@@ -3584,7 +3584,7 @@
   "457": {
     "family": "edgeglow",
     "file": "sfx_457.fsh",
-    "lines": 102,
+    "lines": 107,
     "motion": "surge",
     "overlay": "grain",
     "seed": "a3b8905f34b67c01",
@@ -3593,7 +3593,7 @@
   "458": {
     "family": "frostlens",
     "file": "sfx_458.fsh",
-    "lines": 114,
+    "lines": 119,
     "motion": "surge",
     "overlay": "grain",
     "seed": "0b2d55de2cd32c15",
@@ -3602,7 +3602,7 @@
   "459": {
     "family": "heathaze",
     "file": "sfx_459.fsh",
-    "lines": 103,
+    "lines": 107,
     "motion": "surge",
     "overlay": "sparkle",
     "seed": "8cdc027fe0eb91c0",
@@ -3620,7 +3620,7 @@
   "460": {
     "family": "posterize",
     "file": "sfx_460.fsh",
-    "lines": 79,
+    "lines": 83,
     "motion": "pulse",
     "overlay": "sparkle",
     "seed": "f0e16d4aae1b7a42",
@@ -3629,7 +3629,7 @@
   "461": {
     "family": "radialblur",
     "file": "sfx_461.fsh",
-    "lines": 96,
+    "lines": 100,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "904fb9f6af47dce0",
@@ -3647,7 +3647,7 @@
   "463": {
     "family": "duotone",
     "file": "sfx_463.fsh",
-    "lines": 77,
+    "lines": 82,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "cbd51a43c06bc85d",
@@ -3656,7 +3656,7 @@
   "464": {
     "family": "kaleido",
     "file": "sfx_464.fsh",
-    "lines": 109,
+    "lines": 113,
     "motion": "pulse",
     "overlay": "sparkle",
     "seed": "4ec0272f70bb6fb7",
@@ -3674,7 +3674,7 @@
   "466": {
     "family": "dreamblur",
     "file": "sfx_466.fsh",
-    "lines": 98,
+    "lines": 106,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "25080c731fb37562",
@@ -3683,7 +3683,7 @@
   "467": {
     "family": "moire",
     "file": "sfx_467.fsh",
-    "lines": 81,
+    "lines": 86,
     "motion": "drift",
     "overlay": "grain",
     "seed": "16aa591e9e48341c",
@@ -3701,7 +3701,7 @@
   "469": {
     "family": "aberration",
     "file": "sfx_469.fsh",
-    "lines": 96,
+    "lines": 100,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "dff6296a0d72bf75",
@@ -3719,7 +3719,7 @@
   "470": {
     "family": "underwater",
     "file": "sfx_470.fsh",
-    "lines": 121,
+    "lines": 126,
     "motion": "surge",
     "overlay": "grain",
     "seed": "37e69c1bf3f5464e",
@@ -3728,7 +3728,7 @@
   "471": {
     "family": "thermal",
     "file": "sfx_471.fsh",
-    "lines": 96,
+    "lines": 110,
     "motion": "drift",
     "overlay": "grain",
     "seed": "e6b624000c1ad85a",
@@ -3737,7 +3737,7 @@
   "472": {
     "family": "sketch",
     "file": "sfx_472.fsh",
-    "lines": 99,
+    "lines": 104,
     "motion": "drift",
     "overlay": "grain",
     "seed": "ed44c4880c392f48",
@@ -3746,7 +3746,7 @@
   "473": {
     "family": "starburst",
     "file": "sfx_473.fsh",
-    "lines": 100,
+    "lines": 105,
     "motion": "surge",
     "overlay": "grain",
     "seed": "97ac169655e60693",
@@ -3755,7 +3755,7 @@
   "474": {
     "family": "vhs",
     "file": "sfx_474.fsh",
-    "lines": 112,
+    "lines": 117,
     "motion": "steady",
     "overlay": "grain",
     "seed": "cc02a01fc5327c12",
@@ -3773,7 +3773,7 @@
   "476": {
     "family": "tint",
     "file": "sfx_476.fsh",
-    "lines": 80,
+    "lines": 84,
     "motion": "pulse",
     "overlay": "sparkle",
     "seed": "3af2622e763d42b2",
@@ -3791,7 +3791,7 @@
   "478": {
     "family": "vignette",
     "file": "sfx_478.fsh",
-    "lines": 89,
+    "lines": 93,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "b1d323d48cc705b6",
@@ -3800,7 +3800,7 @@
   "479": {
     "family": "chroma",
     "file": "sfx_479.fsh",
-    "lines": 92,
+    "lines": 97,
     "motion": "steady",
     "overlay": "grain",
     "seed": "5dcb914218834ad5",
@@ -3854,7 +3854,7 @@
   "484": {
     "family": "scanlines",
     "file": "sfx_484.fsh",
-    "lines": 82,
+    "lines": 86,
     "motion": "surge",
     "overlay": "sparkle",
     "seed": "7a4ec767d4e06c75",
@@ -3872,7 +3872,7 @@
   "486": {
     "family": "frostlens",
     "file": "sfx_486.fsh",
-    "lines": 114,
+    "lines": 119,
     "motion": "drift",
     "overlay": "grain",
     "seed": "10c0501ed5fa0ccc",
@@ -3881,7 +3881,7 @@
   "487": {
     "family": "heathaze",
     "file": "sfx_487.fsh",
-    "lines": 109,
+    "lines": 113,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "85eff5fca22d95c0",
@@ -3899,7 +3899,7 @@
   "489": {
     "family": "radialblur",
     "file": "sfx_489.fsh",
-    "lines": 98,
+    "lines": 102,
     "motion": "surge",
     "overlay": "sparkle",
     "seed": "c0de8564db628ef1",
@@ -3935,7 +3935,7 @@
   "492": {
     "family": "kaleido",
     "file": "sfx_492.fsh",
-    "lines": 108,
+    "lines": 113,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "c3321e5daaa7d3bd",
@@ -3944,7 +3944,7 @@
   "493": {
     "family": "huedrift",
     "file": "sfx_493.fsh",
-    "lines": 87,
+    "lines": 91,
     "motion": "pulse",
     "overlay": "sparkle",
     "seed": "c9295e8a86e24cc6",
@@ -3953,7 +3953,7 @@
   "494": {
     "family": "dreamblur",
     "file": "sfx_494.fsh",
-    "lines": 96,
+    "lines": 99,
     "motion": "steady",
     "overlay": "pulseglow",
     "seed": "b980732d5178afb3",
@@ -3962,7 +3962,7 @@
   "495": {
     "family": "moire",
     "file": "sfx_495.fsh",
-    "lines": 84,
+    "lines": 88,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "557fcb7893de4c01",
@@ -3971,7 +3971,7 @@
   "496": {
     "family": "spectral",
     "file": "sfx_496.fsh",
-    "lines": 98,
+    "lines": 102,
     "motion": "pulse",
     "overlay": "sparkle",
     "seed": "d7d597e1a13b2787",
@@ -3998,7 +3998,7 @@
   "499": {
     "family": "thermal",
     "file": "sfx_499.fsh",
-    "lines": 95,
+    "lines": 104,
     "motion": "pulse",
     "overlay": "pulseglow",
     "seed": "7b62629a63ec4d2a",
@@ -4061,7 +4061,7 @@
   "504": {
     "family": "tint",
     "file": "sfx_504.fsh",
-    "lines": 77,
+    "lines": 81,
     "motion": "pulse",
     "overlay": "sparkle",
     "seed": "f01f1ca2a5823d0a",
@@ -4079,7 +4079,7 @@
   "506": {
     "family": "vignette",
     "file": "sfx_506.fsh",
-    "lines": 77,
+    "lines": 81,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "258c875a59a789ef",
@@ -4097,7 +4097,7 @@
   "508": {
     "family": "pixelate",
     "file": "sfx_508.fsh",
-    "lines": 91,
+    "lines": 96,
     "motion": "surge",
     "overlay": "grain",
     "seed": "99478a8fbeeb9c49",
@@ -4124,7 +4124,7 @@
   "510": {
     "family": "bloomglow",
     "file": "sfx_510.fsh",
-    "lines": 96,
+    "lines": 100,
     "motion": "surge",
     "overlay": "sparkle",
     "seed": "596f10c5c4d81a8a",
@@ -4133,7 +4133,7 @@
   "511": {
     "family": "ripple",
     "file": "sfx_511.fsh",
-    "lines": 106,
+    "lines": 111,
     "motion": "drift",
     "overlay": "grain",
     "seed": "d13713065258a97b",
@@ -4160,7 +4160,7 @@
   "514": {
     "family": "frostlens",
     "file": "sfx_514.fsh",
-    "lines": 115,
+    "lines": 119,
     "motion": "surge",
     "overlay": "sparkle",
     "seed": "390954ace3e7526c",
@@ -4178,7 +4178,7 @@
   "516": {
     "family": "posterize",
     "file": "sfx_516.fsh",
-    "lines": 81,
+    "lines": 85,
     "motion": "pulse",
     "overlay": "sparkle",
     "seed": "f29bb68bdcd4baa8",
@@ -4196,7 +4196,7 @@
   "518": {
     "family": "glitch",
     "file": "sfx_518.fsh",
-    "lines": 110,
+    "lines": 114,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "e3be17563ceab217",
@@ -4223,7 +4223,7 @@
   "520": {
     "family": "kaleido",
     "file": "sfx_520.fsh",
-    "lines": 100,
+    "lines": 104,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "613aebaac32e6c53",
@@ -4232,7 +4232,7 @@
   "521": {
     "family": "huedrift",
     "file": "sfx_521.fsh",
-    "lines": 87,
+    "lines": 92,
     "motion": "surge",
     "overlay": "grain",
     "seed": "52a1c12c66bc696c",
@@ -4241,7 +4241,7 @@
   "522": {
     "family": "dreamblur",
     "file": "sfx_522.fsh",
-    "lines": 99,
+    "lines": 107,
     "motion": "drift",
     "overlay": "grain",
     "seed": "c92df9d3bfabf0f7",
@@ -4250,7 +4250,7 @@
   "523": {
     "family": "moire",
     "file": "sfx_523.fsh",
-    "lines": 81,
+    "lines": 86,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "8ff30bfd7c13fb40",
@@ -4259,7 +4259,7 @@
   "524": {
     "family": "spectral",
     "file": "sfx_524.fsh",
-    "lines": 100,
+    "lines": 105,
     "motion": "drift",
     "overlay": "grain",
     "seed": "f7715202f8f50dfa",
@@ -4268,7 +4268,7 @@
   "525": {
     "family": "aberration",
     "file": "sfx_525.fsh",
-    "lines": 94,
+    "lines": 99,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "501e0126d2da1bda",
@@ -4286,7 +4286,7 @@
   "527": {
     "family": "thermal",
     "file": "sfx_527.fsh",
-    "lines": 92,
+    "lines": 99,
     "motion": "drift",
     "overlay": "none",
     "seed": "0ebf67b385ef780e",
@@ -4295,7 +4295,7 @@
   "528": {
     "family": "sketch",
     "file": "sfx_528.fsh",
-    "lines": 96,
+    "lines": 101,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "96f3bfec17d3c782",
@@ -4331,7 +4331,7 @@
   "531": {
     "family": "gloom",
     "file": "sfx_531.fsh",
-    "lines": 96,
+    "lines": 100,
     "motion": "pulse",
     "overlay": "sparkle",
     "seed": "aa6cf8beb8d1c848",
@@ -4340,7 +4340,7 @@
   "532": {
     "family": "tint",
     "file": "sfx_532.fsh",
-    "lines": 76,
+    "lines": 81,
     "motion": "steady",
     "overlay": "grain",
     "seed": "e0b57beb52b23c38",
@@ -4376,7 +4376,7 @@
   "536": {
     "family": "pixelate",
     "file": "sfx_536.fsh",
-    "lines": 91,
+    "lines": 96,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "4ef74620b52207da",
@@ -4403,7 +4403,7 @@
   "539": {
     "family": "ripple",
     "file": "sfx_539.fsh",
-    "lines": 100,
+    "lines": 105,
     "motion": "drift",
     "overlay": "grain",
     "seed": "396af65f08e70935",
@@ -4421,7 +4421,7 @@
   "540": {
     "family": "scanlines",
     "file": "sfx_540.fsh",
-    "lines": 105,
+    "lines": 110,
     "motion": "surge",
     "overlay": "grain",
     "seed": "174aa3249a89436a",
@@ -4439,7 +4439,7 @@
   "542": {
     "family": "frostlens",
     "file": "sfx_542.fsh",
-    "lines": 114,
+    "lines": 118,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "1b2f05ce1dcf1a55",
@@ -4466,7 +4466,7 @@
   "545": {
     "family": "radialblur",
     "file": "sfx_545.fsh",
-    "lines": 95,
+    "lines": 100,
     "motion": "surge",
     "overlay": "grain",
     "seed": "3a243145637f4cb6",
@@ -4502,7 +4502,7 @@
   "549": {
     "family": "huedrift",
     "file": "sfx_549.fsh",
-    "lines": 85,
+    "lines": 90,
     "motion": "steady",
     "overlay": "grain",
     "seed": "3a0601daa76f7a22",
@@ -4520,7 +4520,7 @@
   "550": {
     "family": "dreamblur",
     "file": "sfx_550.fsh",
-    "lines": 96,
+    "lines": 99,
     "motion": "pulse",
     "overlay": "pulseglow",
     "seed": "8503437b9a9b98a6",
@@ -4529,7 +4529,7 @@
   "551": {
     "family": "moire",
     "file": "sfx_551.fsh",
-    "lines": 82,
+    "lines": 87,
     "motion": "drift",
     "overlay": "grain",
     "seed": "b4ae979d254167fe",
@@ -4556,7 +4556,7 @@
   "554": {
     "family": "underwater",
     "file": "sfx_554.fsh",
-    "lines": 122,
+    "lines": 126,
     "motion": "pulse",
     "overlay": "sparkle",
     "seed": "d9e0c4d5c0215906",
@@ -4565,7 +4565,7 @@
   "555": {
     "family": "thermal",
     "file": "sfx_555.fsh",
-    "lines": 97,
+    "lines": 108,
     "motion": "pulse",
     "overlay": "sparkle",
     "seed": "7310447061d897c6",
@@ -4574,7 +4574,7 @@
   "556": {
     "family": "sketch",
     "file": "sfx_556.fsh",
-    "lines": 101,
+    "lines": 106,
     "motion": "steady",
     "overlay": "grain",
     "seed": "117e72395387bf85",
@@ -4592,7 +4592,7 @@
   "558": {
     "family": "vhs",
     "file": "sfx_558.fsh",
-    "lines": 114,
+    "lines": 119,
     "motion": "surge",
     "overlay": "grain",
     "seed": "0ce56d5236094729",
@@ -4601,7 +4601,7 @@
   "559": {
     "family": "gloom",
     "file": "sfx_559.fsh",
-    "lines": 91,
+    "lines": 95,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "58bd2185b3e31014",
@@ -4619,7 +4619,7 @@
   "560": {
     "family": "tint",
     "file": "sfx_560.fsh",
-    "lines": 77,
+    "lines": 82,
     "motion": "steady",
     "overlay": "grain",
     "seed": "09965844e93c5c54",
@@ -4646,7 +4646,7 @@
   "563": {
     "family": "chroma",
     "file": "sfx_563.fsh",
-    "lines": 92,
+    "lines": 96,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "045d265f6512659c",
@@ -4655,7 +4655,7 @@
   "564": {
     "family": "pixelate",
     "file": "sfx_564.fsh",
-    "lines": 94,
+    "lines": 98,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "a567ee42b67fd294",
@@ -4700,7 +4700,7 @@
   "569": {
     "family": "edgeglow",
     "file": "sfx_569.fsh",
-    "lines": 102,
+    "lines": 106,
     "motion": "pulse",
     "overlay": "sparkle",
     "seed": "2e1e6d3fd35a0fc9",
@@ -4718,7 +4718,7 @@
   "570": {
     "family": "frostlens",
     "file": "sfx_570.fsh",
-    "lines": 112,
+    "lines": 116,
     "motion": "pulse",
     "overlay": "sparkle",
     "seed": "897e21cd21181b3d",
@@ -4736,7 +4736,7 @@
   "572": {
     "family": "posterize",
     "file": "sfx_572.fsh",
-    "lines": 78,
+    "lines": 83,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "f110c904f98a62a1",
@@ -4754,7 +4754,7 @@
   "574": {
     "family": "glitch",
     "file": "sfx_574.fsh",
-    "lines": 113,
+    "lines": 117,
     "motion": "surge",
     "overlay": "sparkle",
     "seed": "3b192316dabe6b3e",
@@ -4781,7 +4781,7 @@
   "577": {
     "family": "huedrift",
     "file": "sfx_577.fsh",
-    "lines": 87,
+    "lines": 92,
     "motion": "drift",
     "overlay": "grain",
     "seed": "7354047fb1735332",
@@ -4790,7 +4790,7 @@
   "578": {
     "family": "dreamblur",
     "file": "sfx_578.fsh",
-    "lines": 98,
+    "lines": 105,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "d04ab57bbb0863c9",
@@ -4799,7 +4799,7 @@
   "579": {
     "family": "moire",
     "file": "sfx_579.fsh",
-    "lines": 82,
+    "lines": 87,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "e52929aed585322f",
@@ -4817,7 +4817,7 @@
   "580": {
     "family": "spectral",
     "file": "sfx_580.fsh",
-    "lines": 101,
+    "lines": 105,
     "motion": "surge",
     "overlay": "sparkle",
     "seed": "e5f6dbc8e7f9ac6d",
@@ -4826,7 +4826,7 @@
   "581": {
     "family": "aberration",
     "file": "sfx_581.fsh",
-    "lines": 95,
+    "lines": 99,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "26aba998419254ce",
@@ -4835,7 +4835,7 @@
   "582": {
     "family": "underwater",
     "file": "sfx_582.fsh",
-    "lines": 120,
+    "lines": 124,
     "motion": "surge",
     "overlay": "sparkle",
     "seed": "63c32a3513e3f801",
@@ -4844,7 +4844,7 @@
   "583": {
     "family": "thermal",
     "file": "sfx_583.fsh",
-    "lines": 94,
+    "lines": 101,
     "motion": "steady",
     "overlay": "pulseglow",
     "seed": "01feca0f9987bd1f",
@@ -4853,7 +4853,7 @@
   "584": {
     "family": "sketch",
     "file": "sfx_584.fsh",
-    "lines": 98,
+    "lines": 102,
     "motion": "surge",
     "overlay": "sparkle",
     "seed": "864e5b524806b615",
@@ -4880,7 +4880,7 @@
   "587": {
     "family": "gloom",
     "file": "sfx_587.fsh",
-    "lines": 97,
+    "lines": 101,
     "motion": "surge",
     "overlay": "sparkle",
     "seed": "97b50356e13c75e3",
@@ -4898,7 +4898,7 @@
   "589": {
     "family": "wobble",
     "file": "sfx_589.fsh",
-    "lines": 90,
+    "lines": 95,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "ff5410dbcb2d3ae6",
@@ -4934,7 +4934,7 @@
   "592": {
     "family": "pixelate",
     "file": "sfx_592.fsh",
-    "lines": 92,
+    "lines": 97,
     "motion": "surge",
     "overlay": "grain",
     "seed": "d9544e3ab478370b",
@@ -4943,7 +4943,7 @@
   "593": {
     "family": "desat",
     "file": "sfx_593.fsh",
-    "lines": 78,
+    "lines": 82,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "c6920076e7cfbae8",
@@ -4952,7 +4952,7 @@
   "594": {
     "family": "bloomglow",
     "file": "sfx_594.fsh",
-    "lines": 94,
+    "lines": 99,
     "motion": "steady",
     "overlay": "grain",
     "seed": "051c534a57cb47bd",
@@ -4961,7 +4961,7 @@
   "595": {
     "family": "ripple",
     "file": "sfx_595.fsh",
-    "lines": 101,
+    "lines": 105,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "419051defc3f5159",
@@ -4970,7 +4970,7 @@
   "596": {
     "family": "scanlines",
     "file": "sfx_596.fsh",
-    "lines": 106,
+    "lines": 110,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "5d52b7c5550977cb",
@@ -5024,7 +5024,7 @@
   "600": {
     "family": "posterize",
     "file": "sfx_600.fsh",
-    "lines": 78,
+    "lines": 83,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "de9d212d9fb2fc83",
@@ -5042,7 +5042,7 @@
   "602": {
     "family": "glitch",
     "file": "sfx_602.fsh",
-    "lines": 111,
+    "lines": 116,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "2f3cc79fe46b6073",
@@ -5051,7 +5051,7 @@
   "603": {
     "family": "duotone",
     "file": "sfx_603.fsh",
-    "lines": 79,
+    "lines": 84,
     "motion": "surge",
     "overlay": "grain",
     "seed": "a30a829d2b4120dd",
@@ -5078,7 +5078,7 @@
   "606": {
     "family": "dreamblur",
     "file": "sfx_606.fsh",
-    "lines": 98,
+    "lines": 106,
     "motion": "drift",
     "overlay": "grain",
     "seed": "ed87e2999b242f85",
@@ -5123,7 +5123,7 @@
   "610": {
     "family": "underwater",
     "file": "sfx_610.fsh",
-    "lines": 122,
+    "lines": 126,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "7735a0057e52a701",
@@ -5132,7 +5132,7 @@
   "611": {
     "family": "thermal",
     "file": "sfx_611.fsh",
-    "lines": 97,
+    "lines": 110,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "5ed3d0e0b7428055",
@@ -5177,7 +5177,7 @@
   "616": {
     "family": "tint",
     "file": "sfx_616.fsh",
-    "lines": 78,
+    "lines": 82,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "dd3463dafdb69f75",
@@ -5186,7 +5186,7 @@
   "617": {
     "family": "wobble",
     "file": "sfx_617.fsh",
-    "lines": 90,
+    "lines": 95,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "181f45b0a9b6a182",
@@ -5222,7 +5222,7 @@
   "620": {
     "family": "pixelate",
     "file": "sfx_620.fsh",
-    "lines": 92,
+    "lines": 96,
     "motion": "pulse",
     "overlay": "sparkle",
     "seed": "1f2914e45dca9c10",
@@ -5249,7 +5249,7 @@
   "623": {
     "family": "ripple",
     "file": "sfx_623.fsh",
-    "lines": 101,
+    "lines": 105,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "6a0759068da6fb45",
@@ -5258,7 +5258,7 @@
   "624": {
     "family": "scanlines",
     "file": "sfx_624.fsh",
-    "lines": 107,
+    "lines": 111,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "2fec05ebeb943cb6",
@@ -5321,7 +5321,7 @@
   "630": {
     "family": "glitch",
     "file": "sfx_630.fsh",
-    "lines": 112,
+    "lines": 117,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "f68a9b45572d4b54",
@@ -5330,7 +5330,7 @@
   "631": {
     "family": "duotone",
     "file": "sfx_631.fsh",
-    "lines": 80,
+    "lines": 84,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "8a5ddd794fd8397e",
@@ -5339,7 +5339,7 @@
   "632": {
     "family": "kaleido",
     "file": "sfx_632.fsh",
-    "lines": 109,
+    "lines": 113,
     "motion": "pulse",
     "overlay": "sparkle",
     "seed": "38e5d41225d6b0b7",
@@ -5348,7 +5348,7 @@
   "633": {
     "family": "huedrift",
     "file": "sfx_633.fsh",
-    "lines": 85,
+    "lines": 90,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "831bda2d4520da9d",
@@ -5357,7 +5357,7 @@
   "634": {
     "family": "dreamblur",
     "file": "sfx_634.fsh",
-    "lines": 91,
+    "lines": 94,
     "motion": "steady",
     "overlay": "none",
     "seed": "97bad8f490bd60f8",
@@ -5366,7 +5366,7 @@
   "635": {
     "family": "moire",
     "file": "sfx_635.fsh",
-    "lines": 83,
+    "lines": 88,
     "motion": "surge",
     "overlay": "grain",
     "seed": "f2bb193603d4122f",
@@ -5384,7 +5384,7 @@
   "637": {
     "family": "aberration",
     "file": "sfx_637.fsh",
-    "lines": 95,
+    "lines": 100,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "a3c1474beb24e09b",
@@ -5393,7 +5393,7 @@
   "638": {
     "family": "underwater",
     "file": "sfx_638.fsh",
-    "lines": 119,
+    "lines": 123,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "0828f75cc9d833a1",
@@ -5402,7 +5402,7 @@
   "639": {
     "family": "thermal",
     "file": "sfx_639.fsh",
-    "lines": 96,
+    "lines": 108,
     "motion": "steady",
     "overlay": "grain",
     "seed": "bf424f615075f155",
@@ -5420,7 +5420,7 @@
   "640": {
     "family": "sketch",
     "file": "sfx_640.fsh",
-    "lines": 102,
+    "lines": 107,
     "motion": "drift",
     "overlay": "grain",
     "seed": "06e6aa31eb5a19ab",
@@ -5429,7 +5429,7 @@
   "641": {
     "family": "starburst",
     "file": "sfx_641.fsh",
-    "lines": 99,
+    "lines": 104,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "797b457fab9d80b8",
@@ -5447,7 +5447,7 @@
   "643": {
     "family": "gloom",
     "file": "sfx_643.fsh",
-    "lines": 86,
+    "lines": 91,
     "motion": "drift",
     "overlay": "grain",
     "seed": "b96d81fa57b68767",
@@ -5465,7 +5465,7 @@
   "645": {
     "family": "wobble",
     "file": "sfx_645.fsh",
-    "lines": 91,
+    "lines": 95,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "60f0515f54e0a1ea",
@@ -5474,7 +5474,7 @@
   "646": {
     "family": "vignette",
     "file": "sfx_646.fsh",
-    "lines": 79,
+    "lines": 83,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "3c8f8ea289983988",
@@ -5483,7 +5483,7 @@
   "647": {
     "family": "chroma",
     "file": "sfx_647.fsh",
-    "lines": 93,
+    "lines": 97,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "7b2b3fb03e0329a3",
@@ -5492,7 +5492,7 @@
   "648": {
     "family": "pixelate",
     "file": "sfx_648.fsh",
-    "lines": 93,
+    "lines": 97,
     "motion": "surge",
     "overlay": "sparkle",
     "seed": "63cf90da33ef0f9b",
@@ -5501,7 +5501,7 @@
   "649": {
     "family": "desat",
     "file": "sfx_649.fsh",
-    "lines": 79,
+    "lines": 83,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "cbfb70d9adec0ff4",
@@ -5519,7 +5519,7 @@
   "650": {
     "family": "bloomglow",
     "file": "sfx_650.fsh",
-    "lines": 96,
+    "lines": 100,
     "motion": "surge",
     "overlay": "sparkle",
     "seed": "3f879a1595576ef3",
@@ -5537,7 +5537,7 @@
   "652": {
     "family": "scanlines",
     "file": "sfx_652.fsh",
-    "lines": 90,
+    "lines": 94,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "54c6d5bb0a386d6c",
@@ -5555,7 +5555,7 @@
   "654": {
     "family": "frostlens",
     "file": "sfx_654.fsh",
-    "lines": 115,
+    "lines": 119,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "d9e3d0e7f7c4ceb7",
@@ -5573,7 +5573,7 @@
   "656": {
     "family": "posterize",
     "file": "sfx_656.fsh",
-    "lines": 81,
+    "lines": 86,
     "motion": "drift",
     "overlay": "grain",
     "seed": "e5dbb2f186f190a2",
@@ -5627,7 +5627,7 @@
   "661": {
     "family": "huedrift",
     "file": "sfx_661.fsh",
-    "lines": 86,
+    "lines": 91,
     "motion": "steady",
     "overlay": "grain",
     "seed": "b163fb4818b4fbfb",
@@ -5636,7 +5636,7 @@
   "662": {
     "family": "dreamblur",
     "file": "sfx_662.fsh",
-    "lines": 99,
+    "lines": 107,
     "motion": "surge",
     "overlay": "grain",
     "seed": "35c8098b9dd9cdfe",
@@ -5663,7 +5663,7 @@
   "665": {
     "family": "aberration",
     "file": "sfx_665.fsh",
-    "lines": 94,
+    "lines": 98,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "5e52b6715f315bce",
@@ -5681,7 +5681,7 @@
   "667": {
     "family": "thermal",
     "file": "sfx_667.fsh",
-    "lines": 96,
+    "lines": 108,
     "motion": "steady",
     "overlay": "grain",
     "seed": "be3b495a1a4357e9",
@@ -5690,7 +5690,7 @@
   "668": {
     "family": "sketch",
     "file": "sfx_668.fsh",
-    "lines": 96,
+    "lines": 101,
     "motion": "steady",
     "overlay": "grain",
     "seed": "03c2662c312e5022",
@@ -5699,7 +5699,7 @@
   "669": {
     "family": "starburst",
     "file": "sfx_669.fsh",
-    "lines": 101,
+    "lines": 105,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "14f32bc98f19d876",
@@ -5717,7 +5717,7 @@
   "670": {
     "family": "vhs",
     "file": "sfx_670.fsh",
-    "lines": 121,
+    "lines": 126,
     "motion": "surge",
     "overlay": "grain",
     "seed": "badbc47104d1e8ae",
@@ -5726,7 +5726,7 @@
   "671": {
     "family": "gloom",
     "file": "sfx_671.fsh",
-    "lines": 91,
+    "lines": 96,
     "motion": "surge",
     "overlay": "grain",
     "seed": "11dbf24cff8010f6",
@@ -5735,7 +5735,7 @@
   "672": {
     "family": "tint",
     "file": "sfx_672.fsh",
-    "lines": 79,
+    "lines": 83,
     "motion": "surge",
     "overlay": "sparkle",
     "seed": "5fba87c4d53f48fc",
@@ -5753,7 +5753,7 @@
   "674": {
     "family": "vignette",
     "file": "sfx_674.fsh",
-    "lines": 78,
+    "lines": 83,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "315a6b44312eeaf1",
@@ -5780,7 +5780,7 @@
   "677": {
     "family": "desat",
     "file": "sfx_677.fsh",
-    "lines": 77,
+    "lines": 82,
     "motion": "steady",
     "overlay": "grain",
     "seed": "168abf3c640a4f48",
@@ -5789,7 +5789,7 @@
   "678": {
     "family": "bloomglow",
     "file": "sfx_678.fsh",
-    "lines": 96,
+    "lines": 100,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "032ae7c3ed1a9d18",
@@ -5870,7 +5870,7 @@
   "686": {
     "family": "glitch",
     "file": "sfx_686.fsh",
-    "lines": 112,
+    "lines": 116,
     "motion": "pulse",
     "overlay": "sparkle",
     "seed": "16ec4938fa2606d8",
@@ -5888,7 +5888,7 @@
   "688": {
     "family": "kaleido",
     "file": "sfx_688.fsh",
-    "lines": 109,
+    "lines": 114,
     "motion": "surge",
     "overlay": "grain",
     "seed": "cf05a801d92f9f51",
@@ -5897,7 +5897,7 @@
   "689": {
     "family": "huedrift",
     "file": "sfx_689.fsh",
-    "lines": 87,
+    "lines": 92,
     "motion": "drift",
     "overlay": "grain",
     "seed": "684de3255ed34ffd",
@@ -5915,7 +5915,7 @@
   "690": {
     "family": "dreamblur",
     "file": "sfx_690.fsh",
-    "lines": 99,
+    "lines": 106,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "cd438621a5efbbed",
@@ -5924,7 +5924,7 @@
   "691": {
     "family": "moire",
     "file": "sfx_691.fsh",
-    "lines": 83,
+    "lines": 87,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "24a63118c3d5e390",
@@ -5933,7 +5933,7 @@
   "692": {
     "family": "spectral",
     "file": "sfx_692.fsh",
-    "lines": 97,
+    "lines": 101,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "893edda5b446987e",
@@ -5951,7 +5951,7 @@
   "694": {
     "family": "underwater",
     "file": "sfx_694.fsh",
-    "lines": 120,
+    "lines": 124,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "c96fb8a9e8d883bb",
@@ -5960,7 +5960,7 @@
   "695": {
     "family": "thermal",
     "file": "sfx_695.fsh",
-    "lines": 96,
+    "lines": 103,
     "motion": "pulse",
     "overlay": "pulseglow",
     "seed": "dfb56d22a134c32f",
@@ -5978,7 +5978,7 @@
   "697": {
     "family": "starburst",
     "file": "sfx_697.fsh",
-    "lines": 99,
+    "lines": 104,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "7e960507188fbd82",
@@ -5987,7 +5987,7 @@
   "698": {
     "family": "vhs",
     "file": "sfx_698.fsh",
-    "lines": 109,
+    "lines": 114,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "53cb3ef0d8b6459b",
@@ -5996,7 +5996,7 @@
   "699": {
     "family": "gloom",
     "file": "sfx_699.fsh",
-    "lines": 82,
+    "lines": 87,
     "motion": "steady",
     "overlay": "grain",
     "seed": "563cbe15eb9722ce",
@@ -6041,7 +6041,7 @@
   "702": {
     "family": "vignette",
     "file": "sfx_702.fsh",
-    "lines": 88,
+    "lines": 93,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "002d91b141852f91",
@@ -6050,7 +6050,7 @@
   "703": {
     "family": "chroma",
     "file": "sfx_703.fsh",
-    "lines": 92,
+    "lines": 97,
     "motion": "steady",
     "overlay": "grain",
     "seed": "d39c3f3c7c1f3c3a",
@@ -6059,7 +6059,7 @@
   "704": {
     "family": "pixelate",
     "file": "sfx_704.fsh",
-    "lines": 92,
+    "lines": 96,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "476593b5679c8cf1",
@@ -6122,7 +6122,7 @@
   "710": {
     "family": "frostlens",
     "file": "sfx_710.fsh",
-    "lines": 114,
+    "lines": 118,
     "motion": "pulse",
     "overlay": "sparkle",
     "seed": "5f16b16a5047f8f2",
@@ -6131,7 +6131,7 @@
   "711": {
     "family": "heathaze",
     "file": "sfx_711.fsh",
-    "lines": 105,
+    "lines": 109,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "486a9d326f98e55e",
@@ -6140,7 +6140,7 @@
   "712": {
     "family": "posterize",
     "file": "sfx_712.fsh",
-    "lines": 80,
+    "lines": 85,
     "motion": "steady",
     "overlay": "grain",
     "seed": "31a1fb00a7db78d1",
@@ -6149,7 +6149,7 @@
   "713": {
     "family": "radialblur",
     "file": "sfx_713.fsh",
-    "lines": 95,
+    "lines": 100,
     "motion": "drift",
     "overlay": "grain",
     "seed": "6e413be8b0bb856a",
@@ -6158,7 +6158,7 @@
   "714": {
     "family": "glitch",
     "file": "sfx_714.fsh",
-    "lines": 111,
+    "lines": 116,
     "motion": "steady",
     "overlay": "grain",
     "seed": "6194954831f3c4f1",
@@ -6194,7 +6194,7 @@
   "718": {
     "family": "dreamblur",
     "file": "sfx_718.fsh",
-    "lines": 100,
+    "lines": 107,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "39644e2503cb418a",
@@ -6248,7 +6248,7 @@
   "723": {
     "family": "thermal",
     "file": "sfx_723.fsh",
-    "lines": 97,
+    "lines": 109,
     "motion": "drift",
     "overlay": "grain",
     "seed": "d6574cb29c141ce8",
@@ -6266,7 +6266,7 @@
   "725": {
     "family": "starburst",
     "file": "sfx_725.fsh",
-    "lines": 100,
+    "lines": 104,
     "motion": "surge",
     "overlay": "sparkle",
     "seed": "b4e0b348a729e635",
@@ -6293,7 +6293,7 @@
   "728": {
     "family": "tint",
     "file": "sfx_728.fsh",
-    "lines": 80,
+    "lines": 85,
     "motion": "drift",
     "overlay": "grain",
     "seed": "88e6f27064209a89",
@@ -6302,7 +6302,7 @@
   "729": {
     "family": "wobble",
     "file": "sfx_729.fsh",
-    "lines": 97,
+    "lines": 102,
     "motion": "drift",
     "overlay": "grain",
     "seed": "891fc9836fa9690e",
@@ -6320,7 +6320,7 @@
   "730": {
     "family": "vignette",
     "file": "sfx_730.fsh",
-    "lines": 90,
+    "lines": 94,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "15d637e7882d5cfc",
@@ -6356,7 +6356,7 @@
   "734": {
     "family": "bloomglow",
     "file": "sfx_734.fsh",
-    "lines": 94,
+    "lines": 99,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "4fa066bfd5ab5bb2",
@@ -6365,7 +6365,7 @@
   "735": {
     "family": "ripple",
     "file": "sfx_735.fsh",
-    "lines": 99,
+    "lines": 104,
     "motion": "steady",
     "overlay": "grain",
     "seed": "837de98785be9127",
@@ -6392,7 +6392,7 @@
   "738": {
     "family": "frostlens",
     "file": "sfx_738.fsh",
-    "lines": 114,
+    "lines": 118,
     "motion": "surge",
     "overlay": "sparkle",
     "seed": "5585b09ff9e3e126",
@@ -6401,7 +6401,7 @@
   "739": {
     "family": "heathaze",
     "file": "sfx_739.fsh",
-    "lines": 105,
+    "lines": 110,
     "motion": "drift",
     "overlay": "grain",
     "seed": "21684a89e0f8d2a8",
@@ -6428,7 +6428,7 @@
   "741": {
     "family": "radialblur",
     "file": "sfx_741.fsh",
-    "lines": 98,
+    "lines": 102,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "963f4baedf556e8a",
@@ -6437,7 +6437,7 @@
   "742": {
     "family": "glitch",
     "file": "sfx_742.fsh",
-    "lines": 114,
+    "lines": 118,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "f4f45a3cc3cf701c",
@@ -6455,7 +6455,7 @@
   "744": {
     "family": "kaleido",
     "file": "sfx_744.fsh",
-    "lines": 108,
+    "lines": 113,
     "motion": "steady",
     "overlay": "grain",
     "seed": "bdcc29526103b860",
@@ -6464,7 +6464,7 @@
   "745": {
     "family": "huedrift",
     "file": "sfx_745.fsh",
-    "lines": 87,
+    "lines": 91,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "20aeb26224f99e9e",
@@ -6473,7 +6473,7 @@
   "746": {
     "family": "dreamblur",
     "file": "sfx_746.fsh",
-    "lines": 99,
+    "lines": 107,
     "motion": "surge",
     "overlay": "grain",
     "seed": "25a1f28fd5347d1d",
@@ -6500,7 +6500,7 @@
   "749": {
     "family": "aberration",
     "file": "sfx_749.fsh",
-    "lines": 95,
+    "lines": 100,
     "motion": "drift",
     "overlay": "grain",
     "seed": "d94450925a853ae0",
@@ -6518,7 +6518,7 @@
   "750": {
     "family": "underwater",
     "file": "sfx_750.fsh",
-    "lines": 121,
+    "lines": 125,
     "motion": "pulse",
     "overlay": "sparkle",
     "seed": "6b4caedd3c141fd1",
@@ -6527,7 +6527,7 @@
   "751": {
     "family": "thermal",
     "file": "sfx_751.fsh",
-    "lines": 96,
+    "lines": 109,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "9749a099a4df9b9d",
@@ -6545,7 +6545,7 @@
   "753": {
     "family": "starburst",
     "file": "sfx_753.fsh",
-    "lines": 99,
+    "lines": 104,
     "motion": "steady",
     "overlay": "grain",
     "seed": "622335c75541ce83",
@@ -6572,7 +6572,7 @@
   "756": {
     "family": "tint",
     "file": "sfx_756.fsh",
-    "lines": 77,
+    "lines": 81,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "d23b87e11d798efd",
@@ -6581,7 +6581,7 @@
   "757": {
     "family": "wobble",
     "file": "sfx_757.fsh",
-    "lines": 91,
+    "lines": 96,
     "motion": "steady",
     "overlay": "grain",
     "seed": "e24c332be8921236",
@@ -6617,7 +6617,7 @@
   "760": {
     "family": "pixelate",
     "file": "sfx_760.fsh",
-    "lines": 93,
+    "lines": 97,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "f78927b6ffd84300",
@@ -6626,7 +6626,7 @@
   "761": {
     "family": "desat",
     "file": "sfx_761.fsh",
-    "lines": 78,
+    "lines": 83,
     "motion": "surge",
     "overlay": "grain",
     "seed": "4a302ef8244d9eb0",
@@ -6653,7 +6653,7 @@
   "764": {
     "family": "scanlines",
     "file": "sfx_764.fsh",
-    "lines": 106,
+    "lines": 111,
     "motion": "drift",
     "overlay": "grain",
     "seed": "bbc9325e504b1989",
@@ -6662,7 +6662,7 @@
   "765": {
     "family": "edgeglow",
     "file": "sfx_765.fsh",
-    "lines": 103,
+    "lines": 108,
     "motion": "drift",
     "overlay": "grain",
     "seed": "6ef63634ce4dfc5c",
@@ -6689,7 +6689,7 @@
   "768": {
     "family": "posterize",
     "file": "sfx_768.fsh",
-    "lines": 79,
+    "lines": 83,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "d860afdffef013a7",
@@ -6725,7 +6725,7 @@
   "771": {
     "family": "duotone",
     "file": "sfx_771.fsh",
-    "lines": 77,
+    "lines": 82,
     "motion": "steady",
     "overlay": "grain",
     "seed": "74390eae31013d84",
@@ -6734,7 +6734,7 @@
   "772": {
     "family": "kaleido",
     "file": "sfx_772.fsh",
-    "lines": 99,
+    "lines": 104,
     "motion": "surge",
     "overlay": "grain",
     "seed": "cfa8009affdcf185",
@@ -6752,7 +6752,7 @@
   "774": {
     "family": "dreamblur",
     "file": "sfx_774.fsh",
-    "lines": 97,
+    "lines": 100,
     "motion": "drift",
     "overlay": "pulseglow",
     "seed": "e5c47a5f1d3b599d",
@@ -6770,7 +6770,7 @@
   "776": {
     "family": "spectral",
     "file": "sfx_776.fsh",
-    "lines": 99,
+    "lines": 103,
     "motion": "surge",
     "overlay": "sparkle",
     "seed": "76d34e8cbded100e",
@@ -6788,7 +6788,7 @@
   "778": {
     "family": "underwater",
     "file": "sfx_778.fsh",
-    "lines": 121,
+    "lines": 126,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "c82125f424a22cf1",
@@ -6797,7 +6797,7 @@
   "779": {
     "family": "thermal",
     "file": "sfx_779.fsh",
-    "lines": 97,
+    "lines": 104,
     "motion": "drift",
     "overlay": "pulseglow",
     "seed": "0e6dde147a5870b4",
@@ -6815,7 +6815,7 @@
   "780": {
     "family": "sketch",
     "file": "sfx_780.fsh",
-    "lines": 101,
+    "lines": 106,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "5894ece3fef84d28",
@@ -6824,7 +6824,7 @@
   "781": {
     "family": "starburst",
     "file": "sfx_781.fsh",
-    "lines": 98,
+    "lines": 103,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "f84a561f07138fef",
@@ -6851,7 +6851,7 @@
   "784": {
     "family": "tint",
     "file": "sfx_784.fsh",
-    "lines": 77,
+    "lines": 82,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "fc30f77db9848431",
@@ -6878,7 +6878,7 @@
   "787": {
     "family": "chroma",
     "file": "sfx_787.fsh",
-    "lines": 93,
+    "lines": 98,
     "motion": "drift",
     "overlay": "grain",
     "seed": "1c6c473b94c1ff9f",
@@ -6887,7 +6887,7 @@
   "788": {
     "family": "pixelate",
     "file": "sfx_788.fsh",
-    "lines": 91,
+    "lines": 95,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "39ef0408410e5a04",
@@ -6896,7 +6896,7 @@
   "789": {
     "family": "desat",
     "file": "sfx_789.fsh",
-    "lines": 78,
+    "lines": 83,
     "motion": "drift",
     "overlay": "grain",
     "seed": "3e9c19e0c5b8eed3",
@@ -6914,7 +6914,7 @@
   "790": {
     "family": "bloomglow",
     "file": "sfx_790.fsh",
-    "lines": 95,
+    "lines": 100,
     "motion": "drift",
     "overlay": "grain",
     "seed": "1649527264e857ed",
@@ -6923,7 +6923,7 @@
   "791": {
     "family": "ripple",
     "file": "sfx_791.fsh",
-    "lines": 112,
+    "lines": 117,
     "motion": "drift",
     "overlay": "grain",
     "seed": "6f75fe98aa3cd5cc",
@@ -6941,7 +6941,7 @@
   "793": {
     "family": "edgeglow",
     "file": "sfx_793.fsh",
-    "lines": 102,
+    "lines": 107,
     "motion": "drift",
     "overlay": "grain",
     "seed": "85ec6d20026bdaa5",
@@ -6968,7 +6968,7 @@
   "796": {
     "family": "posterize",
     "file": "sfx_796.fsh",
-    "lines": 77,
+    "lines": 82,
     "motion": "steady",
     "overlay": "grain",
     "seed": "ae2d1ff4dc4f8f12",
@@ -6977,7 +6977,7 @@
   "797": {
     "family": "radialblur",
     "file": "sfx_797.fsh",
-    "lines": 97,
+    "lines": 101,
     "motion": "pulse",
     "overlay": "sparkle",
     "seed": "579c5c7b9e9e6207",
@@ -7022,7 +7022,7 @@
   "800": {
     "family": "kaleido",
     "file": "sfx_800.fsh",
-    "lines": 109,
+    "lines": 113,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "ae07d46762690d59",
@@ -7031,7 +7031,7 @@
   "801": {
     "family": "huedrift",
     "file": "sfx_801.fsh",
-    "lines": 87,
+    "lines": 91,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "54a3109a3f08c569",
@@ -7040,7 +7040,7 @@
   "802": {
     "family": "dreamblur",
     "file": "sfx_802.fsh",
-    "lines": 99,
+    "lines": 102,
     "motion": "drift",
     "overlay": "pulseglow",
     "seed": "26d1cd80ec5f83a4",
@@ -7049,7 +7049,7 @@
   "803": {
     "family": "moire",
     "file": "sfx_803.fsh",
-    "lines": 82,
+    "lines": 86,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "874ef600399528f5",
@@ -7058,7 +7058,7 @@
   "804": {
     "family": "spectral",
     "file": "sfx_804.fsh",
-    "lines": 97,
+    "lines": 102,
     "motion": "steady",
     "overlay": "grain",
     "seed": "e98859abc9218251",
@@ -7076,7 +7076,7 @@
   "806": {
     "family": "underwater",
     "file": "sfx_806.fsh",
-    "lines": 121,
+    "lines": 126,
     "motion": "drift",
     "overlay": "grain",
     "seed": "9b47f559e00e9372",
@@ -7085,7 +7085,7 @@
   "807": {
     "family": "thermal",
     "file": "sfx_807.fsh",
-    "lines": 97,
+    "lines": 108,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "b27c9852282afaf7",
@@ -7121,7 +7121,7 @@
   "810": {
     "family": "vhs",
     "file": "sfx_810.fsh",
-    "lines": 113,
+    "lines": 117,
     "motion": "pulse",
     "overlay": "sparkle",
     "seed": "c6c555945a6bc5ad",
@@ -7130,7 +7130,7 @@
   "811": {
     "family": "gloom",
     "file": "sfx_811.fsh",
-    "lines": 95,
+    "lines": 100,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "620f09622579dd14",
@@ -7184,7 +7184,7 @@
   "817": {
     "family": "desat",
     "file": "sfx_817.fsh",
-    "lines": 77,
+    "lines": 82,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "c92d2c08f64df553",
@@ -7193,7 +7193,7 @@
   "818": {
     "family": "bloomglow",
     "file": "sfx_818.fsh",
-    "lines": 95,
+    "lines": 99,
     "motion": "steady",
     "overlay": "sparkle",
     "seed": "e6e6e10fbec2adf1",
@@ -7202,7 +7202,7 @@
   "819": {
     "family": "ripple",
     "file": "sfx_819.fsh",
-    "lines": 113,
+    "lines": 117,
     "motion": "surge",
     "overlay": "sparkle",
     "seed": "168b1fa657c321ed",
@@ -7220,7 +7220,7 @@
   "820": {
     "family": "scanlines",
     "file": "sfx_820.fsh",
-    "lines": 107,
+    "lines": 111,
     "motion": "surge",
     "overlay": "sparkle",
     "seed": "bcd76301c8754feb",
@@ -7229,7 +7229,7 @@
   "821": {
     "family": "edgeglow",
     "file": "sfx_821.fsh",
-    "lines": 104,
+    "lines": 108,
     "motion": "drift",
     "overlay": "sparkle",
     "seed": "a80abb40461f63eb",
@@ -7265,7 +7265,7 @@
   "825": {
     "family": "radialblur",
     "file": "sfx_825.fsh",
-    "lines": 96,
+    "lines": 101,
     "motion": "steady",
     "overlay": "grain",
     "seed": "525239426d3bf3cc",
@@ -7274,7 +7274,7 @@
   "826": {
     "family": "glitch",
     "file": "sfx_826.fsh",
-    "lines": 112,
+    "lines": 117,
     "motion": "drift",
     "overlay": "grain",
     "seed": "646b5c4d7e4fa93d",
@@ -7319,7 +7319,7 @@
   "830": {
     "family": "dreamblur",
     "file": "sfx_830.fsh",
-    "lines": 93,
+    "lines": 96,
     "motion": "steady",
     "overlay": "none",
     "seed": "79ceaefc8990ccbb",
@@ -7346,7 +7346,7 @@
   "833": {
     "family": "aberration",
     "file": "sfx_833.fsh",
-    "lines": 96,
+    "lines": 100,
     "motion": "surge",
     "overlay": "sparkle",
     "seed": "b76747f03df4f4a0",
@@ -7355,7 +7355,7 @@
   "834": {
     "family": "underwater",
     "file": "sfx_834.fsh",
-    "lines": 118,
+    "lines": 123,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "52680c08653e4d6f",
@@ -7364,7 +7364,7 @@
   "835": {
     "family": "thermal",
     "file": "sfx_835.fsh",
-    "lines": 90,
+    "lines": 99,
     "motion": "pulse",
     "overlay": "none",
     "seed": "dd924a3f6773317b",
@@ -7382,7 +7382,7 @@
   "837": {
     "family": "starburst",
     "file": "sfx_837.fsh",
-    "lines": 99,
+    "lines": 103,
     "motion": "pulse",
     "overlay": "sparkle",
     "seed": "2a4cdc64e383b2cf",
@@ -7391,7 +7391,7 @@
   "838": {
     "family": "vhs",
     "file": "sfx_838.fsh",
-    "lines": 120,
+    "lines": 125,
     "motion": "pulse",
     "overlay": "grain",
     "seed": "1b33c1f4cd62e1cb",

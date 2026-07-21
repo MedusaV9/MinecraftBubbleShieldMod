@@ -66,19 +66,31 @@ void main() {
     // Drifting hotspot field biases the reading before the ramp.
     float blob = vnoise(texCoord * 4.3924 + vec2(anim * 0.0563, anim * 0.0253));
     // Quantized isotherm bands, like a cheap thermography readout.
+    float thermalMix = clamp(strength, 0.0, 0.85);
     float heat = clamp(baseLuma + (blob - 0.5) * 0.2451 * min(strength, 1.0), 0.0, 1.0);
     heat = floor(heat * 5.0000 + 0.5) / 5.0000;
     // False-color ramp: cold Secondary depths through the palette to a
-    // white-hot peak.
+    // capped hot peak (never pure white -- legibility ceiling).
     vec3 coldTone = Secondary.rgb * 0.1557;
     vec3 ramped = mix(coldTone, Secondary.rgb, smoothstep(0.0, 0.4452, heat));
     ramped = mix(ramped, Primary.rgb, smoothstep(0.4105, 0.7764, heat));
-    ramped = mix(ramped, vec3(1.0), smoothstep(0.8996, 1.0, heat));
-    vec3 outColor = mix(base, ramped, clamp(strength, 0.0, 1.0));
+    ramped = mix(ramped, vec3(0.8503), smoothstep(0.8996, 1.0, heat));
+    // Luma band: keep a fixed share of the real scene, ceiling the read
+    // hue-preservingly at 0.75 luma and floor it at 0.05 per channel so
+    // no palette/variant can white-out or black-out the screen.
+    vec3 toned = mix(base, ramped, thermalMix);
+    float tonedLuma = luma(toned);
+    toned *= min(tonedLuma, 0.75) / max(tonedLuma, 0.001);
+    vec3 outColor = max(toned, vec3(0.05));
 
-    // Overlay: living film grain (frame counter wrapped at 256 so the
-    // hash input stays fp32-friendly across the whole GameTime day).
-    float grainFrame = mod(floor(anim * 5.8648), 256.0);
+    // Overlay: living film grain. Photosensitivity: the refresh ticks on
+    // an INDEPENDENT unit-rate clock (GameTime only, never the
+    // paramA-scaled anim, which would hard-refresh at up to ~100 Hz
+    // here); the baked per-id rate keeps every reroll under 2.5 Hz.
+    // The frame counter wraps at 256 so the hash input stays
+    // fp32-friendly across the whole GameTime day.
+    float grainClock = GameTime * 1200.0 + ParamsB.x * 61.8;
+    float grainFrame = mod(floor(grainClock * 1.7162), 256.0);
     outColor += (hash21(floor(texCoord * safeInSize) + vec2(grainFrame, 0.0)) - 0.5) * 0.0330;
 
     // Richness pass (v3): a bounded soft-contrast curve plus a vibrance

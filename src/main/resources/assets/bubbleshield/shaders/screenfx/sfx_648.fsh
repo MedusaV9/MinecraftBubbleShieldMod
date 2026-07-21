@@ -72,10 +72,14 @@ void main() {
     vec3 posterized = cell - fract(cell * ParamsA.z) / ParamsA.z;
     vec3 outColor = mix(posterized, posterized * Primary.rgb, ParamsB.z);
 
-    // Overlay: sparse twinkling motes.
+    // Overlay: sparse twinkling motes. Photosensitivity: the twinkle
+    // sine runs on an INDEPENDENT unit-rate clock (GameTime only, never
+    // the paramA-scaled anim, which reaches ~3-5 Hz at these ids); the
+    // baked per-id rate keeps every flash cycle under 2.4 Hz.
     vec2 oCell = floor(texCoord * safeInSize / 15.4789);
     float oTw = hash21(oCell + vec2(37.0, 91.0));
-    float oTwinkle = smoothstep(0.8419, 1.0, sin(anim * 1.8479 + oTw * 6.2831) * 0.5 + 0.5) * step(0.9834, oTw);
+    float oClock = GameTime * 1200.0 + ParamsB.x * 61.8;
+    float oTwinkle = smoothstep(0.8419, 1.0, sin(oClock * 10.8593 + oTw * 6.2831) * 0.5 + 0.5) * step(0.9834, oTw);
     outColor += Secondary.rgb * oTwinkle * 0.3044;
 
     // Richness pass (v3): a bounded soft-contrast curve plus a vibrance

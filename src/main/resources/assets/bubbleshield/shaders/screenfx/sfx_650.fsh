@@ -75,10 +75,14 @@ void main() {
         + brightTap(texCoord + safeOffset(vec2(0.0, -texel.y)), ParamsA.w) * 0.15;
     vec3 outColor = base + glow * mix(vec3(1.0), Primary.rgb, 0.6535) * strength;
 
-    // Overlay: sparse twinkling motes.
+    // Overlay: sparse twinkling motes. Photosensitivity: the twinkle
+    // sine runs on an INDEPENDENT unit-rate clock (GameTime only, never
+    // the paramA-scaled anim, which reaches ~3-5 Hz at these ids); the
+    // baked per-id rate keeps every flash cycle under 2.4 Hz.
     vec2 oCell = floor(texCoord * safeInSize / 13.3770);
     float oTw = hash21(oCell + vec2(37.0, 91.0));
-    float oTwinkle = smoothstep(0.8772, 1.0, sin(anim * 1.6731 + oTw * 6.2831) * 0.5 + 0.5) * step(0.9865, oTw);
+    float oClock = GameTime * 1200.0 + ParamsB.x * 61.8;
+    float oTwinkle = smoothstep(0.8772, 1.0, sin(oClock * 9.5484 + oTw * 6.2831) * 0.5 + 0.5) * step(0.9865, oTw);
     outColor += Secondary.rgb * oTwinkle * 0.3743;
 
     // Richness pass (v3): a bounded soft-contrast curve plus a vibrance

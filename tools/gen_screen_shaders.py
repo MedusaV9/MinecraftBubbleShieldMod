@@ -103,6 +103,17 @@ COUNT = 840
 GLOBAL_SEED = 0x5C4EE7F1
 MAX_UV_OFFSET = 0.02  # gameplay-safety bound for any scene-sample displacement
 
+# First id of the 840-flip catalogue rows. Safety fixes that would otherwise
+# change pre-flip bytes (the rate-capped overlay clocks below) are gated to
+# ids >= this, so regeneration leaves sfx_000..419 byte-identical.
+V5_FLIP_START = 420
+
+# Set per-file by emit_shader (True for the 840-flip ids >= V5_FLIP_START).
+# Read by family modules whose id range straddles the flip (fam_dreamblur's
+# built-in twinkle; the shared overlays take an explicit parameter instead)
+# so the photosensitivity rate caps apply ONLY to the new ids.
+_RATE_CAPPED = False
+
 FAMILIES = [
     "tint", "wobble", "vignette", "chroma", "pixelate", "desat",
     "bloomglow", "ripple", "scanlines", "edgeglow", "frostlens", "heathaze",
@@ -1100,12 +1111,27 @@ def fam_huedrift(v, u):
 
 
 def fam_dreamblur(v, u):
-    sparkle = [
-        f"vec2 cellUv = floor(texCoord * safeInSize / {F(u(10, 8.0, 16.0))});",
-        "float tw = hash21(cellUv);",
-        f"float twinkle = smoothstep({F(u(11, 0.75, 0.85))}, 1.0, sin(anim * {F(u(12, 1.5, 3.0))} + tw * 6.2831) * 0.5 + 0.5) * step({F(u(13, 0.965, 0.985))}, tw);",
-        f"vec3 outColor = dream + Primary.rgb * twinkle * {F(u(14, 0.3, 0.5))} * animAmp;",
-    ]
+    if _RATE_CAPPED:
+        # 840-flip ids: the paramA-scaled anim would flash these motes at
+        # 3-5+ Hz (photosensitivity), so the twinkle sine runs on an
+        # INDEPENDENT unit-rate clock (GameTime only -- neither Speed nor the
+        # drift boost can accelerate it); the baked rate stays under 2.4 Hz.
+        sparkle = [
+            "// Sparkles: rate-capped twinkle on an independent unit-rate clock",
+            "// (photosensitivity: the paramA-scaled anim reaches 3-5+ Hz here).",
+            f"vec2 cellUv = floor(texCoord * safeInSize / {F(u(10, 8.0, 16.0))});",
+            "float tw = hash21(cellUv);",
+            "float twClock = GameTime * 1200.0 + ParamsB.x * 61.8;",
+            f"float twinkle = smoothstep({F(u(11, 0.75, 0.85))}, 1.0, sin(twClock * {F(u(12, 6.0, 15.0))} + tw * 6.2831) * 0.5 + 0.5) * step({F(u(13, 0.965, 0.985))}, tw);",
+            f"vec3 outColor = dream + Primary.rgb * twinkle * {F(u(14, 0.3, 0.5))} * animAmp;",
+        ]
+    else:
+        sparkle = [
+            f"vec2 cellUv = floor(texCoord * safeInSize / {F(u(10, 8.0, 16.0))});",
+            "float tw = hash21(cellUv);",
+            f"float twinkle = smoothstep({F(u(11, 0.75, 0.85))}, 1.0, sin(anim * {F(u(12, 1.5, 3.0))} + tw * 6.2831) * 0.5 + 0.5) * step({F(u(13, 0.965, 0.985))}, tw);",
+            f"vec3 outColor = dream + Primary.rgb * twinkle * {F(u(14, 0.3, 0.5))} * animAmp;",
+        ]
     if v == "soft9":
         return [
             "// 9-tap soft blur veils the scene; hash-cell sparkles twinkle on top.",
@@ -1215,7 +1241,15 @@ def fam_moire(v, u):
 #   divides by (or scales purely with) those knobs -- frequencies are baked
 #   per-id via u(), and ParamsA.w is only used through a max() guard;
 # * amplitude knobs ride min(strength, 1.0) / clamp(strength, 0.0, 1.0) so an
-#   unexpected packing cannot over-drive an additive or displacement term.
+#   unexpected packing cannot over-drive an additive or displacement term;
+# * flash-capable code that STRADDLES the flip (the shared sparkle/grain
+#   overlays, dreamblur's twinkle) is additionally rate-capped for ids >=
+#   V5_FLIP_START: it ticks on an independent unit-rate clock
+#   (GameTime * 1200.0, never the paramA-scaled anim) with a per-id baked
+#   rate that stays under ~2.5 Hz -- see overlay_lines / fam_dreamblur.
+#   Thermal (a whole-screen false-color remap) additionally carries a
+#   luma-band guarantee (see fam_thermal) so no id can white-out or
+#   black-out the scene.
 # ---------------------------------------------------------------------------
 
 
@@ -1384,14 +1418,32 @@ def fam_thermal(v, u):
     # Luma -> false-color ramp built from the FxConfig palette, biased by a
     # slowly DRIFTING hotspot field. Strictly a per-pixel remap: no hard cuts,
     # the only motion is the sub-0.1-rate noise drift (flicker-free).
+    #
+    # Legibility band (playability): thermal is a WHOLE-SCREEN remap, so it
+    # gets belt-and-braces bounds on top of the shared ParamsB.w floor:
+    # * the ramp's hot peak is capped below pure white (<= ~0.88);
+    # * the blend always keeps a fixed share of the true scene -- the
+    #   inverted variant reads dark scenes as ~fully hot (black -> near-
+    #   white before this fix), so its blend caps at 0.55 (>= 45% of the
+    #   real scene always survives); the other variants cap at 0.85;
+    # * the composite is luma-banded: a hue-preserving ceiling at 0.75
+    #   stops any palette/variant from washing the view toward white, and
+    #   a 0.05 channel floor stops near-black palettes from crushing it --
+    #   no thermal id can white-out or black-out the screen.
     ramp = [
         "// False-color ramp: cold Secondary depths through the palette to a",
-        "// white-hot peak.",
+        "// capped hot peak (never pure white -- legibility ceiling).",
         f"vec3 coldTone = Secondary.rgb * {F(u(8, 0.14, 0.22))};",
         f"vec3 ramped = mix(coldTone, Secondary.rgb, smoothstep(0.0, {F(u(9, 0.42, 0.5))}, heat));",
         f"ramped = mix(ramped, Primary.rgb, smoothstep({F(u(10, 0.36, 0.44))}, {F(u(11, 0.72, 0.82))}, heat));",
-        f"ramped = mix(ramped, vec3(1.0), smoothstep({F(u(12, 0.84, 0.9))}, 1.0, heat));",
-        "vec3 outColor = mix(base, ramped, clamp(strength, 0.0, 1.0));",
+        f"ramped = mix(ramped, vec3({F(u(13, 0.80, 0.88))}), smoothstep({F(u(12, 0.84, 0.9))}, 1.0, heat));",
+        "// Luma band: keep a fixed share of the real scene, ceiling the read",
+        "// hue-preservingly at 0.75 luma and floor it at 0.05 per channel so",
+        "// no palette/variant can white-out or black-out the screen.",
+        "vec3 toned = mix(base, ramped, thermalMix);",
+        "float tonedLuma = luma(toned);",
+        "toned *= min(tonedLuma, 0.75) / max(tonedLuma, 0.001);",
+        "vec3 outColor = max(toned, vec3(0.05));",
     ]
     blob = [
         "// Drifting hotspot field biases the reading before the ramp.",
@@ -1399,17 +1451,22 @@ def fam_thermal(v, u):
     ]
     if v == "classic":
         return blob + [
+            "float thermalMix = clamp(strength, 0.0, 0.85);",
             f"float heat = clamp(baseLuma + (blob - 0.5) * {F(u(3, 0.2, 0.3))} * min(strength, 1.0), 0.0, 1.0);",
         ] + ramp, {"luma", "vnoise"}
     if v == "inverted":
         return blob + [
-            "// Inverted sensor: shadows read hot, highlights read cold.",
+            "// Inverted sensor: shadows read hot, highlights read cold. Dark",
+            "// scenes therefore read ~fully hot, so the blend cap is tighter",
+            "// (anti-whiteout: a black scene stays under ~0.5 output luma).",
+            "float thermalMix = clamp(strength, 0.0, 0.55);",
             f"float heat = clamp(1.0 - baseLuma + (blob - 0.5) * {F(u(3, 0.2, 0.3))} * min(strength, 1.0), 0.0, 1.0);",
         ] + ramp, {"luma", "vnoise"}
     if v == "banded":
         levels = float(int(u(4, 5.0, 8.99)))
         return blob + [
             "// Quantized isotherm bands, like a cheap thermography readout.",
+            "float thermalMix = clamp(strength, 0.0, 0.85);",
             f"float heat = clamp(baseLuma + (blob - 0.5) * {F(u(3, 0.18, 0.26))} * min(strength, 1.0), 0.0, 1.0);",
             f"heat = floor(heat * {F(levels)} + 0.5) / {F(levels)};",
         ] + ramp, {"luma", "vnoise"}
@@ -1417,6 +1474,7 @@ def fam_thermal(v, u):
     return blob + [
         "// A second, tighter octave makes distinct wandering hot blobs.",
         f"float blobB = vnoise(texCoord * {F(u(4, 7.0, 11.0))} - vec2(anim * {F(u(5, 0.03, 0.06))}, anim * {F(u(6, 0.05, 0.09))}));",
+        "float thermalMix = clamp(strength, 0.0, 0.85);",
         f"float heat = clamp(baseLuma + (blob * 0.6 + blobB * 0.4 - 0.5) * {F(u(3, 0.3, 0.45))} * min(strength, 1.0), 0.0, 1.0);",
     ] + ramp, {"luma", "vnoise"}
 
@@ -1724,10 +1782,30 @@ def motion_lines(motion, u):
     ]
 
 
-def overlay_lines(overlay, u):
+def overlay_lines(overlay, u, rate_capped):
+    """The shared overlays. rate_capped=True for the 840-flip ids (>= V5_FLIP_START):
+    their paramA reaches ~10.4, so the paramA-scaled `anim` would tick the
+    sparkle twinkle at 3-5 Hz and hard-refresh the grain at up to ~100 Hz --
+    over the sub-3 Hz photosensitivity budget. Those ids instead run on an
+    INDEPENDENT unit-rate clock (GameTime only, never anim, so neither Speed
+    nor the drift boost can accelerate it) with a per-id baked rate whose
+    worst case stays under ~2.5 Hz. Ids < V5_FLIP_START keep the frozen
+    anim-driven form byte-for-byte."""
     if overlay == "none":
         return [], set()
     if overlay == "grain":
+        if rate_capped:
+            return [
+                "// Overlay: living film grain. Photosensitivity: the refresh ticks on",
+                "// an INDEPENDENT unit-rate clock (GameTime only, never the",
+                "// paramA-scaled anim, which would hard-refresh at up to ~100 Hz",
+                "// here); the baked per-id rate keeps every reroll under 2.5 Hz.",
+                "// The frame counter wraps at 256 so the hash input stays",
+                "// fp32-friendly across the whole GameTime day.",
+                "float grainClock = GameTime * 1200.0 + ParamsB.x * 61.8;",
+                f"float grainFrame = mod(floor(grainClock * {F(u(70, 1.5, 2.5))}), 256.0);",
+                f"outColor += (hash21(floor(texCoord * safeInSize) + vec2(grainFrame, 0.0)) - 0.5) * {F(u(71, 0.02, 0.04))};",
+            ], {"hash21"}
         return [
             "// Overlay: living film grain (frame counter wrapped at 256 so the",
             "// hash input stays fp32-friendly across the whole GameTime day).",
@@ -1735,6 +1813,18 @@ def overlay_lines(overlay, u):
             f"outColor += (hash21(floor(texCoord * safeInSize) + vec2(grainFrame, 0.0)) - 0.5) * {F(u(71, 0.02, 0.04))};",
         ], {"hash21"}
     if overlay == "sparkle":
+        if rate_capped:
+            return [
+                "// Overlay: sparse twinkling motes. Photosensitivity: the twinkle",
+                "// sine runs on an INDEPENDENT unit-rate clock (GameTime only, never",
+                "// the paramA-scaled anim, which reaches ~3-5 Hz at these ids); the",
+                "// baked per-id rate keeps every flash cycle under 2.4 Hz.",
+                f"vec2 oCell = floor(texCoord * safeInSize / {F(u(70, 10.0, 18.0))});",
+                "float oTw = hash21(oCell + vec2(37.0, 91.0));",
+                "float oClock = GameTime * 1200.0 + ParamsB.x * 61.8;",
+                f"float oTwinkle = smoothstep({F(u(71, 0.8, 0.88))}, 1.0, sin(oClock * {F(u(72, 6.0, 15.0))} + oTw * 6.2831) * 0.5 + 0.5) * step({F(u(73, 0.975, 0.99))}, oTw);",
+                f"outColor += Secondary.rgb * oTwinkle * {F(u(74, 0.25, 0.4))};",
+            ], {"hash21"}
         return [
             "// Overlay: sparse twinkling motes.",
             f"vec2 oCell = floor(texCoord * safeInSize / {F(u(70, 10.0, 18.0))});",
@@ -1752,7 +1842,10 @@ def overlay_lines(overlay, u):
 
 
 def emit_shader(asg: dict) -> str:
+    global _RATE_CAPPED
     effect_id = asg["id"]
+    rate_capped = effect_id >= V5_FLIP_START
+    _RATE_CAPPED = rate_capped
     rng = Rng(asg["seed"])
     draws = [rng.unit() for _ in range(96)]
 
@@ -1760,7 +1853,7 @@ def emit_shader(asg: dict) -> str:
         return lo + (hi - lo) * draws[i]
 
     body_lines, body_helpers = FAMILY_BODIES[asg["family"]](asg["variant"], u)
-    ov_lines, ov_helpers = overlay_lines(asg["overlay"], u)
+    ov_lines, ov_helpers = overlay_lines(asg["overlay"], u, rate_capped)
     helper_names = resolve_helpers({"luma"} | body_helpers | ov_helpers)
 
     lines = []

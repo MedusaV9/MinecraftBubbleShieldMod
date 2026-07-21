@@ -74,15 +74,22 @@ void main() {
     }
     blurred /= 9.0;
     vec3 dream = mix(base, blurred * 1.0908, clamp(strength, 0.0, 0.85));
+    // Sparkles: rate-capped twinkle on an independent unit-rate clock
+    // (photosensitivity: the paramA-scaled anim reaches 3-5+ Hz here).
     vec2 cellUv = floor(texCoord * safeInSize / 8.3636);
     float tw = hash21(cellUv);
-    float twinkle = smoothstep(0.7823, 1.0, sin(anim * 2.8932 + tw * 6.2831) * 0.5 + 0.5) * step(0.9782, tw);
+    float twClock = GameTime * 1200.0 + ParamsB.x * 61.8;
+    float twinkle = smoothstep(0.7823, 1.0, sin(twClock * 14.3591 + tw * 6.2831) * 0.5 + 0.5) * step(0.9782, tw);
     vec3 outColor = dream + Primary.rgb * twinkle * 0.3049 * animAmp;
 
-    // Overlay: sparse twinkling motes.
+    // Overlay: sparse twinkling motes. Photosensitivity: the twinkle
+    // sine runs on an INDEPENDENT unit-rate clock (GameTime only, never
+    // the paramA-scaled anim, which reaches ~3-5 Hz at these ids); the
+    // baked per-id rate keeps every flash cycle under 2.4 Hz.
     vec2 oCell = floor(texCoord * safeInSize / 12.5459);
     float oTw = hash21(oCell + vec2(37.0, 91.0));
-    float oTwinkle = smoothstep(0.8524, 1.0, sin(anim * 1.3795 + oTw * 6.2831) * 0.5 + 0.5) * step(0.9815, oTw);
+    float oClock = GameTime * 1200.0 + ParamsB.x * 61.8;
+    float oTwinkle = smoothstep(0.8524, 1.0, sin(oClock * 7.3464 + oTw * 6.2831) * 0.5 + 0.5) * step(0.9815, oTw);
     outColor += Secondary.rgb * oTwinkle * 0.2830;
 
     // Richness pass (v3): a bounded soft-contrast curve plus a vibrance

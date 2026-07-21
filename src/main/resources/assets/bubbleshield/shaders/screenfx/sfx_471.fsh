@@ -66,19 +66,33 @@ void main() {
 
     // Drifting hotspot field biases the reading before the ramp.
     float blob = vnoise(texCoord * 3.4877 + vec2(anim * 0.0514, anim * 0.0200));
-    // Inverted sensor: shadows read hot, highlights read cold.
+    // Inverted sensor: shadows read hot, highlights read cold. Dark
+    // scenes therefore read ~fully hot, so the blend cap is tighter
+    // (anti-whiteout: a black scene stays under ~0.5 output luma).
+    float thermalMix = clamp(strength, 0.0, 0.55);
     float heat = clamp(1.0 - baseLuma + (blob - 0.5) * 0.2952 * min(strength, 1.0), 0.0, 1.0);
     // False-color ramp: cold Secondary depths through the palette to a
-    // white-hot peak.
+    // capped hot peak (never pure white -- legibility ceiling).
     vec3 coldTone = Secondary.rgb * 0.1478;
     vec3 ramped = mix(coldTone, Secondary.rgb, smoothstep(0.0, 0.4270, heat));
     ramped = mix(ramped, Primary.rgb, smoothstep(0.4163, 0.7265, heat));
-    ramped = mix(ramped, vec3(1.0), smoothstep(0.8551, 1.0, heat));
-    vec3 outColor = mix(base, ramped, clamp(strength, 0.0, 1.0));
+    ramped = mix(ramped, vec3(0.8133), smoothstep(0.8551, 1.0, heat));
+    // Luma band: keep a fixed share of the real scene, ceiling the read
+    // hue-preservingly at 0.75 luma and floor it at 0.05 per channel so
+    // no palette/variant can white-out or black-out the screen.
+    vec3 toned = mix(base, ramped, thermalMix);
+    float tonedLuma = luma(toned);
+    toned *= min(tonedLuma, 0.75) / max(tonedLuma, 0.001);
+    vec3 outColor = max(toned, vec3(0.05));
 
-    // Overlay: living film grain (frame counter wrapped at 256 so the
-    // hash input stays fp32-friendly across the whole GameTime day).
-    float grainFrame = mod(floor(anim * 8.6379), 256.0);
+    // Overlay: living film grain. Photosensitivity: the refresh ticks on
+    // an INDEPENDENT unit-rate clock (GameTime only, never the
+    // paramA-scaled anim, which would hard-refresh at up to ~100 Hz
+    // here); the baked per-id rate keeps every reroll under 2.5 Hz.
+    // The frame counter wraps at 256 so the hash input stays
+    // fp32-friendly across the whole GameTime day.
+    float grainClock = GameTime * 1200.0 + ParamsB.x * 61.8;
+    float grainFrame = mod(floor(grainClock * 2.4095), 256.0);
     outColor += (hash21(floor(texCoord * safeInSize) + vec2(grainFrame, 0.0)) - 0.5) * 0.0347;
 
     // Richness pass (v3): a bounded soft-contrast curve plus a vibrance
