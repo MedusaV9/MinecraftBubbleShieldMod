@@ -10,14 +10,16 @@ with a fixed precision -- so diffs stay reviewable.
 
 Design (see /tmp/shader_plan.md sections 1, 2, 4.1 and AGENTS.md):
 
-* Frozen fragment contract: `#version 330`; only `#moj_import <minecraft:fog.glsl>`
+* Fragment contract (v6): `#version 330`; only `#moj_import <minecraft:fog.glsl>`
   and `<minecraft:globals.glsl>`; inputs texCoord0 (RAW [0,1] sphere UV),
   vertexColor (rgb = palette = dominant chroma, a = dissolve; the final alpha
   is vertexColor.a * clamp(a0 + a1 * pattern, 0, 1), so the dissolve always
   wins), sphericalVertexDistance, cylindricalVertexDistance; out fragColor;
-  animation ONLY via `float time = GameTime * 1200.0;`; NO custom uniforms,
-  NO textures; `discard` when alpha < 0.01; the last statement applies
-  apply_fog exactly like the 16 original hand-written seed shaders did.
+  animation ONLY via `float time = GameTime * 1200.0;`; the ONLY uniform
+  beyond the vanilla imports is `uniform sampler2D Sampler0` (the shipped
+  surface atlas, see the v6 bullet below -- ShieldPipelines binds it through
+  the SAMPLER0 bind group); `discard` when alpha < 0.01; the last statement
+  applies apply_fog exactly like the 16 original hand-written seed shaders.
 
 * Portability/robustness rules baked into every emitted file:
   - `invsmooth(lo, hi, x)` (== 1 - smoothstep(lo, hi, x)) replaces every
@@ -151,6 +153,37 @@ Design (see /tmp/shader_plan.md sections 1, 2, 4.1 and AGENTS.md):
   soft-knee highlight rolloff. Only builtins (gl_FrontFacing, gl_FragCoord)
   -- no new uniforms, no textures; the vertexColor.a dissolve still wins.
 
+* v6 sampled-texture layer (EVERY file; byte-stability of older rounds is
+  deliberately given up this round): each shader samples ONE tile of the
+  shipped surface atlas (assets/bubbleshield/textures/effect/surface_atlas.png,
+  2048x2048 RGBA, a 4x4 grid of 16 SEAMLESS 512px tiles; identifier
+  bubbleshield:textures/effect/surface_atlas.png, LINEAR + REPEAT via its
+  .mcmeta) through `uniform sampler2D Sampler0`, declared right after the
+  moj_imports and bound by ShieldPipelines' SAMPLER0 bind group. Channel
+  contract per texel: R = coarse structural layer, G = mid-scale detail,
+  B = fine grain, A = EMISSION MASK (glow, NOT transparency). All channels
+  are neutral grayscale -- every hue still comes from vertexColor (recolor-
+  safe). The tile is picked per FAMILY (FAMILY_TILE, thematic; all 16 tiles
+  are used) and sampled from the family's animated/warped `wuv` domain with
+  an integer tile-repeat multiplier (u-wrap- and day-wrap-safe: wuv's drift
+  is already quantized to integer lattice periods per day and texMul is an
+  integer) plus an inset `clamp(fract(...), 0.004, 0.996)` so the lookup can
+  never bleed into a neighboring tile. Three contributions, all LIVE paths
+  into fragColor (a dead sample would be eliminated and trip the per-pipeline
+  "does not use sampler Sampler0" warning x COUNT):
+  - `texDetail` (weighted R/G/B mix) modulates + lifts the family's `mid`
+    signature ([layer:tex:<tile>] marker) and multiplies the composited body
+    rgb, so real multi-scale texture detail reads everywhere;
+  - `emit` (atlas.a, scaled by the family's own pattern highlight and a slow
+    day-quantized breath -- spatial, never a full-field >3Hz strobe) ADDS a
+    bright hue-preserving palette tint (baseCol pushed toward white by a
+    bounded baked amount) into rgb ([layer:emit:atlas_a] marker) and feeds
+    the alpha, so filament cores / cell edges / cracks / sparkles GLOW;
+  - solidity lift: the presence-alpha knobs are raised (a higher no-pattern
+    base derived from the family floor, floor +0.14, ceiling +0.06 capped at
+    0.97) so the membrane reads SOLID (body alpha ~0.55-0.9 by family) while
+    the vertexColor.a dissolve still always wins.
+
 * v5 correctness fixes (also gated to FAMILIES_V5, so pre-v5 bytes never
   change):
   - DAY-WRAP twinkles: hash-picked twinkle RATES like sin(time*(a + b*h))
@@ -194,8 +227,11 @@ Design (see /tmp/shader_plan.md sections 1, 2, 4.1 and AGENTS.md):
 
 * Compile safety: conservative GLSL 330 subset only -- const-bounded for
   loops (fbm <= 6 octaves, parallax <= 4 taps, voronoi 3x3/5x5), no while, no
-  switch, no texture(), no arrays-of-structs, no uniforms beyond the two
-  vanilla imports, explicit float literals, every function defined before use.
+  switch, no arrays-of-structs, no uniforms beyond the two vanilla imports
+  plus the plain `uniform sampler2D Sampler0` atlas declaration (NO
+  layout(binding=...) qualifier -- that fails at #version 330), exactly one
+  texture() call per file (the atlas tile sample, always live into
+  fragColor), explicit float literals, every function defined before use.
 
 Usage:
     python3 tools/gen_surface_shaders.py                  # all 420 + manifest
@@ -277,6 +313,60 @@ FAMILIES_3D_MID = frozenset({
 # every pre-v5 file byte-identical under regeneration.
 FAMILIES_V5 = frozenset(FAMILIES[40:])
 assert len(FAMILIES_V5) == 20 and "CRYSTALREFRACT" not in FAMILIES_V5
+
+# The 16 shipped surface-atlas tiles (surface_atlas.png: 4x4 grid, row-major
+# index 0..15; each 512px tile is individually seamless). Names document the
+# baked structure only -- all channels are neutral grayscale (R coarse,
+# G mid, B fine, A emission mask), so the shader tints them at runtime.
+ATLAS_TILES = [
+    "fbm_turbulence", "worley_cells", "cracked_glass", "hex_lattice",
+    "caustic_web", "filaments", "scales", "circuit",
+    "starfield", "chrome", "marble_ink", "honeycomb",
+    "runes", "ridged", "foam", "nebula",
+]
+
+# family -> atlas tile index, matched by technique (v6). Every family samples
+# exactly one tile; every tile is used by at least one family (asserted below).
+FAMILY_TILE = {
+    # cloudy / turbulent field techniques -> fbm_turbulence
+    "VOLUMECLOUD": 0, "EMBERSTORM": 0, "SPECTRALVEIL": 0, "RAYMARCHFOG": 0,
+    "AETHERSMOKE": 0,
+    # cellular / faceted-pane techniques -> worley_cells
+    "VORONOI": 1, "CRYSTALREFRACT": 1, "STAINEDGLASS": 1, "SOLARFLARE": 1,
+    # shard / fracture / ice techniques -> cracked_glass
+    "KALEIDO": 2, "LAVAFLOW": 2, "FROSTFERN": 2, "SHARDTESS": 2,
+    "CRYSTALSDF": 2, "DEEPICE": 2, "VOIDRIFT": 2,
+    # hex / tri lattice techniques -> hex_lattice
+    "HEX": 3, "TRIWEAVE": 3,
+    # water-light / wave-grating techniques -> caustic_web
+    "WAVES": 4, "INTERFERENCE": 4, "CAUSTIC": 4,
+    # bolt / tendril / curtain-ray techniques -> filaments
+    "AURORA": 5, "ARCS": 5, "LIGHTNING": 5, "TENDRILNET": 5,
+    "RIBBONAURORA": 5, "MYCELIA": 5, "PLASMAGLOBE": 5,
+    # imbricated plate techniques -> scales
+    "SCALES": 6, "PETALS": 6,
+    # trace / grid-glyph board techniques -> circuit
+    "CIRCUIT": 7, "HOLOGRID": 7, "HOLOPARALLAX": 7,
+    # point-star / twinkle techniques -> starfield
+    "SPARKLE": 8, "STARFIELD": 8, "GALAXYSWIRL": 8, "GRAVLENS": 8,
+    # smooth reflective / iridescent-band techniques -> chrome
+    "THINFILM": 9, "MOIRE": 9, "CHROME": 9, "PRISMDISPERSE": 9,
+    "IRISFILM": 9, "OILSLICK": 9,
+    # swirled fluid / fold techniques -> marble_ink
+    "VORTEX": 10, "CURLSMOKE": 10, "ORBITTRAP": 10, "FLUIDINK": 10,
+    # rounded glowing-cell technique -> honeycomb
+    "BIOLUME": 11,
+    # tiled glyph / arc-maze / mandala techniques -> runes
+    "TRUCHET": 12, "SACREDGEO": 12, "RUNECIRCUIT": 12,
+    # crest / anisotropic-ridge / band techniques -> ridged
+    "RINGS": 13, "RIDGED": 13, "VOIDTENDRIL": 13,
+    # blobby froth / ghost-membrane techniques -> foam
+    "PHANTOMECHO": 14, "ECTOPLASM": 14,
+    # deep gas / fractal-glow techniques -> nebula
+    "PLASMA": 15, "NEBULA": 15, "KALISET": 15, "PORTALVOID": 15,
+}
+assert set(FAMILY_TILE) == set(FAMILIES), "FAMILY_TILE must cover every family exactly"
+assert set(FAMILY_TILE.values()) == set(range(16)), "every atlas tile must be used by >= 1 family"
 
 MASK64 = (1 << 64) - 1
 
@@ -2240,21 +2330,23 @@ MID_SCALE_RANGES = {
 def emit_shader(asg: dict) -> str:
     """Emits one standalone .fsh for the given assignment row.
 
-    Draw-index reservations (the PRNG stream is 128 unit draws; the first 96
+    Draw-index reservations (the PRNG stream is 144 unit draws; the first 96
     keep their v2 meanings so regenerated files stay maximally diff-stable):
       0..39   shared helper knobs, 40..49 family knobs, 50..59 rim knobs,
       60..61 flourish, 62..83 composite/deep v2 knobs (some now unused but
       still drawn for stream stability), 84..95 gradient3/alpha knobs,
       96..127 v3 depth/3D-domain knobs (v4 adds 123..127 for the
       Beer-Lambert / soft-clip knobs and repurposes 85 for the hot-stop
-      saturation lift). The draws are POSITIONAL lookups into a fixed
-      128-entry table, so a composer reusing a spare index only correlates
-      two knobs -- it can never shift any other draw.
+      saturation lift), 128..143 v6 atlas-texture/emission knobs (appended
+      to the stream, so extending 128 -> 144 shifted no older draw). The
+      draws are POSITIONAL lookups into a fixed 144-entry table, so a
+      composer reusing a spare index only correlates two knobs -- it can
+      never shift any other draw.
     """
     effect_id = asg["id"]
     family = asg["family"]
     rng = Rng(asg["seed"])
-    draws = [rng.unit() for _ in range(128)]
+    draws = [rng.unit() for _ in range(144)]
 
     def u(i, lo, hi):
         return lo + (hi - lo) * draws[i]
@@ -2485,10 +2577,18 @@ def emit_shader(asg: dict) -> str:
     hlw = F(u(89, 0.20, 0.40))         # soft-clip mix weight on hot crests
     pk = F(u(90, 0.70, 0.95))          # pattern -> gradient position scale
     rk = F(u(91, 0.12, 0.30))          # chromatic rim gradient offset
-    a_base = F(u(92, 0.04, 0.08))      # alpha where no pattern (dark, thin)
-    a_floor = F(u(93, *pres["floor"])) # family-tuned presence floor
+    # v6 solidity lift: the shield must read SOLID, not see-through. The
+    # no-pattern base alpha is derived from the family's presence floor
+    # (sparse-dark families keep thinner gaps, dense families a firm body),
+    # the presence floor gains +0.14 and the ceiling +0.06 (capped at 0.97).
+    # Body alpha lands around 0.55-0.9 by family; the vertexColor.a dissolve
+    # near whitelisted players still always wins (it multiplies everything).
+    floor_lo, floor_hi = pres["floor"]
+    amax_lo, amax_hi = pres["amax"]
+    a_base = F(u(92, 0.22 + 0.45 * floor_lo, 0.28 + 0.45 * floor_hi))
+    a_floor = F(u(93, floor_lo + 0.14, floor_hi + 0.14))
     a_gain = F(u(94, *pres["gain"]))   # family-tuned alpha rise on features
-    a_max = F(u(95, *pres["amax"]))    # family-tuned translucency ceiling
+    a_max = F(u(95, min(0.96, amax_lo + 0.06), min(0.97, amax_hi + 0.06)))
 
     # v3 3D-depth knobs (indices 96..127).
     def unit3(i0):
@@ -2536,11 +2636,37 @@ def emit_shader(asg: dict) -> str:
         v5_sp_w = F(u(114, 0.10, 0.22))     # slope-parallax pattern weight
         v5_sp_step = u(115, 0.05, 0.11)     # slope-parallax per-tap offset
         v5_sp_scale = u(67, 1.4, 2.4)       # slope-parallax domain scale
-        v5_ghost_lo = u(68, 0.38, 0.55)     # ghost-alpha floor at zero luminance
+        # v6: the ghost floor is raised (was 0.38..0.55) -- dark areas still
+        # thin out relative to bright features, but never back to see-through.
+        v5_ghost_lo = u(68, 0.62, 0.78)     # ghost-alpha floor at zero luminance
         v5_knee = u(70, 0.62, 0.78)         # soft-knee highlight start
         v5_knee_k = F(u(71, 1.6, 2.6))      # soft-knee compression steepness
         v5_dither = F(u(75, 0.06, 0.14))    # blue-noise alpha dither amplitude
         v5_pole_w = u(109, 0.09, 0.15)      # pole-guard fade latitude (2D-mid families)
+
+    # v6 atlas-texture/emission knobs (indices 128..143, appended to the draw
+    # stream). The tile is family-picked (FAMILY_TILE); tex_mul is an INTEGER,
+    # so the tile lookup stays exact across the u = 0/1 wrap (wuv spans an
+    # integer lattice period per wrap) and day-wrap-safe (wuv's drifts already
+    # shift integer lattice periods per day).
+    tile = FAMILY_TILE[family]
+    tile_name = ATLAS_TILES[tile]
+    tex_mul = max(1, round(u(128, 8.0, 16.0) / sx))  # target ~8..16 tile repeats per u wrap
+    tex_wr = F(u(129, 0.35, 0.60))     # coarse structural layer weight (atlas.r)
+    tex_wg = F(u(130, 0.30, 0.55))     # mid-scale detail weight (atlas.g)
+    tex_wb = F(u(131, 0.20, 0.45))     # fine grain weight (atlas.b)
+    tex_mm0 = F(u(132, 0.60, 0.75))    # mid modulation floor
+    tex_mm1 = F(u(133, 0.45, 0.75))    # mid modulation depth (x texDetail)
+    tex_ma = F(u(134, 0.18, 0.35))     # additive texture lift into mid
+    tex_body = u(135, 0.30, 0.48)      # body rgb modulation depth
+    emit_e0 = F(u(136, 0.55, 0.80))    # emission mask base weight
+    emit_e1 = F(u(137, 0.25, 0.50))    # emission lift on the family's own highlights
+    emit_gain = F(u(138, 0.65, 1.00))  # emissive add strength into rgb
+    emit_lift = F(u(139, 0.35, 0.55))  # palette -> bright tint push toward white (bounded)
+    emit_breathe_speed = F6(quant_sin_speed(u(140, 0.10, 0.30)))  # slow, day-quantized
+    emit_breathe_depth = F(u(141, 0.08, 0.18))
+    emit_alpha = F(u(142, 0.12, 0.22))  # emission contribution to the presence alpha
+
     sec_ang, sec_sat, sec_val = secondary_consts(
         asg["primary"], asg["secondary"] if asg.get("secondary") is not None else asg["primary"])
 
@@ -2597,8 +2723,15 @@ def emit_shader(asg: dict) -> str:
     lines.append("#moj_import <minecraft:fog.glsl>")
     lines.append("#moj_import <minecraft:globals.glsl>")
     lines.append("")
+    lines.append("// The shipped surface atlas (bubbleshield:textures/effect/surface_atlas.png,")
+    lines.append("// bound by ShieldPipelines through the SAMPLER0 bind group): a 4x4 grid of 16")
+    lines.append("// seamless grayscale tiles. Per texel: R = coarse structure, G = mid detail,")
+    lines.append("// B = fine grain, A = EMISSION mask (glow, NOT transparency). All hue comes")
+    lines.append("// from vertexColor at runtime (recolor-safe).")
+    lines.append("uniform sampler2D Sampler0;")
+    lines.append("")
     lines.append(f"// Bubble surface shader fx_{effect_id:03d} -- family {family}")
-    lines.append(f"// stack: deep={asg['deep']} x{taps} taps | mid={family.lower()}+{warp}+{anim} | rim={rim} | flourish={flourish}")
+    lines.append(f"// stack: deep={asg['deep']} x{taps} taps | mid={family.lower()}+{warp}+{anim} | rim={rim} | flourish={flourish} | tex={tile_name}")
     lines.append(f"// fbm: {c['fbmMode']} x{c['octaves']} octaves | seed {asg['seed']:016x}")
     lines.append("// GENERATED by tools/gen_surface_shaders.py -- do not hand-edit; edit the")
     lines.append("// generator and regenerate instead (byte-stable, fixed seed).")
@@ -2689,6 +2822,20 @@ def emit_shader(asg: dict) -> str:
     for ln in mid_lines:
         lines.append("    " + ln)
     lines.append("")
+    lines.append(f"    // [layer:tex:{tile_name}]")
+    lines.append(f"    // Real sampled detail from atlas tile {tile} ({tile_name}), matched to this")
+    lines.append("    // family's technique. The INTEGER repeat multiplier keeps the lookup exact")
+    lines.append("    // across the u = 0/1 wrap (wuv spans an integer lattice period per wrap,")
+    lines.append("    // and its drifts shift integer periods per day -- so day-wrap-safe too);")
+    lines.append("    // the inset clamp keeps the linear-filtered sample inside this tile.")
+    lines.append(f"    vec2 texUV = wuv * {F(float(tex_mul))};")
+    lines.append(f"    vec2 tileUV = (vec2({F(float(tile % 4))}, {F(float(tile // 4))}) + clamp(fract(texUV), 0.004, 0.996)) * 0.25;")
+    lines.append("    vec4 atlas = texture(Sampler0, tileUV);")
+    lines.append(f"    float texDetail = clamp(atlas.r * {tex_wr} + atlas.g * {tex_wg} + atlas.b * {tex_wb}, 0.0, 1.0);")
+    lines.append("    // the multi-scale texture layers modulate AND lift the signature, so the")
+    lines.append("    // membrane carries real fine structure even between pattern features")
+    lines.append(f"    mid = clamp(mid * ({tex_mm0} + {tex_mm1} * texDetail) + {tex_ma} * texDetail, 0.0, 1.5);")
+    lines.append("")
     lines.append(f"    // [layer:rim:{rim}]")
     lines.append("    // Silhouette / band lift so the membrane reads as a curved shell:")
     lines.append("    // a wide soft inner glow (style-specific) plus a thin hot line at")
@@ -2727,6 +2874,10 @@ def emit_shader(asg: dict) -> str:
     lines.append("    vec3 rgb = gradient3(deepStop, baseCol, hotStop, gpos);")
     lines.append(f"    float midCover = clamp({mwc} * mid + {rwc} * rim, 0.0, 1.0);")
     lines.append("    rgb = mix(deepCol, rgb, midCover);")
+    lines.append("    // [layer:tex:body] -- the sampled multi-scale detail also grades the")
+    lines.append("    // composited body (deep volume included), so the real texture reads")
+    lines.append("    // everywhere on the membrane, not only inside the mid signature.")
+    lines.append(f"    rgb *= {F(1.0 - 0.45 * tex_body)} + {F(1.10 * tex_body)} * texDetail;")
     lines.append(f"    rgb = satLift(rgb, {sat});")
     lines.append("    // Hue-preserving soft-clip on the hot crests: brightness saturates")
     lines.append("    // toward the palette's own bright tint (1 - exp(-k * hotStop * x)),")
@@ -2746,6 +2897,16 @@ def emit_shader(asg: dict) -> str:
     lines.append(f"    rgb = mix(rgb, rgb * (0.72 + 0.56 * rimDisp), clamp(rim, 0.0, 1.0) * {F(u(83, 0.10, 0.22))});")
     lines.append(f"    vec3 lineDisp = 0.5 + 0.5 * cos(vec3(0.6452, 0.8065, 1.0) * (rimLine * {line_disp_f} + baseUV.y * 0.31 + {line_disp_p}) * 6.2831853);")
     lines.append(f"    rgb = mix(rgb, hotStop * (0.62 + 0.50 * lineDisp), clamp(rimLine, 0.0, 1.0) * {line_disp_w});")
+    lines.append("    // [layer:emit:atlas_a]")
+    lines.append("    // Emissive glow: atlas.a is an EMISSION mask (never transparency) --")
+    lines.append("    // filament cores / cell edges / cracks / sparkles ADD a bright, hue-")
+    lines.append("    // preserving tint of the live palette (baseCol pushed toward white by a")
+    lines.append("    // bounded baked amount, so recolor-safe). Scaled by the family's own")
+    lines.append("    // pattern highlight and a slow day-quantized breath: the glow is spatial,")
+    lines.append("    // never a full-field strobe.")
+    lines.append(f"    vec3 emitCol = clamp(mix(baseCol, vec3(1.0), {emit_lift}), 0.0, 1.0);")
+    lines.append(f"    float emit = atlas.a * ({emit_e0} + {emit_e1} * clamp(pattern, 0.0, 1.0)) * (1.0 - {emit_breathe_depth} * (0.5 + 0.5 * sin(time * {emit_breathe_speed})));")
+    lines.append(f"    rgb += emit * {emit_gain} * emitCol;")
     if is_v5:
         lines.append("    // [layer:v5:softknee]")
         lines.append("    // v5 soft-knee highlight rolloff: channels over the knee compress")
@@ -2753,12 +2914,13 @@ def emit_shader(asg: dict) -> str:
         lines.append("    // exp(0) = 1), so hot crests keep hue separation right up to white.")
         lines.append(f"    vec3 v5Over = max(rgb - vec3({F(v5_knee)}), vec3(0.0));")
         lines.append(f"    rgb = min(rgb, vec3({F(v5_knee)})) + {F(1.0 - v5_knee)} * (1.0 - exp(-v5Over * {v5_knee_k}));")
-    lines.append("    // Presence alpha (family-tuned): a solid-but-translucent membrane")
-    lines.append("    // floor wherever the pattern is present, rising toward the ceiling on")
-    lines.append("    // bright features, plus the deep volume's own Beer-Lambert opacity;")
-    lines.append("    // pattern-free areas stay dark AND thin (anti-washout).")
+    lines.append("    // Presence alpha (family-tuned, v6 solidity lift): a firm membrane base")
+    lines.append("    // even between features, a solid floor wherever the pattern is present,")
+    lines.append("    // rising toward the ceiling on bright features, plus the deep volume's")
+    lines.append("    // Beer-Lambert opacity and the emissive glow (glowing parts read dense).")
+    lines.append("    // The vertexColor.a dissolve near whitelisted players still always wins.")
     lines.append(f"    float presence = smoothstep(0.02, 0.30, pattern);")
-    lines.append(f"    float alpha = vertexColor.a * min({a_base} + {a_floor} * presence + {a_gain} * pattern + {a_vol} * (1.0 - deepTrans), {a_max});")
+    lines.append(f"    float alpha = vertexColor.a * min({a_base} + {a_floor} * presence + {a_gain} * pattern + {a_vol} * (1.0 - deepTrans) + {emit_alpha} * emit, {a_max});")
     if is_v5:
         lines.append("    // [layer:v5:backface]")
         lines.append("    // v5 back-face densify/dim (gl_FrontFacing is a builtin, no uniform")
@@ -2789,12 +2951,11 @@ def emit_shader(asg: dict) -> str:
 
     source = "\n".join(lines) + "\n"
     n = source.count("\n")
-    # Upper bound raised 420 -> 500 for the 840 flip: the v5 quality layer
-    # (backface densify/dim + slope parallax + ghost alpha + dither + soft
-    # knee) adds ~40 lines to the v5-family files, which were dormant (never
-    # emitted) when the old ceiling was tuned. Ids 0..419 are unaffected.
-    if not 110 <= n <= 500:
-        sys.exit(f"fx_{effect_id:03d}: emitted {n} lines, outside the 110..500 sanity bounds")
+    # Upper bound raised 500 -> 540 for the v6 atlas layer: the header sampler
+    # declaration, the [layer:tex:*] sample/modulation block, the body grade
+    # and the [layer:emit:atlas_a] glow block add ~35 lines to EVERY file.
+    if not 110 <= n <= 540:
+        sys.exit(f"fx_{effect_id:03d}: emitted {n} lines, outside the 110..540 sanity bounds")
     return source
 
 
@@ -2818,6 +2979,7 @@ def manifest_entry(asg: dict, source: str) -> dict:
         "flourish": FLOURISHES[int(u(33, 0.0, 3.999))],
         "paletteMode": "gradient3",
         "mid3d": asg["family"] in FAMILIES_3D_MID,
+        "tile": ATLAS_TILES[FAMILY_TILE[asg["family"]]],
         "seed": f"{asg['seed']:016x}",
         "lines": source.count("\n"),
     }

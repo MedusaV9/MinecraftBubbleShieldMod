@@ -18,6 +18,7 @@ import net.minecraft.client.renderer.BindGroupLayouts;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.rendertype.RenderSetup;
 import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.resources.Identifier;
 
 /**
  * One {@link RenderPipeline} + {@link RenderType} per effect id: pipeline
@@ -26,11 +27,14 @@ import net.minecraft.client.renderer.rendertype.RenderType;
  * ({@link EffectRegistry#COUNT} pipelines — 840 today, grows automatically with COUNT).
  *
  * <p>The snippet is modeled on vanilla's {@code RenderPipelines.END_PORTAL_SNIPPET}
- * (GLOBALS + MATRICES_PROJECTION + FOG bind groups, QUADS), with the sampler layouts
- * dropped (the bubble shaders are purely procedural), the vertex binding switched to
- * {@code POSITION_TEX_COLOR} and the translucent blend + no-cull + non-depth-writing
- * depth state copied from vanilla's translucent pipelines (e.g.
- * {@code BEACON_BEAM_TRANSLUCENT}).
+ * (GLOBALS + MATRICES_PROJECTION + FOG bind groups, QUADS), plus the
+ * {@code SAMPLER0} bind group: every bubble fragment shader samples the shipped
+ * surface texture atlas ({@link #SURFACE_ATLAS}, a 4x4 grid of 16 seamless
+ * grayscale structure tiles whose A channel is an emission mask) through the
+ * {@code Sampler0} uniform, layered onto its procedural pattern. The vertex
+ * binding is {@code POSITION_TEX_COLOR} and the translucent blend + no-cull +
+ * non-depth-writing depth state are copied from vanilla's translucent pipelines
+ * (e.g. {@code BEACON_BEAM_TRANSLUCENT}).
  *
  * <p>All pipelines share one vertex shader ({@code bubbleshield:bubble/surface});
  * only the fragment shader differs. They are registered through
@@ -43,9 +47,19 @@ import net.minecraft.client.renderer.rendertype.RenderType;
  * ({@code tools/validate_shaders.py} is the pre-commit gate for that).
  */
 public final class ShieldPipelines {
+	/**
+	 * The generated surface texture atlas every bubble fragment shader samples via
+	 * {@code Sampler0}: 2048x2048 RGBA, a 4x4 grid of 16 seamless 512px tiles.
+	 * Per texel: R = coarse structural layer, G = mid-scale detail, B = fine grain,
+	 * A = emission mask (glow, NOT transparency). All channels are neutral grayscale
+	 * data — the shaders tint them with the live per-effect palette (recolor-safe).
+	 */
+	private static final Identifier SURFACE_ATLAS = BubbleShield.id("textures/effect/surface_atlas.png");
+
 	private static final RenderPipeline.Snippet BUBBLE_SNIPPET = RenderPipeline.builder(RenderPipelines.GLOBALS_SNIPPET)
 			.withBindGroupLayout(BindGroupLayouts.MATRICES_PROJECTION)
 			.withBindGroupLayout(BindGroupLayouts.FOG)
+			.withBindGroupLayout(BindGroupLayouts.SAMPLER0)
 			.withVertexShader(BubbleShield.id("bubble/surface"))
 			.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX_COLOR)
 			.withPrimitiveTopology(PrimitiveTopology.QUADS)
@@ -111,8 +125,12 @@ public final class ShieldPipelines {
 							.withFragmentShader(BubbleShield.id(def.surfaceShaderId()))
 							.build()
 			);
-			// sortOnUpload matches vanilla translucent render types (e.g. item_translucent).
-			types[def.id()] = RenderType.create(name, RenderSetup.builder(pipeline).sortOnUpload().createRenderSetup());
+			// sortOnUpload matches vanilla translucent render types (e.g. item_translucent);
+			// the atlas is bound to the snippet's SAMPLER0 group on every bubble draw.
+			types[def.id()] = RenderType.create(name, RenderSetup.builder(pipeline)
+					.withTexture("Sampler0", SURFACE_ATLAS)
+					.sortOnUpload()
+					.createRenderSetup());
 		}
 
 		return types;
