@@ -132,12 +132,24 @@ Design (see /tmp/shader_plan.md sections 1, 2, 4.1 and AGENTS.md):
   caustic, thinFilm, accentPalette (iq cosine, baked consts), rimGraze,
   rimLat, sparkle, ringPulse, and the unrolled correlated parallax deep stack.
 
-* 40 MID-layer technique composers keyed by the 40 SurfaceTemplate families:
+* 60 MID-layer technique composers keyed by the SurfaceTemplate families:
   the 16 original enum names (PLASMA..LIGHTNING) + THINFILM, CAUSTIC,
   CURLSMOKE, TRUCHET, RIDGED, MOIRE, TRIWEAVE, NEBULA (350 milestone) +
   KALISET, VOLUMECLOUD, CHROME, LAVAFLOW, TENDRILNET, GALAXYSWIRL,
   RIBBONAURORA, FROSTFERN, BIOLUME, HOLOGRID, PORTALVOID, EMBERSTORM,
-  SHARDTESS, SACREDGEO, VOIDTENDRIL, CRYSTALREFRACT (420 milestone).
+  SHARDTESS, SACREDGEO, VOIDTENDRIL, CRYSTALREFRACT (420 milestone) +
+  the 20 v5 technique families (SPECTRALVEIL..VOIDRIFT, FAMILIES_V5) staged
+  for the NEXT catalogue flip: no EffectRegistry row references them yet, so
+  they emit no fx_* file today and every pre-v5 file stays byte-identical.
+
+* v5 quality layer (FAMILIES_V5 ONLY -- the gate is what keeps the 420
+  existing files byte-stable): gl_FrontFacing back-face densify/dim (the far
+  shell dims toward the dark stop and gains alpha), a 3-tap slope-parallax
+  resample of the deep field along the silhouette slope, luminance-weighted
+  ghost alpha (dark areas thin out, bright features hold), blue-noise-style
+  (interleaved gradient noise) alpha dithering scaled by the dissolve, and a
+  soft-knee highlight rolloff. Only builtins (gl_FrontFacing, gl_FragCoord)
+  -- no new uniforms, no textures; the vertexColor.a dissolve still wins.
 
 * Per-id assignment table: EVERY id reads its family from the current
   EffectRegistry.java surface column (parsed at generation time as ground
@@ -198,6 +210,14 @@ FAMILIES = [
     "GALAXYSWIRL", "RIBBONAURORA", "FROSTFERN", "BIOLUME", "HOLOGRID",
     "PORTALVOID", "EMBERSTORM", "SHARDTESS", "SACREDGEO", "VOIDTENDRIL",
     "CRYSTALREFRACT",
+    # 20 v5 technique families (append-only; no registry row references them
+    # yet, so regenerating leaves fx_000..fx_419 byte-identical -- the
+    # assignment table reads each id's family from EffectRegistry.java).
+    "SPECTRALVEIL", "RAYMARCHFOG", "PRISMDISPERSE", "HOLOPARALLAX",
+    "ORBITTRAP", "CRYSTALSDF", "FLUIDINK", "IRISFILM", "AETHERSMOKE",
+    "STAINEDGLASS", "PHANTOMECHO", "GRAVLENS", "MYCELIA", "SOLARFLARE",
+    "DEEPICE", "RUNECIRCUIT", "OILSLICK", "PLASMAGLOBE", "ECTOPLASM",
+    "VOIDRIFT",
 ]
 
 WARPS = ["none", "warp1", "warp2", "curl"]
@@ -219,7 +239,22 @@ FLOURISHES = ["swirl", "glint", "echo", "shimmer"]
 FAMILIES_3D_MID = frozenset({
     "PLASMA", "ARCS", "LIGHTNING", "CURLSMOKE", "RIDGED", "NEBULA",
     "KALISET", "VOLUMECLOUD", "CHROME", "VOIDTENDRIL",
+    # v5 families whose signature field lives on the sphere direction: the
+    # veils/fog/smoke/fractal/facet/refraction techniques sample mdir (and so
+    # gain the true day-safe 3D rotation); GRAVLENS/PHANTOMECHO build their
+    # own rotations from raw sdir and the polar/lattice v5 families keep the
+    # proven seam-safe 2D domains.
+    "SPECTRALVEIL", "RAYMARCHFOG", "PRISMDISPERSE", "ORBITTRAP",
+    "CRYSTALSDF", "AETHERSMOKE", "VOIDRIFT",
 })
+
+# The 20 v5 technique families (appended to FAMILIES for the next catalogue
+# flip). GATED: only these families receive the v5 quality layer (backface
+# densify/dim, slope-parallax taps, luminance-weighted ghost alpha, blue-noise
+# dither, soft-knee rolloff) -- keying the layer off this set is what keeps
+# every pre-v5 file byte-identical under regeneration.
+FAMILIES_V5 = frozenset(FAMILIES[40:])
+assert len(FAMILIES_V5) == 20 and "CRYSTALREFRACT" not in FAMILIES_V5
 
 MASK64 = (1 << 64) - 1
 
@@ -415,6 +450,7 @@ HELPER_DEPS = {
     "rimLat": ["invsmooth"],
     "sparkle": ["cellHash", "invsmooth"],
     "ringPulse": ["hash22", "invsmooth"],
+    "sdSeg": [],
     "deepField": [],  # deps filled per deep recipe at emission time
 }
 
@@ -424,7 +460,7 @@ CANONICAL_ORDER = [
     "warp2", "curl2", "voro2", "voro3", "voronoise", "hexDist", "hexCoords",
     "triGrid", "truchet", "polarFold", "spiralWarp", "caustic", "caustic3",
     "thinFilm", "accentPalette", "gradient3", "satLift", "hueSpin",
-    "rimGraze", "rimLat", "sparkle", "ringPulse", "deepField",
+    "rimGraze", "rimLat", "sparkle", "ringPulse", "sdSeg", "deepField",
 ]
 
 
@@ -893,6 +929,16 @@ def helper_source(name: str, c: dict) -> str:
             "        acc += invsmooth(0.0, 0.05, abs(d - phase * 0.7)) * (1.0 - phase);\n"
             "    }\n"
             "    return acc;\n"
+            "}")
+    if name == "sdSeg":
+        return (
+            "// distance from p to the line segment a-b (classic iq segment SDF);\n"
+            "// used by the branch/filament/glyph v5 families\n"
+            "float sdSeg(vec2 p, vec2 a, vec2 b) {\n"
+            "    vec2 pa = p - a;\n"
+            "    vec2 ba = b - a;\n"
+            "    float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0);\n"
+            "    return length(pa - ba * h);\n"
             "}")
     if name == "deepField":
         recipe = c["deep"]
@@ -1516,6 +1562,466 @@ def mid_composer(family: str, c: dict):
         ], [
             f"rgb = mix(rgb, rgb * (0.6 + 0.85 * crystalFilm), {cfw});",
         ])
+    # ------------------------------------------------------------------
+    # v5 technique families (FAMILIES_V5). Staged for the next catalogue
+    # flip: no EffectRegistry row references them yet, so none of these
+    # branches runs for ids 0..419 and every pre-v5 file stays byte-stable.
+    # ------------------------------------------------------------------
+    if family == "SPECTRALVEIL":
+        # 3D: fresnel-band ghost veil -- the grazing estimator itself is the
+        # banding coordinate (bands of the VIEW angle, not of the surface),
+        # modulated by a slow body field; plus a time-offset AFTERIMAGE:
+        # the same field resampled at an earlier domain rotation (the
+        # rotation IS the motion, so the offset is a true trailing ghost).
+        eqs = qs(46, 0.05, 0.12)
+        return (["fbm3", "rimGraze"], [
+            "float svGraze = rimGraze();",
+            f"float svBody = fbm3(mdir + vec3(0.0, {F(u(40, 0.20, 0.50))} * sin(time * {qs(41, 0.10, 0.24)}), 0.0));",
+            f"float svVeil = pow(0.5 + 0.5 * sin(svGraze * {F(u(42, 6.0, 11.0))} + svBody * {F(u(43, 3.0, 6.0))} - time * {qs(44, 0.4, 0.9)}), {F(u(45, 1.6, 2.8))});",
+            "// time-offset afterimage: the SAME field at 1x and 2x earlier",
+            "// rotation phases, thresholded into decaying ghost sheets",
+            f"float svEcho1 = fbm3(rotA(spinAxis, -time * {eqs}) * (mdir * {F(u(47, 1.05, 1.25))}) + vec3(2.7, 1.3, 5.1));",
+            f"float svEcho2 = fbm3(rotA(spinAxis, -time * {eqs} * 2.0) * (mdir * {F(u(48, 1.25, 1.50))}) + vec3(7.9, 4.2, 0.6));",
+            f"float svGhost = pow(clamp(svEcho1 * 1.5 - 0.40, 0.0, 1.0), 2.0) * {F(u(49, 0.45, 0.65))} + pow(clamp(svEcho2 * 1.5 - 0.45, 0.0, 1.0), 2.0) * {F(u(55, 0.22, 0.40))};",
+            "float mid = clamp(svVeil * (0.55 + 0.45 * svBody) + svGhost, 0.0, 1.2);",
+        ], [])
+    if family == "RAYMARCHFOG":
+        # 3D: a REAL 6..8-step density march INTO the shell along a baked
+        # pseudo view ray with front-to-back accumulation -- deeper steps
+        # sample the same fbm3 field farther in and land under the remaining
+        # transmittance (twice the depth resolution of VOLUMECLOUD's 4-step
+        # march, with a per-step depth fade for light attenuation).
+        steps = 6 + int(u(39, 0.0, 2.999))
+        return (["fbm3"], [
+            f"vec3 rfDir = normalize(vec3({F(u(40, -0.7, 0.7))}, {F(u(41, 0.30, 0.90))}, {F(u(42, -0.7, 0.7))}));",
+            "float rfTrans = 1.0;",
+            "float rfLight = 0.0;",
+            f"for (int i = 0; i < {steps}; i++) {{",
+            "    float fi = float(i);",
+            f"    vec3 rfP = mdir * (1.0 + fi * {F(u(43, 0.10, 0.20))}) + rfDir * (fi * {F(u(44, 0.16, 0.30))});",
+            f"    float rfD = clamp(fbm3(rfP) * {F(u(45, 1.7, 2.4))} - {F(u(46, 0.55, 0.85))}, 0.0, 1.0);",
+            f"    rfLight += rfTrans * rfD * (1.0 - fi * {F(0.85 / steps)});",
+            f"    rfTrans *= 1.0 - rfD * {F(u(47, 0.30, 0.45))};",
+            "}",
+            f"float mid = clamp(rfLight * {F(u(48, 0.9, 1.3))} + (1.0 - rfTrans) * {F(u(49, 0.15, 0.25))}, 0.0, 1.15);",
+        ], [])
+    if family == "PRISMDISPERSE":
+        # 3D: gradient pseudo-normal (central-difference fbm3, sdir-biased so
+        # normalize never sees zero) refracts the DEEP field three times with
+        # per-channel index offsets -- a true chromatic split of one image,
+        # not a palette tint; plus a normal-aligned specular.
+        eps = F(u(40, 0.10, 0.18))
+        base = u(43, 0.10, 0.20)
+        ldir = (u(44, -1.0, 1.0), u(45, 0.3, 1.0), u(46, -1.0, 1.0))
+        ln = math.sqrt(ldir[0] ** 2 + ldir[1] ** 2 + ldir[2] ** 2)
+        ldir = (ldir[0] / ln, ldir[1] / ln, ldir[2] / ln)
+        return (["fbm3"], [
+            "float pdC = fbm3(mdir);",
+            f"float pdX = fbm3(mdir + vec3({eps}, 0.0, 0.0));",
+            f"float pdY = fbm3(mdir + vec3(0.0, {eps}, 0.0));",
+            f"float pdZ = fbm3(mdir + vec3(0.0, 0.0, {eps}));",
+            f"vec3 pdN = normalize(vec3(pdX - pdC, pdY - pdC, pdZ - pdC) * {F(u(41, 2.0, 4.0))} + sdir);",
+            "// 3-channel chromatic split: each channel refracts the SAME deep",
+            "// field with its own index-of-refraction offset along the normal",
+            f"float pdSc = {F(u(42, 1.8, 2.8))};",
+            f"vec3 pdSplit = vec3(deepField(sdir * pdSc + pdN * {F(base)}, time),",
+            f"    deepField(sdir * pdSc + pdN * {F(base * 1.35)}, time),",
+            f"    deepField(sdir * pdSc + pdN * {F(base * 1.75)}, time));",
+            f"float pdSpec = pow(clamp(dot(pdN, vec3({F(ldir[0])}, {F(ldir[1])}, {F(ldir[2])})), 0.0, 1.0), {F(u(47, 6.0, 12.0))});",
+            f"float mid = clamp(dot(pdSplit, vec3(0.3333)) * {F(u(48, 0.75, 1.05))} + pdSpec * {F(u(49, 0.45, 0.70))}, 0.0, 1.25);",
+        ], [
+            "// the split lands per-channel into the palette-driven rgb: a",
+            "// bounded multiplicative mix, so the owner recolor stays in charge",
+            f"rgb = mix(rgb, rgb * (0.45 + {F(u(55, 1.0, 1.5))} * pdSplit), {F(u(56, 0.30, 0.44))});",
+        ])
+    if family == "HOLOPARALLAX":
+        # 2D: 3..4 grid/scanline layers, each parallax-shifted along the
+        # screen-space silhouette slope (rimDir -- seam-safe by construction,
+        # the same trick as the deep planes) with integer per-layer scales so
+        # every layer tiles the u wrap; plus a v-sweeping horizontal sync
+        # band and a hash flicker gate.
+        hp_layers = 3 + int(u(39, 0.0, 1.999))
+        gw = u(42, 0.06, 0.12)
+        return (["invsmooth", "hash11"], [
+            "float hpAcc = 0.0;",
+            f"for (int i = 0; i < {hp_layers}; i++) {{",
+            "    float fi = float(i);",
+            "    // integer per-layer scale keeps the grid seam-aligned; the",
+            "    // rimDir shift is the hologram's depth parallax",
+            f"    vec2 hpUV = wuv * (fi + 1.0) + rimDir * (fi * {F(u(41, 0.05, 0.12))});",
+            "    vec2 hpD = abs(fract(hpUV) - 0.5);",
+            f"    float hpGrid = smoothstep({F(0.5 - gw)}, {F(0.5 - gw * 0.35)}, max(hpD.x, hpD.y));",
+            f"    float hpScan = 0.5 + 0.5 * sin(hpUV.y * {F(u(43, 9.0, 16.0))} + time * {qs(44, 0.5, 1.1)} - fi * 1.7);",
+            f"    hpAcc += (hpGrid * {F(u(45, 0.50, 0.70))} + hpScan * {F(u(46, 0.10, 0.20))}) * (1.0 - fi * {F(u(47, 0.16, 0.24))});",
+            "}",
+            f"float hpSync = invsmooth(0.0, {F(u(48, 0.04, 0.08))}, abs(baseUV.y - fract(time * {F6(quant_fract_speed(u(40, 0.05, 0.12)))})));",
+            f"float hpFlick = 0.85 + 0.15 * step(0.4, hash11(floor(time * {F(u(49, 8.0, 14.0))})));",
+            f"float mid = clamp(hpAcc * hpFlick + hpSync * {F(u(55, 0.35, 0.55))}, 0.0, 1.25);",
+        ], [])
+    if family == "ORBITTRAP":
+        # 3D-fed 2D fractal: a Julia iteration on the (rotated) sphere-
+        # direction plane -- seam- and pole-safe by construction -- with TWO
+        # orbit traps (closest approach to a baked point AND to a line
+        # through the origin) and a slowly drifting c (quantized sin, so the
+        # daily wrap cannot pop the set shape). z is clamped each iteration
+        # so divergence can never reach inf on any driver.
+        return ([], [
+            f"vec2 otZ = mdir.xy * {F(u(40, 1.2, 1.8))} + vec2(mdir.z * {F(u(41, 0.3, 0.7))}, 0.0);",
+            f"vec2 otC = vec2({F(u(42, -0.85, -0.55))}, {F(u(43, 0.35, 0.65))}) + {F(u(44, 0.03, 0.08))} * vec2(sin(time * {qs(45, 0.03, 0.08)}), cos(time * {qs(46, 0.02, 0.06)}));",
+            "float otPt = 100.0;",
+            "float otLn = 100.0;",
+            "for (int i = 0; i < 7; i++) {",
+            "    otZ = vec2(otZ.x * otZ.x - otZ.y * otZ.y, 2.0 * otZ.x * otZ.y) + otC;",
+            "    otZ = clamp(otZ, -8.0, 8.0);",
+            f"    otPt = min(otPt, length(otZ - vec2({F(u(47, -0.4, 0.4))}, {F(u(48, -0.4, 0.4))})));",
+            f"    otLn = min(otLn, abs(otZ.y - otZ.x * {F(u(49, -0.5, 0.5))}));",
+            "}",
+            f"float otGlow = pow(clamp(1.0 - otPt * {F(u(55, 0.7, 1.1))}, 0.0, 1.0), {F(u(56, 2.0, 3.5))});",
+            f"float otWire = pow(clamp(1.0 - otLn * {F(u(57, 1.2, 2.0))}, 0.0, 1.0), {F(u(58, 3.0, 6.0))});",
+            f"float otBand = 0.5 + 0.5 * sin(otPt * {F(u(59, 5.0, 10.0))} - time * {qs(26, 0.3, 0.7)});",
+            "float mid = clamp(otGlow * (0.55 + 0.45 * otBand) + otWire * 0.6, 0.0, 1.25);",
+        ], [])
+    if family == "CRYSTALSDF":
+        # 3D: nearest hashed-plane facet cells -- 6 baked unit normals cut
+        # the sphere into spherical-voronoi facets (nearest plane wins), the
+        # edge is the margin between the two best dots, and each facet
+        # glints AS ONE PLANE when its normal sweeps past a rotating light
+        # (facet-aligned specular, unlike any per-pixel sparkle).
+        def _cs_unit(ia, ib, ic):
+            v = (u(ia, -1.0, 1.0), u(ib, -1.0, 1.0), u(ic, -1.0, 1.0))
+            n = math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
+            if n < 0.25:
+                return (0.4851, 0.7276, 0.4851)
+            return (v[0] / n, v[1] / n, v[2] / n)
+        cs_planes = [_cs_unit(40, 41, 42), _cs_unit(43, 44, 45), _cs_unit(46, 47, 48),
+                     _cs_unit(49, 55, 56), _cs_unit(57, 58, 59), _cs_unit(26, 27, 28)]
+        cs_light = _cs_unit(29, 39, 19)
+        cs_lines = [
+            "vec3 csDir = normalize(mdir);",
+            "float csBest = -2.0;",
+            "float csSecond = -2.0;",
+            "vec3 csN = vec3(0.0, 1.0, 0.0);",
+            "float csId = 0.0;",
+        ]
+        for i, pn in enumerate(cs_planes):
+            cs_lines.append(f"vec3 csP{i} = vec3({F(pn[0])}, {F(pn[1])}, {F(pn[2])});")
+            cs_lines.append(f"float csD{i} = dot(csDir, csP{i});")
+            cs_lines.append(
+                f"if (csD{i} > csBest) {{ csSecond = csBest; csBest = csD{i}; csN = csP{i}; csId = {F(i * 0.1618 + 0.07)}; }}"
+                f" else if (csD{i} > csSecond) {{ csSecond = csD{i}; }}")
+        cs_lines += [
+            f"float csEdge = invsmooth(0.015, {F(u(20, 0.10, 0.20))}, csBest - csSecond);",
+            f"vec3 csL = rotA(spinAxis, time * {qs(21, 0.05, 0.12)}) * vec3({F(cs_light[0])}, {F(cs_light[1])}, {F(cs_light[2])});",
+            f"float csSpec = pow(clamp(dot(csN, csL), 0.0, 1.0), {F(u(22, 8.0, 16.0))});",
+            f"float csTw = 0.5 + 0.5 * sin(time * {qs(23, 0.7, 1.5)} + csId * 39.0);",
+            f"float csFill = 0.5 + 0.5 * sin(csId * 6.2831853 + dot(csDir, csN) * {F(u(24, 3.0, 6.0))});",
+            f"float mid = clamp(csEdge * {F(u(25, 0.45, 0.70))} + csSpec * ({F(u(17, 0.55, 0.85))} + 0.3 * csTw) + csFill * {F(u(16, 0.15, 0.28))}, 0.0, 1.3);",
+        ]
+        return (["invsmooth"], cs_lines, [])
+    if family == "FLUIDINK":
+        # 2D: marbled ink -- an EXPLICIT double domain-warp (q then r, both
+        # seam-periodic fbm2 offset fields, so the wrap survives) whose warp
+        # vectors also ADVECT the accent-palette position in the post pass:
+        # the color bands follow the marbling folds, not the raw UV.
+        fi_amp = F(u(41, 1.6, 2.6))
+        return (["fbm2"], [
+            f"vec2 fiQ = vec2(fbm2(wuv + vec2(0.0, time * {qpy(40, 0.05, 0.12)}), midPer), fbm2(wuv + vec2(5.2, 1.3), midPer));",
+            f"vec2 fiR = vec2(fbm2(wuv + fiQ * {fi_amp} + vec2(1.7, 9.2) + vec2(time * {qpx(42, 0.03, 0.08)}, 0.0), midPer), fbm2(wuv + fiQ * {fi_amp} + vec2(8.3, 2.8), midPer));",
+            f"float fiInk = fbm2(wuv + fiR * {F(u(43, 2.0, 3.2))}, midPer);",
+            f"float fiVein = pow(clamp(1.0 - abs(2.0 * fiR.x - 1.0), 0.0, 1.0), {F(u(44, 3.0, 6.0))});",
+            f"float mid = clamp(fiInk * {F(u(45, 0.9, 1.2))} + fiVein * {F(u(46, 0.30, 0.50))}, 0.0, 1.2);",
+        ], [
+            "// advected palette: the warp field itself steers the accent",
+            "// position, so the hue bands ride the marbling (bounded mix)",
+            f"rgb = mix(rgb, rgb * (0.55 + 0.9 * accentPalette(fiQ.x * {F(u(47, 0.5, 0.9))} + fiR.y * {F(u(48, 0.4, 0.8))})), {F(u(49, 0.25, 0.40))});",
+        ])
+    if family == "IRISFILM":
+        # 2D: full-hue thin film -- a MULTI-HARMONIC spectral phase ramp
+        # (three incommensurate per-channel cosine harmonics beat into a much
+        # richer rainbow than the single-cosine thinFilm helper) multiplied
+        # by a grazing-angle term, so the iridescence lives at the silhouette
+        # like a real soap membrane.
+        return (["fbm2", "rimGraze"], [
+            f"float ifThick = fbm2(wuv + vec2(time * {qpx(40, 0.02, 0.06)}, 0.0), midPer) * {F(u(41, 1.2, 2.2))} + baseUV.y * {F(u(42, 0.6, 1.4))} + {F(u(43, 0.0, 0.8))};",
+            "float ifGraze = 0.35 + 0.65 * rimGraze();",
+            "vec3 ifPhase = 6.2831853 * ifThick * vec3(1.0, 0.8065, 0.6452);",
+            f"vec3 ifFilm = vec3(0.34) + 0.22 * cos(ifPhase) + 0.22 * cos(ifPhase * 2.0 + vec3(0.7, 1.9, 3.1)) + 0.22 * cos(ifPhase * 3.0 + vec3(2.3, 4.1, 0.9));",
+            f"float mid = clamp(dot(clamp(ifFilm, 0.0, 1.0), vec3(0.3333)) * {F(u(44, 1.0, 1.4))} * ifGraze + {F(u(45, 0.10, 0.22))}, 0.0, 1.2);",
+        ], [
+            f"rgb = mix(rgb, rgb * (0.5 + {F(u(46, 1.1, 1.5))} * clamp(ifFilm, 0.0, 1.0)), {F(u(47, 0.30, 0.45))} * ifGraze);",
+        ])
+    if family == "AETHERSMOKE":
+        # 3D: volumetric smoke -- ONE curl-style advection vector field
+        # (three offset fbm3 taps) displaces three depth taps of the density
+        # field, composited BACK-TO-FRONT: the deepest tap lays down a dark
+        # base and each nearer, brighter tap alpha-composites OVER it, so
+        # dense smoke visibly hides the layers behind.
+        as_g = u(41, 0.20, 0.38)
+        as_th = u(45, 0.50, 0.80)
+        as_gain = F(u(44, 1.5, 2.1))
+        as_lines = [
+            f"vec3 asW = {F(u(40, 0.4, 0.8))} * (vec3(fbm3(mdir + vec3(9.1, 2.3, 6.7)), fbm3(mdir + vec3(4.5, 8.2, 1.1)), fbm3(mdir + vec3(2.9, 5.6, 7.4))) - 0.5);",
+            "float asAcc = 0.0;",
+        ]
+        for k, i in enumerate((2, 1, 0)):  # deepest first: back-to-front
+            bright = F(0.40 + 0.30 * (2 - i))
+            as_lines += [
+                f"float asD{i} = clamp(fbm3(mdir * {F(1.0 + i * as_g)} + asW * {F(1.0 - i * 0.28)} + vec3({F(i * 4.7)}, {F(i * 2.9)}, {F(i * 7.3)})) * {as_gain} - {F(as_th)}, 0.0, 1.0);",
+                f"asAcc = mix(asAcc, {bright}, asD{i} * {F(u(46, 0.70, 0.90))});",
+            ]
+        as_lines += [
+            f"float asSway = 0.85 + 0.15 * sin(time * {qs(47, 0.10, 0.25)} + asW.x * 4.0);",
+            f"float mid = clamp(asAcc * asSway * {F(u(48, 1.0, 1.3))}, 0.0, 1.2);",
+        ]
+        return (["fbm3"], as_lines, [])
+    if family == "STAINEDGLASS":
+        # 2D: stained glass -- static voronoi panes whose lead came is DARK
+        # (sunk to the dark stop in the post pass, unlike SHARDTESS's bright
+        # leadwork), each pane transmitting light through its OWN hue
+        # (per-cell accent-palette position) with a slow sun pulse.
+        return (["voro2", "invsmooth"], [
+            "vec3 sgV = voro2(wuv, midPer, 0.0);",
+            f"float sgLead = invsmooth(0.008, {F(u(40, 0.05, 0.09))}, sgV.x);",
+            f"float sgLight = 0.55 + 0.45 * sin(time * {qs(41, 0.3, 0.7)} + sgV.z * 6.2831853);",
+            f"float sgBevel = smoothstep(0.0, {F(u(42, 0.25, 0.45))}, sgV.x);",
+            f"float mid = clamp((1.0 - sgLead) * ({F(u(43, 0.45, 0.65))} + {F(u(44, 0.30, 0.45))} * sgLight) * (0.75 + 0.25 * sgBevel), 0.0, 1.2);",
+        ], [
+            "// per-pane hue: each cell tints through its own palette position;",
+            "// the lead lines sink to the dark stop (bounded, recolor-safe)",
+            f"rgb = mix(rgb, rgb * (0.45 + 1.1 * accentPalette(sgV.z * {F(u(45, 0.6, 1.0))} + {F(u(46, 0.0, 1.0))})), {F(u(47, 0.30, 0.45))});",
+            f"rgb = mix(rgb, deepStop, clamp(sgLead, 0.0, 1.0) * {F(u(48, 0.55, 0.75))});",
+        ])
+    if family == "PHANTOMECHO":
+        # 2D: spectral afterimage -- FOUR time-shifted evaluations of the
+        # same moving blob field (chordal metaballs on quantized Lissajous
+        # paths), each echo sampled at an earlier time with geometrically
+        # decaying weight: a motion trail baked from pure re-evaluation.
+        return (["invsmooth"], [
+            "float peAcc = 0.0;",
+            "float peW = 1.0;",
+            "for (int e = 0; e < 4; e++) {",
+            f"    float peT = time - float(e) * {F(u(40, 0.35, 0.70))};",
+            "    float peField = 0.0;",
+            "    for (int b = 0; b < 3; b++) {",
+            "        float fb = float(b);",
+            f"        vec2 peC = vec2(0.5) + vec2({F(u(41, 0.22, 0.34))} * sin(peT * {qs(42, 0.10, 0.22)} + fb * 2.4), {F(u(43, 0.16, 0.28))} * cos(peT * {qs(44, 0.08, 0.18)} + fb * 4.1));",
+            "        // chordal x-distance keeps every blob round across the seam",
+            "        float peD = length(vec2(sin((baseUV.x - peC.x) * 3.1415927) * 0.6366, baseUV.y - peC.y));",
+            f"        peField += invsmooth({F(u(45, 0.04, 0.08))}, {F(u(46, 0.20, 0.34))}, peD);",
+            "    }",
+            "    peAcc += peField * peW;",
+            f"    peW *= {F(u(47, 0.50, 0.65))};",
+            "}",
+            f"float mid = clamp(peAcc * {F(u(48, 0.40, 0.60))}, 0.0, 1.25);",
+        ], [])
+    if family == "GRAVLENS":
+        # 2D: gravitational lens -- a drifting mass point radially warps the
+        # star lattice UV (deflection ~ 1/r, computed in the seam-safe
+        # chordal frame so the pull field tiles the wrap) and an Einstein
+        # ring brightens both the ring itself and any star that drifts near
+        # it (magnification).
+        return (["cellHash", "invsmooth"], [
+            f"vec2 glC = vec2({F(u(40, 0.2, 0.8))} + {F(u(41, 0.08, 0.16))} * sin(time * {qs(42, 0.04, 0.10)}), {F(u(43, 0.3, 0.7))} + {F(u(44, 0.06, 0.12))} * cos(time * {qs(45, 0.03, 0.09)}));",
+            "vec2 glD = vec2(sin((baseUV.x - glC.x) * 6.2831853) * 0.1592, baseUV.y - glC.y);",
+            "float glR = length(glD) + 0.02;",
+            f"float glPull = {F(u(46, 0.010, 0.022))} / glR;",
+            "// the deflection is periodic in u by construction, so the warped",
+            "// lattice still tiles the seam",
+            "vec2 glUV = wuv - glD / glR * glPull * midPer.x;",
+            "float glStars = 0.0;",
+            "for (int i = 0; i < 2; i++) {",
+            "    float fi = float(i);",
+            "    float layerPx = midPer.x * (fi + 1.0);",
+            "    vec2 su = glUV * (fi + 1.0) + vec2(fi * 23.7, fi * 11.9);",
+            "    vec2 sc = floor(su);",
+            "    vec2 sf = fract(su) - 0.5;",
+            "    float sh = cellHash(sc + vec2(fi * 53.0, 0.0), layerPx);",
+            "    float tw = 0.6 + 0.4 * sin(time * (1.0 + 2.5 * sh) + sh * 44.0);",
+            f"    glStars += step({F(u(47, 0.78, 0.88))}, sh) * invsmooth(0.03, 0.16, length(sf - (vec2(cellHash(sc + 4.7, layerPx), cellHash(sc + 9.3, layerPx)) - 0.5) * 0.55)) * tw;",
+            "}",
+            f"float glRing = invsmooth(0.0, {F(u(48, 0.030, 0.055))}, abs(glR - {F(u(49, 0.10, 0.18))}));",
+            f"float mid = clamp(glStars * (1.0 + glRing * {F(u(55, 1.2, 2.0))}) + glRing * {F(u(56, 0.35, 0.55))}, 0.0, 1.3);",
+        ], [])
+    if family == "MYCELIA":
+        # 2D: fungal threads -- a per-cell node network whose branches are
+        # REAL segment SDFs (node to the four neighbor nodes, hash-jittered
+        # on the wrapping lattice), with glowing node tips and a traveling
+        # growth pulse that sweeps the network by cell phase.
+        return (["sdSeg", "cellHash", "invsmooth"], [
+            "vec2 myI = floor(wuv);",
+            "vec2 myF = fract(wuv);",
+            "vec2 myN0 = vec2(cellHash(myI, midPer.x), cellHash(myI + 71.3, midPer.x)) * 0.6 + 0.2;",
+            "float myD = 8.0;",
+            "float myPh = 0.0;",
+            "for (int k = 0; k < 4; k++) {",
+            "    vec2 og = (k == 0) ? vec2(1.0, 0.0) : ((k == 1) ? vec2(-1.0, 0.0) : ((k == 2) ? vec2(0.0, 1.0) : vec2(0.0, -1.0)));",
+            "    vec2 nc = myI + og;",
+            "    vec2 nn = og + vec2(cellHash(nc, midPer.x), cellHash(nc + 71.3, midPer.x)) * 0.6 + 0.2;",
+            "    float sd = sdSeg(myF, myN0, nn);",
+            "    if (sd < myD) { myD = sd; myPh = cellHash(nc + 13.9, midPer.x); }",
+            "}",
+            f"float myFil = invsmooth({F(u(40, 0.015, 0.030))}, {F(u(41, 0.06, 0.11))}, myD);",
+            f"float myGlow = invsmooth(0.05, {F(u(42, 0.22, 0.38))}, myD);",
+            "float myNode = invsmooth(0.02, 0.07, length(myF - myN0));",
+            "// traveling growth pulse: a wavefront sweeps the network by phase",
+            f"float myPulse = pow(0.5 + 0.5 * sin(time * {qs(43, 0.5, 1.1)} - (myI.y + myPh * {F(u(44, 2.0, 5.0))}) * {F(u(45, 0.8, 1.6))}), {F(u(46, 3.0, 6.0))});",
+            f"float mid = clamp(myFil * ({F(u(47, 0.45, 0.65))} + {F(u(48, 0.45, 0.65))} * myPulse) + myNode * 0.5 * myPulse + myGlow * 0.15 * myPulse, 0.0, 1.2);",
+        ], [])
+    if family == "SOLARFLARE":
+        # 2D polar: solar prominences -- three arcing filament LOOPS anchored
+        # on the chordal polar frame (each loop's radius falls off with the
+        # square of the angular distance from its meridian: a real arch, not
+        # a radial spoke), over limb brightening and low granulation. The
+        # loop tips burn at the hot stop in the post pass.
+        return (["safeAtan", "fbm2", "rimGraze", "invsmooth"], [
+            "float du = baseUV.x - 0.5;",
+            "float sfAng = safeAtan(baseUV.y - 0.5, sin(du * 6.2831853) * 0.5);",
+            "float sfRad = length(vec2(sin(du * 3.1415927), baseUV.y - 0.5)) * 2.0;",
+            "float sfArcs = 0.0;",
+            "for (int i = 0; i < 3; i++) {",
+            "    float fi = float(i);",
+            f"    float fa = fi * 2.0943951 + {F(u(40, 0.0, 2.0))} + {F(u(41, 0.2, 0.5))} * sin(time * {qs(42, 0.06, 0.16)} + fi * 1.7);",
+            "    float dAng = abs(sin((sfAng - fa) * 0.5));",
+            f"    float loopR = {F(u(43, 0.45, 0.62))} + {F(u(44, 0.10, 0.20))} * sin(time * {qs(45, 0.15, 0.35)} + fi * 2.9) - dAng * dAng * {F(u(46, 1.2, 2.2))};",
+            f"    float arc = invsmooth(0.005, {F(u(47, 0.035, 0.060))}, abs(sfRad - loopR)) * invsmooth(0.35, 0.75, dAng);",
+            f"    sfArcs += arc * (0.6 + 0.4 * sin(time * {qs(48, 1.2, 2.6)} + fi * 2.1));",
+            "}",
+            f"float sfLimb = rimGraze() * {F(u(49, 0.5, 0.8))};",
+            "float sfGran = fbm2(wuv, midPer) * 0.18;",
+            "float mid = clamp(sfArcs + sfLimb + sfGran, 0.0, 1.35);",
+        ], [
+            "// flare tips burn at the (luma-capped) hot stop",
+            f"rgb = mix(rgb, hotStop, clamp(sfArcs, 0.0, 1.0) * {F(u(55, 0.35, 0.55))});",
+        ])
+    if family == "DEEPICE":
+        # 2D: cracked ice depth -- TWO crack-voronoi sheets; the deeper sheet
+        # is offset along the silhouette slope and SCALED by the grazing term
+        # (slope-scaled parallax: the sheets visibly separate where the shell
+        # curves away) and recedes to a colder secondary cast in the post.
+        return (["voro2", "invsmooth", "fbm2", "rimGraze"], [
+            "vec3 iceA = voro2(wuv, midPer, 0.0);",
+            "// slope-scaled parallax: the deeper sheet slides along rimDir,",
+            "// farther where the view grazes (screen-space: seam-safe)",
+            f"vec2 iceOff = rimDir * ({F(u(40, 0.20, 0.40))} + {F(u(41, 0.5, 1.0))} * rimGraze());",
+            "vec3 iceB = voro2(wuv * 2.0 + iceOff + vec2(13.7, 5.9), midPer * 2.0, 0.0);",
+            f"float crackA = invsmooth(0.004, {F(u(42, 0.035, 0.060))}, iceA.x);",
+            f"float crackB = invsmooth(0.004, {F(u(43, 0.030, 0.050))}, iceB.x);",
+            f"float sheen = fbm2(wuv + vec2(time * {qpx(44, 0.01, 0.04)}, 0.0), midPer);",
+            f"float glint = pow(0.5 + 0.5 * sin(time * {qs(45, 0.4, 0.9)} + iceA.z * 6.2831853), {F(u(46, 6.0, 10.0))});",
+            f"float mid = clamp(crackA * {F(u(47, 0.70, 0.95))} + crackB * {F(u(48, 0.35, 0.50))} + sheen * {F(u(49, 0.15, 0.30))} + glint * 0.35, 0.0, 1.25);",
+        ], [
+            "// the deeper crack sheet reads colder and darker (secondary",
+            "// cast): depth through color separation, not just brightness",
+            f"rgb = mix(rgb, mix(secCol, deepStop, 0.5), clamp(crackB * (1.0 - crackA), 0.0, 1.0) * {F(u(55, 0.35, 0.55))});",
+        ])
+    if family == "RUNECIRCUIT":
+        # 2D: polar glyph bands -- integer cells per band (seam-aligned by
+        # construction) each drawing a 3-stroke segment-SDF rune picked by
+        # its wrap-safe hash, IGNITING SEQUENTIALLY as a phase front sweeps
+        # each band (integer cycles/day, offset per row), between thin band
+        # rails.
+        rc_n = 10 + 2 * int(u(40, 0.0, 3.999))
+        rc_bands = 4 + int(u(41, 0.0, 2.999))
+        return (["sdSeg", "cellHash", "invsmooth"], [
+            f"vec2 rcUV = vec2(baseUV.x * {F(float(rc_n))}, baseUV.y * {F(float(rc_bands))});",
+            "vec2 rcI = floor(rcUV);",
+            "vec2 rcF = fract(rcUV);",
+            f"float rcH = cellHash(rcI, {F(float(rc_n))});",
+            "// per-cell glyph: three strokes picked from a fixed anchor set",
+            "vec2 rcA = vec2(0.25 + 0.5 * step(0.5, fract(rcH * 7.0)), 0.22);",
+            "vec2 rcB = vec2(0.75 - 0.5 * step(0.5, fract(rcH * 13.0)), 0.5);",
+            "vec2 rcC = vec2(0.25 + 0.5 * step(0.5, fract(rcH * 29.0)), 0.78);",
+            "float rcD = min(sdSeg(rcF, rcA, rcB), min(sdSeg(rcF, rcB, rcC), sdSeg(rcF, vec2(0.5, 0.34), vec2(0.5, 0.66))));",
+            f"float rcGlyph = invsmooth({F(u(42, 0.020, 0.035))}, {F(u(43, 0.07, 0.11))}, rcD) * invsmooth(0.36, 0.48, abs(rcF.y - 0.5));",
+            "// sequential ignition: the front advances one cell at a time and",
+            "// wraps exactly (rcI.x/n differs by 1 across the seam)",
+            f"float rcPhase = fract(time * {F6(quant_fract_speed(u(44, 0.06, 0.14)))} - rcI.x / {F(float(rc_n))} + rcI.y * 0.37);",
+            f"float rcLit = pow(clamp(1.0 - rcPhase * {F(u(45, 1.15, 1.60))}, 0.0, 1.0), {F(u(46, 1.5, 2.8))});",
+            f"float rcRail = invsmooth(0.004, {F(u(47, 0.020, 0.035))}, abs(abs(rcF.y - 0.5) - 0.46));",
+            f"float mid = clamp(rcGlyph * ({F(u(48, 0.15, 0.30))} + {F(u(49, 0.75, 1.00))} * rcLit) + rcRail * {F(u(55, 0.20, 0.35))}, 0.0, 1.25);",
+        ], [])
+    if family == "OILSLICK":
+        # 2D: oil-on-water -- a curl-warped thickness field whose value
+        # ROTATES THE HUE of the live palette (hueSpin with a thickness-
+        # driven angle, bounded mix): a continuous hue sweep across the
+        # slick, not a fixed accent ramp.
+        return (["curl2", "fbm2"], [
+            f"vec2 osW = wuv + {F(u(40, 0.35, 0.70))} * curl2(wuv + vec2(0.0, time * {F6(quant_drift(0.06, float(syp)))}), midPer);",
+            f"float osTh = fbm2(osW, midPer) * {F(u(41, 1.5, 2.5))} + baseUV.y * {F(u(42, 0.4, 1.0))};",
+            f"float osBand = 0.5 + 0.5 * sin(osTh * {F(u(43, 7.0, 12.0))} - time * {qs(44, 0.2, 0.5)});",
+            f"float osSheen = pow(clamp(osBand, 0.0, 1.0), {F(u(45, 1.4, 2.4))});",
+            f"float mid = clamp(osSheen * {F(u(46, 0.8, 1.1))} + fbm2(osW * 2.0 + vec2(3.9, 8.4), midPer * 2.0) * {F(u(47, 0.15, 0.30))}, 0.0, 1.2);",
+        ], [
+            "// hue-rotation iridescence: the film thickness spins the palette",
+            "// hue itself (bounded, so the owner recolor stays authoritative)",
+            f"vec3 osHue = clamp(hueSpin(baseCol, osTh * {F(u(48, 1.2, 2.2))} - {F(u(49, 0.8, 1.6))}), 0.0, 1.0);",
+            f"rgb = mix(rgb, rgb * (0.45 + 1.05 * osHue), {F(u(55, 0.28, 0.42))} * osBand);",
+        ])
+    if family == "PLASMAGLOBE":
+        # 2D polar: a tesla globe -- FIVE thin filaments anchored at the
+        # exact center (unlike TENDRILNET's three wide off-center arcs),
+        # slowly precessing as a whole, wiggling with radius-fed noise, with
+        # a two-tier bright core and rim-contact flares where a filament
+        # reaches the shell; the space between bolts stays near-transparent
+        # (low presence floor).
+        return (["safeAtan", "fbm2", "invsmooth"], [
+            "float du = baseUV.x - 0.5;",
+            "float pgAng = safeAtan(baseUV.y - 0.5, sin(du * 6.2831853) * 0.5);",
+            "float pgRad = length(vec2(sin(du * 3.1415927), baseUV.y - 0.5)) * 2.0;",
+            "float pgBolts = 0.0;",
+            "for (int i = 0; i < 5; i++) {",
+            "    float fi = float(i);",
+            f"    float fa = fi * 1.2566371 + time * {qs(40, 0.05, 0.12)} + {F(u(41, 0.4, 1.0))} * sin(time * {qs(42, 0.15, 0.35)} + fi * 2.6);",
+            f"    float wig = (fbm2(vec2(pgRad * {F(u(43, 3.0, 6.0))} + fi * 9.17, time * {F6(quant_drift(u(44, 0.10, 0.20), NOWRAP_PERIOD))}), vec2({F(NOWRAP_PERIOD)}, {F(NOWRAP_PERIOD)})) - 0.5) * {F(u(45, 0.4, 0.9))} * pgRad;",
+            "    float dAng = abs(sin((pgAng - fa) * 0.5 + wig));",
+            f"    float fil = pow(clamp(1.0 - dAng * {F(u(46, 2.2, 3.2))}, 0.0, 1.0), {F(u(47, 8.0, 14.0))});",
+            f"    pgBolts += fil * (0.55 + 0.45 * sin(time * {qs(48, 2.0, 4.0)} + fi * 1.8));",
+            "}",
+            f"float pgCore = invsmooth(0.01, {F(u(49, 0.10, 0.18))}, pgRad) * 1.2 + invsmooth(0.0, 0.05, pgRad) * 0.8;",
+            f"float pgTip = pgBolts * smoothstep({F(u(55, 0.55, 0.75))}, 1.0, pgRad) * 0.8;",
+            "float mid = clamp(pgBolts * smoothstep(0.03, 0.15, pgRad) + pgCore + pgTip, 0.0, 1.4);",
+        ], [])
+    if family == "ECTOPLASM":
+        # 2D: ghost goo -- a v-stretched, downward-advected warped fbm body
+        # (the drip domain is anisotropic like AURORA's curtain but flows
+        # DOWN) thresholded into a hanging mask that thickens toward the
+        # top, with the drip BOUNDARY itself catching a hot rim highlight.
+        ec_ky = u(40, 0.35, 0.55)
+        ec_qdown = F6(quant_drift(u(41, 0.06, 0.14), float(syp) * ec_ky))
+        return (["fbm2"], [
+            f"vec2 ecUV = vec2(wuv.x, baseUV.y * {F(float(syp) * ec_ky)} + time * {ec_qdown});",
+            f"float ecBody = fbm2(ecUV, vec2(midPer.x, {F(float(syp) * ec_ky)}));",
+            f"float ecDrip = fbm2(vec2(ecUV.x * 2.0, ecUV.y * 0.6) + vec2(7.7, 2.3), vec2(midPer.x * 2.0, {F(float(syp) * ec_ky * 0.6)}));",
+            f"float ecMask = smoothstep({F(u(43, 0.34, 0.44))}, {F(u(44, 0.60, 0.74))}, ecBody * 0.55 + ecDrip * 0.45 + (1.0 - baseUV.y) * {F(u(45, 0.12, 0.28))});",
+            "float ecEdge = ecMask * (1.0 - ecMask) * 4.0;",
+            f"float ecSheen = pow(0.5 + 0.5 * sin(ecBody * {F(u(46, 6.0, 11.0))} - time * {qs(47, 0.3, 0.7)}), {F(u(48, 2.0, 4.0))});",
+            f"float mid = clamp(ecMask * ({F(u(49, 0.50, 0.70))} + 0.3 * ecSheen) + ecEdge * {F(u(55, 0.50, 0.80))}, 0.0, 1.2);",
+        ], [
+            "// drip rims catch the light: the goo boundary lifts to the hot stop",
+            f"rgb = mix(rgb, hotStop, clamp(ecEdge, 0.0, 1.0) * {F(u(56, 0.25, 0.40))});",
+        ])
+    if family == "VOIDRIFT":
+        # 3D: a dark shell torn by crack SDFs (ridged fbm3 pushed to a very
+        # thin crest) that reveal a BRIGHT starry deep layer through the
+        # rifts; the un-cracked body sinks to a near-black in-hue dark stop
+        # in the post pass, so the interior only reads through the cracks.
+        return (["fbm3", "hash31", "invsmooth"], [
+            f"float vrN = fbm3(mdir + vec3(0.0, {F(u(40, 0.10, 0.30))} * sin(time * {qs(41, 0.05, 0.12)}), 0.0));",
+            f"float vrCrack = pow(clamp(1.0 - abs(2.0 * vrN - 1.0) * {F(u(42, 1.05, 1.30))}, 0.0, 1.0), {F(u(43, 10.0, 18.0))});",
+            f"float vrWide = pow(clamp(1.0 - abs(2.0 * vrN - 1.0), 0.0, 1.0), {F(u(44, 3.0, 5.0))});",
+            "// the bright deep layer shows only THROUGH the cracks: a starry",
+            "// lattice on the (day-safely rotated) sphere direction",
+            f"vec3 vrS = rotA(spinAxis, time * {qs(45, 0.02, 0.06)}) * (sdir * {F(u(46, 9.0, 16.0))});",
+            "vec3 vrCell = floor(vrS);",
+            "float vrH = hash31(vrCell);",
+            f"float vrStar = step({F(u(47, 0.75, 0.85))}, vrH) * invsmooth(0.08, 0.42, length(fract(vrS) - 0.5)) * (0.6 + 0.4 * sin(time * (1.5 + 2.0 * vrH) + vrH * 31.0));",
+            f"float vrGlow = vrCrack * ({F(u(48, 0.70, 1.00))} + {F(u(49, 0.50, 0.80))} * vrStar) + vrWide * vrStar * 0.35;",
+            f"float mid = clamp(vrGlow + vrWide * {F(u(55, 0.08, 0.16))}, 0.0, 1.3);",
+        ], [
+            "// the un-cracked body sinks to near-black (in-hue): the void is",
+            "// a dark shell, and the starry interior reads only in the rifts",
+            f"rgb = mix(rgb, deepStop * {F(u(56, 0.40, 0.60))}, clamp(1.0 - vrWide * {F(u(57, 1.4, 2.0))}, 0.0, 1.0) * {F(u(58, 0.60, 0.80))});",
+        ])
     raise KeyError(family)
 
 
@@ -1545,6 +2051,28 @@ FAMILY_PRESENCE = {
     "RIBBONAURORA": {"floor": (0.12, 0.20), "gain": (0.44, 0.60), "sat": (1.15, 1.40)},
     "EMBERSTORM":   {"floor": (0.14, 0.22), "gain": (0.45, 0.60)},
     "FROSTFERN":    {"sat": (1.15, 1.40)},
+    # v5 families (only ever read once a registry row references them, so
+    # adding these entries cannot perturb any existing id's draws or bytes).
+    "SPECTRALVEIL": {"floor": (0.10, 0.18), "gain": (0.38, 0.52), "amax": (0.72, 0.82), "sat": (1.10, 1.35)},
+    "RAYMARCHFOG":  {"floor": (0.30, 0.40), "gain": (0.28, 0.40), "amax": (0.80, 0.88), "sat": (1.25, 1.50), "cover": (0.70, 0.95)},
+    "PRISMDISPERSE": {"floor": (0.24, 0.34), "gain": (0.34, 0.50), "sat": (1.20, 1.45)},
+    "HOLOPARALLAX": {"floor": (0.10, 0.18), "gain": (0.48, 0.62), "amax": (0.78, 0.86)},
+    "ORBITTRAP":    {"floor": (0.12, 0.20), "gain": (0.44, 0.58), "sat": (1.18, 1.42)},
+    "CRYSTALSDF":   {"floor": (0.26, 0.38), "gain": (0.36, 0.52), "sat": (1.12, 1.38)},
+    "FLUIDINK":     {"floor": (0.28, 0.38), "gain": (0.32, 0.46), "sat": (1.18, 1.42)},
+    "IRISFILM":     {"floor": (0.16, 0.26), "gain": (0.38, 0.54), "amax": (0.74, 0.84), "sat": (1.25, 1.50)},
+    "AETHERSMOKE":  {"floor": (0.24, 0.34), "gain": (0.30, 0.44), "sat": (1.15, 1.40), "cover": (0.75, 1.00)},
+    "STAINEDGLASS": {"floor": (0.30, 0.42), "gain": (0.34, 0.48), "amax": (0.84, 0.90), "sat": (1.20, 1.45)},
+    "PHANTOMECHO":  {"floor": (0.08, 0.16), "gain": (0.46, 0.62), "amax": (0.74, 0.84)},
+    "GRAVLENS":     {"floor": (0.08, 0.14), "gain": (0.48, 0.62)},
+    "MYCELIA":      {"floor": (0.12, 0.20), "gain": (0.44, 0.60)},
+    "SOLARFLARE":   {"floor": (0.12, 0.20), "gain": (0.46, 0.62), "sat": (1.15, 1.40)},
+    "DEEPICE":      {"floor": (0.28, 0.40), "gain": (0.32, 0.46), "amax": (0.82, 0.90), "sat": (1.12, 1.35)},
+    "RUNECIRCUIT":  {"floor": (0.10, 0.18), "gain": (0.48, 0.64)},
+    "OILSLICK":     {"floor": (0.26, 0.36), "gain": (0.32, 0.46), "sat": (1.25, 1.50)},
+    "PLASMAGLOBE":  {"floor": (0.06, 0.12), "gain": (0.50, 0.66), "amax": (0.80, 0.88)},
+    "ECTOPLASM":    {"floor": (0.18, 0.28), "gain": (0.40, 0.56), "sat": (1.12, 1.38)},
+    "VOIDRIFT":     {"floor": (0.14, 0.24), "gain": (0.42, 0.58)},
 }
 
 # Families whose DEEP volume must stay subordinate to the MID signature (the
@@ -1553,6 +2081,12 @@ FAMILY_PRESENCE = {
 DEEP_WEIGHT = {
     "KALISET": 0.5, "VOIDTENDRIL": 0.55, "VOLUMECLOUD": 0.75,
     "TENDRILNET": 0.7, "GALAXYSWIRL": 0.7, "PORTALVOID": 0.7, "BIOLUME": 0.65,
+    # v5: the sparse/dark signatures must not be muddied by the deep volume
+    # (and the march/composite families already carry their own depth).
+    "ORBITTRAP": 0.5, "GRAVLENS": 0.5, "PLASMAGLOBE": 0.45, "VOIDRIFT": 0.5,
+    "PHANTOMECHO": 0.6, "RUNECIRCUIT": 0.6, "SOLARFLARE": 0.6, "MYCELIA": 0.65,
+    "HOLOPARALLAX": 0.6, "SPECTRALVEIL": 0.7, "RAYMARCHFOG": 0.65,
+    "AETHERSMOKE": 0.65, "STAINEDGLASS": 0.7,
 }
 
 
@@ -1597,6 +2131,14 @@ MID_SCALE_RANGES = {
     "HOLOGRID": (7.0, 12.0), "PORTALVOID": (3.0, 6.0), "EMBERSTORM": (8.0, 14.0),
     "SHARDTESS": (6.0, 10.0), "SACREDGEO": (5.0, 9.0), "VOIDTENDRIL": (3.0, 6.0),
     "CRYSTALREFRACT": (6.0, 10.0),
+    "SPECTRALVEIL": (3.0, 6.0), "RAYMARCHFOG": (2.5, 5.0),
+    "PRISMDISPERSE": (3.0, 6.0), "HOLOPARALLAX": (6.0, 10.0),
+    "ORBITTRAP": (3.0, 6.0), "CRYSTALSDF": (3.0, 6.0), "FLUIDINK": (3.0, 6.0),
+    "IRISFILM": (3.0, 5.5), "AETHERSMOKE": (3.0, 6.0),
+    "STAINEDGLASS": (5.0, 9.0), "PHANTOMECHO": (3.0, 6.0),
+    "GRAVLENS": (8.0, 14.0), "MYCELIA": (6.0, 11.0), "SOLARFLARE": (3.0, 6.0),
+    "DEEPICE": (5.0, 9.0), "RUNECIRCUIT": (5.0, 9.0), "OILSLICK": (4.0, 7.0),
+    "PLASMAGLOBE": (3.0, 6.0), "ECTOPLASM": (5.0, 9.0), "VOIDRIFT": (3.0, 6.0),
 }
 
 
@@ -1879,6 +2421,23 @@ def emit_shader(asg: dict) -> str:
     cap_gain = F(u(126, 1.45, 1.85))   # hot-stop luma cap vs base luma
     cap_lo = F(u(127, 0.45, 0.60))     # hot-stop luma cap floor
     hot_sat = F(u(85, 1.10, 1.35))     # hot-stop saturation lift (repurposed draw)
+
+    # v5 quality-layer knobs, read ONLY for the 20 v5 families. Byte-safety:
+    # the 128 draws are materialized up front and u() is a positional lookup,
+    # so conditionally reading spare indices here can never shift any other
+    # knob -- and no registry id maps to a v5 family yet, so no existing file
+    # gains these lines.
+    is_v5 = family in FAMILIES_V5
+    if is_v5:
+        v5_bf_dim = F(u(8, 0.25, 0.45))     # back-face recede toward the dark stop
+        v5_bf_dens = F(u(74, 0.15, 0.35))   # back-face alpha densify
+        v5_sp_w = F(u(114, 0.10, 0.22))     # slope-parallax pattern weight
+        v5_sp_step = u(115, 0.05, 0.11)     # slope-parallax per-tap offset
+        v5_sp_scale = u(67, 1.4, 2.4)       # slope-parallax domain scale
+        v5_ghost_lo = u(68, 0.38, 0.55)     # ghost-alpha floor at zero luminance
+        v5_knee = u(70, 0.62, 0.78)         # soft-knee highlight start
+        v5_knee_k = F(u(71, 1.6, 2.6))      # soft-knee compression steepness
+        v5_dither = F(u(75, 0.06, 0.14))    # blue-noise alpha dither amplitude
     sec_ang, sec_sat, sec_val = secondary_consts(
         asg["primary"], asg["secondary"] if asg.get("secondary") is not None else asg["primary"])
 
@@ -2040,7 +2599,18 @@ def emit_shader(asg: dict) -> str:
     lines.append("    // signature structure, and the gradient position leans toward the hot")
     lines.append("    // stop at the rim (chromatic rim). The vertexColor.a dissolve near")
     lines.append("    // whitelisted players always wins the final alpha.")
-    lines.append(f"    float pattern = clamp({dw} * deepPat + {mw} * mid + {rw} * rim + flourish + grain, 0.0, 1.5);")
+    if is_v5:
+        lines.append("    // [layer:v5:slopeparallax]")
+        lines.append("    // v5 slope-parallax multi-tap: three EXTRA taps of the deep field,")
+        lines.append("    // stepped along the silhouette slope (par, screen-space: seam-safe)")
+        lines.append("    // at growing offset and scale -- the membrane texture itself gains")
+        lines.append("    // depth where the shell curves away from the view.")
+        lines.append(f"    float v5Par = deepField(sdir * {F(v5_sp_scale)} + par * {F(v5_sp_step)}, time) * 0.5;")
+        lines.append(f"    v5Par += deepField(sdir * {F(v5_sp_scale * 1.35)} + par * {F(v5_sp_step * 2.0)}, time) * 0.3;")
+        lines.append(f"    v5Par += deepField(sdir * {F(v5_sp_scale * 1.75)} + par * {F(v5_sp_step * 3.0)}, time) * 0.2;")
+        lines.append(f"    float pattern = clamp({dw} * deepPat + {mw} * mid + {rw} * rim + flourish + grain + {v5_sp_w} * v5Par, 0.0, 1.5);")
+    else:
+        lines.append(f"    float pattern = clamp({dw} * deepPat + {mw} * mid + {rw} * rim + flourish + grain, 0.0, 1.5);")
     lines.append(f"    float gpos = clamp(pattern * {pk} + rim * {rk}, 0.0, 1.0);")
     lines.append("    vec3 rgb = gradient3(deepStop, baseCol, hotStop, gpos);")
     lines.append(f"    float midCover = clamp({mwc} * mid + {rwc} * rim, 0.0, 1.0);")
@@ -2064,12 +2634,39 @@ def emit_shader(asg: dict) -> str:
     lines.append(f"    rgb = mix(rgb, rgb * (0.72 + 0.56 * rimDisp), clamp(rim, 0.0, 1.0) * {F(u(83, 0.10, 0.22))});")
     lines.append(f"    vec3 lineDisp = 0.5 + 0.5 * cos(vec3(0.6452, 0.8065, 1.0) * (rimLine * {line_disp_f} + baseUV.y * 0.31 + {line_disp_p}) * 6.2831853);")
     lines.append(f"    rgb = mix(rgb, hotStop * (0.62 + 0.50 * lineDisp), clamp(rimLine, 0.0, 1.0) * {line_disp_w});")
+    if is_v5:
+        lines.append("    // [layer:v5:softknee]")
+        lines.append("    // v5 soft-knee highlight rolloff: channels over the knee compress")
+        lines.append("    // exponentially instead of clipping (continuous at the knee since")
+        lines.append("    // exp(0) = 1), so hot crests keep hue separation right up to white.")
+        lines.append(f"    vec3 v5Over = max(rgb - vec3({F(v5_knee)}), vec3(0.0));")
+        lines.append(f"    rgb = min(rgb, vec3({F(v5_knee)})) + {F(1.0 - v5_knee)} * (1.0 - exp(-v5Over * {v5_knee_k}));")
     lines.append("    // Presence alpha (family-tuned): a solid-but-translucent membrane")
     lines.append("    // floor wherever the pattern is present, rising toward the ceiling on")
     lines.append("    // bright features, plus the deep volume's own Beer-Lambert opacity;")
     lines.append("    // pattern-free areas stay dark AND thin (anti-washout).")
     lines.append(f"    float presence = smoothstep(0.02, 0.30, pattern);")
     lines.append(f"    float alpha = vertexColor.a * min({a_base} + {a_floor} * presence + {a_gain} * pattern + {a_vol} * (1.0 - deepTrans), {a_max});")
+    if is_v5:
+        lines.append("    // [layer:v5:backface]")
+        lines.append("    // v5 back-face densify/dim (gl_FrontFacing is a builtin, no uniform")
+        lines.append("    // needed): the INSIDE of the far shell recedes toward the dark stop")
+        lines.append("    // and gains alpha, so the bubble reads as a filled volume from within.")
+        lines.append("    float v5Back = gl_FrontFacing ? 0.0 : 1.0;")
+        lines.append(f"    rgb = mix(rgb, deepStop, v5Back * {v5_bf_dim});")
+        lines.append(f"    alpha = min(alpha * (1.0 + v5Back * {v5_bf_dens}), {a_max});")
+        lines.append("    // [layer:v5:ghostalpha]")
+        lines.append("    // v5 luminance-weighted ghost translucency: dark areas thin out while")
+        lines.append("    // bright features hold. Multiplicative on the existing alpha, so the")
+        lines.append("    // vertexColor.a dissolve near whitelisted players still always wins.")
+        lines.append("    float v5Luma = dot(clamp(rgb, 0.0, 1.0), vec3(0.299, 0.587, 0.114));")
+        lines.append(f"    alpha *= {F(v5_ghost_lo)} + {F(1.0 - v5_ghost_lo)} * smoothstep(0.03, 0.42, v5Luma);")
+        lines.append("    // [layer:v5:dither]")
+        lines.append("    // v5 blue-noise-style alpha dither (interleaved gradient noise on")
+        lines.append("    // gl_FragCoord) breaks translucency banding; multiplicative, so it is")
+        lines.append("    // scaled by the dissolve and alpha = 0 stays exactly 0.")
+        lines.append("    float v5Dither = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));")
+        lines.append(f"    alpha = clamp(alpha * (1.0 + (v5Dither - 0.5) * {v5_dither}), 0.0, 1.0);")
     lines.append("    vec4 color = vec4(clamp(rgb, 0.0, 1.0), alpha);")
     lines.append("    if (color.a < 0.01) {")
     lines.append("        discard;")
