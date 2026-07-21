@@ -34,14 +34,19 @@ Design (see /tmp/shader_plan.md section 4.2 and AGENTS.md):
   TintMix, LumaFloor] (id-phase, secondary motion rate, palette-lean weight,
   gameplay luminance floor).
 
-* 20 screen technique families -- the 16 original template looks refactored as
+* 28 screen technique families -- the 16 original template looks refactored as
   parameterized modules (tint, wobble, vignette, chroma, pixelate, desat,
   bloomglow, ripple, scanlines, edgeglow, frostlens, heathaze, posterize,
-  radialblur, glitch, duotone) + 4 new ones (kaleido refraction, huedrift,
-  dreamblur + sparkle, moire interference). Each id's family comes from
-  EffectRegistry.java (parsed at generation time as ground truth); the
-  structural stack (family, variant, motion, overlay) is chosen by
-  deterministic probing so all 420 stacks are pairwise distinct.
+  radialblur, glitch, duotone) + 4 v2 ones (kaleido refraction, huedrift,
+  dreamblur + sparkle, moire interference) + 8 v5 ones held ready for the next
+  catalogue flip (spectral ghost echoes, aberration lens fringing, underwater
+  caustic refraction, thermal false-color, sketch edge ink, starburst streaks,
+  vhs tape artifacts, gloom breathing dusk). Each id's family comes from
+  EffectRegistry.java (parsed at generation time as ground truth), so the v5
+  modules emit nothing until registry rows reference them -- adding them does
+  not perturb a single existing byte. The structural stack (family, variant,
+  motion, overlay) is chosen by deterministic probing so all 420 stacks are
+  pairwise distinct.
 
 * Gameplay safety, enforced by the shared composer (not per-module discretion):
   every non-identity scene sample is routed through
@@ -103,6 +108,11 @@ FAMILIES = [
     "bloomglow", "ripple", "scanlines", "edgeglow", "frostlens", "heathaze",
     "posterize", "radialblur", "glitch", "duotone",
     "kaleido", "huedrift", "dreamblur", "moire",
+    # v5 families: DORMANT until the next catalogue flip adds EffectRegistry
+    # rows that reference them (no current row does, so they emit nothing and
+    # every existing sfx byte is untouched).
+    "spectral", "aberration", "underwater", "thermal",
+    "sketch", "starburst", "vhs", "gloom",
 ]
 
 # Structural variant axis per family (baked GLSL structure, not just numbers).
@@ -127,6 +137,14 @@ VARIANTS = {
     "huedrift": ["global", "radial", "waves", "split"],
     "dreamblur": ["soft9", "cross5", "glowdream", "edgehalo"],
     "moire": ["linlin", "ringring", "linring", "rotmoire"],
+    "spectral": ["twin", "triple", "orbit", "fade"],
+    "aberration": ["barrel", "pincushion", "breathing", "cornered"],
+    "underwater": ["shallows", "deep", "shafted", "surgewash"],
+    "thermal": ["classic", "inverted", "banded", "hotspots"],
+    "sketch": ["ink", "crosshatch", "charcoal", "blueprint"],
+    "starburst": ["four", "five", "six", "spinning"],
+    "vhs": ["tracking", "dropout", "headswitch", "worn"],
+    "gloom": ["dusk", "creeping", "heartbeat", "hollow"],
 }
 
 MOTIONS = ["steady", "pulse", "drift", "surge"]
@@ -1180,6 +1198,471 @@ def fam_moire(v, u):
     ] + tail, set()
 
 
+# ---------------------------------------------------------------------------
+# v5 family modules (spectral/aberration/underwater/thermal/sketch/starburst/
+# vhs/gloom). DORMANT until the next catalogue flip adds EffectRegistry rows
+# that reference them, so nothing below can perturb an existing sfx byte.
+#
+# Shared v5 conventions (same discipline as the v1-v4 modules above):
+# * every displaced scene sample routes its TOTAL summed displacement through
+#   ONE safeOffset() clamp (never two stacked half-clamps);
+# * the new families cannot rely on a JSON-side SPEED_CLAMP entry existing for
+#   them yet, so every hard-cut/strobe-capable term is rate-limited IN-SHADER:
+#   quantized frame counters use floor(anim * m) with m <= 0.3 (a worst-case
+#   drift-boosted id-419 anim advances ~9.8/s, so rerolls stay under ~3 Hz --
+#   photosensitivity), and luminance-modulating sines keep rate constants low
+#   enough for the same bound;
+# * the flip may pack ParamsA.z/.w as 0.0 for these families, so none of them
+#   divides by (or scales purely with) those knobs -- frequencies are baked
+#   per-id via u(), and ParamsA.w is only used through a max() guard;
+# * amplitude knobs ride min(strength, 1.0) / clamp(strength, 0.0, 1.0) so an
+#   unexpected packing cannot over-drive an additive or displacement term.
+# ---------------------------------------------------------------------------
+
+
+def fam_spectral(v, u):
+    # 2-3 DECAYING ghost-offset resamples of InSampler + desaturation drift.
+    # Echo weights are energy-preserving (base keeps 1 - sum(w)) and every
+    # ghost tap is bounded by safeOffset.
+    tail = [
+        "// Desaturation drift: a slow spirit-world pallor swings on GameTime.",
+        f"float pallor = {F(u(8, 0.25, 0.4))} + {F(u(9, 0.12, 0.2))} * sin(anim * {F(u(10, 0.2, 0.4))} + ParamsB.x * 6.2831);",
+        "vec3 pale = mix(haunted, vec3(luma(haunted)), clamp(pallor * strength, 0.0, 0.8));",
+        "vec3 outColor = mix(pale, pale * Primary.rgb, ParamsB.z);",
+    ]
+    if v == "twin":
+        ang = u(0, 0.3, 1.2)
+        return [
+            "// Twin ghosts: two opposite decaying echoes along a fixed diagonal.",
+            "float echoK = clamp(strength, 0.0, 1.0);",
+            f"vec2 ghostAxis = vec2({F(math.cos(ang))}, {F(math.sin(ang))}) * {F(u(1, 0.008, 0.013))} * animAmp;",
+            "vec3 g1 = sampleAt(texCoord + safeOffset(ghostAxis));",
+            f"vec3 g2 = sampleAt(texCoord + safeOffset(-ghostAxis * {F(u(2, 1.6, 2.0))}));",
+            f"float w1 = {F(u(3, 0.28, 0.38))} * echoK;",
+            f"float w2 = {F(u(4, 0.13, 0.19))} * echoK;",
+            "vec3 haunted = base * (1.0 - w1 - w2) + g1 * w1 + g2 * w2;",
+        ] + tail, {"luma", "safeOffset", "sampleAt"}
+    if v == "triple":
+        return [
+            "// Three ghosts at 120-degree spokes, each fainter and further out.",
+            "float echoK = clamp(strength, 0.0, 1.0);",
+            f"float spokeAng = {F(u(0, 0.0, 2.0))};",
+            f"float ghostR = {F(u(1, 0.007, 0.012))} * animAmp;",
+            "vec3 g1 = sampleAt(texCoord + safeOffset(vec2(cos(spokeAng), sin(spokeAng)) * ghostR));",
+            f"vec3 g2 = sampleAt(texCoord + safeOffset(vec2(cos(spokeAng + 2.0944), sin(spokeAng + 2.0944)) * ghostR * {F(u(2, 1.4, 1.7))}));",
+            f"vec3 g3 = sampleAt(texCoord + safeOffset(vec2(cos(spokeAng + 4.1888), sin(spokeAng + 4.1888)) * ghostR * {F(u(3, 1.9, 2.3))}));",
+            f"float w1 = {F(u(4, 0.23, 0.3))} * echoK;",
+            f"float w2 = {F(u(5, 0.12, 0.17))} * echoK;",
+            f"float w3 = {F(u(6, 0.06, 0.1))} * echoK;",
+            "vec3 haunted = base * (1.0 - w1 - w2 - w3) + g1 * w1 + g2 * w2 + g3 * w3;",
+        ] + tail, {"luma", "safeOffset", "sampleAt"}
+    if v == "orbit":
+        return [
+            "// The ghost pair slowly orbits the true image on GameTime.",
+            "float echoK = clamp(strength, 0.0, 1.0);",
+            f"float orbitAng = anim * {F(u(0, 0.1, 0.22))} + ParamsB.x * 6.2831;",
+            f"vec2 orbitDir = vec2(cos(orbitAng), sin(orbitAng)) * {F(u(1, 0.008, 0.013))} * animAmp;",
+            "vec3 g1 = sampleAt(texCoord + safeOffset(orbitDir));",
+            f"vec3 g2 = sampleAt(texCoord + safeOffset(-orbitDir * {F(u(2, 1.5, 1.9))}));",
+            f"float w1 = {F(u(3, 0.27, 0.36))} * echoK;",
+            f"float w2 = {F(u(4, 0.12, 0.18))} * echoK;",
+            "vec3 haunted = base * (1.0 - w1 - w2) + g1 * w1 + g2 * w2;",
+        ] + tail, {"luma", "safeOffset", "sampleAt"}
+    # fade
+    ang = u(0, 0.4, 1.3)
+    return [
+        "// A single echo trail: two taps down one axis, breathing in reach.",
+        "float echoK = clamp(strength, 0.0, 1.0);",
+        f"float reach = 0.7 + 0.3 * sin(anim * {F(u(1, 0.25, 0.45))} + ParamsB.x * 6.2831);",
+        f"vec2 trail = vec2({F(math.cos(ang))}, {F(math.sin(ang))}) * {F(u(2, 0.009, 0.015))} * reach * animAmp;",
+        "vec3 g1 = sampleAt(texCoord + safeOffset(trail));",
+        "vec3 g2 = sampleAt(texCoord + safeOffset(trail * 2.0));",
+        f"float w1 = {F(u(3, 0.3, 0.38))} * echoK;",
+        f"float w2 = {F(u(4, 0.12, 0.18))} * echoK;",
+        "vec3 haunted = base * (1.0 - w1 - w2) + g1 * w1 + g2 * w2;",
+    ] + tail, {"luma", "safeOffset", "sampleAt"}
+
+
+def fam_aberration(v, u):
+    # True lens fringing: a barrel/pincushion warp plus per-channel RADIAL
+    # offsets. The warp and the fringe are SUMMED before the single safeOffset
+    # clamp per channel, so the total displacement can never exceed the bound.
+    tail = [
+        "float red = sampleAt(texCoord + safeOffset(warp + fringe)).r;",
+        "float green = sampleAt(texCoord + safeOffset(warp)).g;",
+        "float blue = sampleAt(texCoord + safeOffset(warp - fringe)).b;",
+        "vec3 fringed = vec3(red, green, blue);",
+        "vec3 outColor = mix(fringed, fringed * Primary.rgb, ParamsB.z);",
+    ]
+    if v == "barrel":
+        return [
+            "// Barrel warp: the frame bulges outward; fringing grows with radius.",
+            "float r2 = centerDist * centerDist;",
+            f"vec2 warp = centered * r2 * {F(u(0, 0.05, 0.09))} * min(strength, 1.0);",
+            f"vec2 fringe = centered * r2 * {F(u(1, 0.012, 0.02))} * min(strength, 1.0) * animAmp;",
+        ] + tail, {"safeOffset", "sampleAt"}
+    if v == "pincushion":
+        return [
+            "// Pincushion warp: the frame pinches inward toward the center.",
+            "float r2 = centerDist * centerDist;",
+            f"vec2 warp = -centered * r2 * {F(u(0, 0.05, 0.09))} * min(strength, 1.0);",
+            f"vec2 fringe = centered * r2 * {F(u(1, 0.012, 0.02))} * min(strength, 1.0) * animAmp;",
+        ] + tail, {"safeOffset", "sampleAt"}
+    if v == "breathing":
+        return [
+            "// The lens breathes: the warp swings between barrel and pincushion",
+            "// on a slow GameTime sine (well under any strobe-relevant rate).",
+            "float r2 = centerDist * centerDist;",
+            f"float lensK = sin(anim * {F(u(0, 0.2, 0.4))} + ParamsB.x * 6.2831) * {F(u(1, 0.04, 0.07))} * min(strength, 1.0);",
+            "vec2 warp = centered * r2 * lensK;",
+            f"vec2 fringe = centered * r2 * {F(u(2, 0.012, 0.02))} * min(strength, 1.0) * animAmp;",
+        ] + tail, {"safeOffset", "sampleAt"}
+    # cornered
+    return [
+        "// Corner-weighted fringe: an r^4 falloff keeps the center optically",
+        "// clean while the corners smear like a cheap wide-angle element.",
+        "float r2 = centerDist * centerDist;",
+        f"vec2 warp = centered * r2 * {F(u(0, 0.03, 0.06))} * min(strength, 1.0);",
+        f"vec2 fringe = centered * r2 * r2 * {F(u(1, 0.03, 0.05))} * min(strength, 1.0) * animAmp;",
+    ] + tail, {"safeOffset", "sampleAt"}
+
+
+def fam_underwater(v, u):
+    # Caustic-modulated wavy refraction + blue-green depth grade + light
+    # shafts. All motion is slow scene-space sway (no hard cuts anywhere).
+    def caustic_sway(extra_amp):
+        return [
+            "// Caustic field (slow vnoise drift) modulates the sway amplitude.",
+            f"float caustic = vnoise(texCoord * {F(u(0, 6.0, 10.0))} + vec2(anim * {F(u(1, 0.08, 0.16))}, anim * {F(u(2, 0.05, 0.1))}));",
+            "vec2 sway = vec2(",
+            f"    sin(texCoord.y * {F(u(3, 40.0, 65.0))} + anim * {F(u(4, 1.0, 1.8))}),",
+            f"    cos(texCoord.x * {F(u(5, 30.0, 50.0))} - anim * {F(u(6, 0.8, 1.4))})",
+            f") * {F(u(7, 0.004, 0.007))} * min(strength, 1.0) * animAmp * (0.35 + 0.65 * caustic){extra_amp};",
+            "vec3 scene = sampleAt(texCoord + safeOffset(sway));",
+        ]
+    shaft_ang = u(8, 1.9, 2.4)
+    shafts = [
+        "// Light shafts: soft diagonal bands, brightest near the surface (top).",
+        f"vec2 shaftDir = vec2({F(math.cos(shaft_ang))}, {F(math.sin(shaft_ang))});",
+        f"float shaftBand = pow(0.5 + 0.5 * sin(dot(texCoord, shaftDir) * {F(u(9, 9.0, 16.0))} + anim * {F(u(10, 0.2, 0.45))}), {F(u(11, 3.0, 6.0))});",
+        f"float shaft = shaftBand * smoothstep({F(u(12, 0.15, 0.3))}, {F(u(13, 0.75, 0.95))}, texCoord.y) * (0.4 + 0.6 * caustic);",
+    ]
+    grade = [
+        "// Depth grade: the scene sinks toward the palette with screen depth.",
+        f"float depthMix = invsmooth({F(u(14, 0.1, 0.2))}, {F(u(15, 0.8, 0.95))}, texCoord.y);",
+        "vec3 deepTone = scene * mix(Primary.rgb, Secondary.rgb, depthMix);",
+    ]
+    if v == "shallows":
+        return caustic_sway("") + shafts + grade + [
+            f"vec3 graded = mix(scene, deepTone, {F(u(16, 0.3, 0.4))} * clamp(strength, 0.0, 1.0));",
+            f"vec3 outColor = graded + Primary.rgb * shaft * {F(u(17, 0.15, 0.22))} * min(strength, 1.0);",
+        ], {"invsmooth", "vnoise", "safeOffset", "sampleAt"}
+    if v == "deep":
+        return caustic_sway("") + shafts + grade + [
+            f"vec3 graded = mix(scene, deepTone, {F(u(16, 0.55, 0.7))} * clamp(strength, 0.0, 1.0)) * {F(u(18, 0.84, 0.92))};",
+            f"vec3 outColor = graded + Primary.rgb * shaft * {F(u(17, 0.06, 0.1))} * min(strength, 1.0);",
+        ], {"invsmooth", "vnoise", "safeOffset", "sampleAt"}
+    if v == "shafted":
+        return caustic_sway("") + shafts + [
+            "// A second, wider band set doubles up into proper god-rays.",
+            f"float shaftBandB = pow(0.5 + 0.5 * sin(dot(texCoord, shaftDir) * {F(u(18, 4.0, 7.0))} - anim * {F(u(19, 0.15, 0.3))}), {F(u(20, 2.5, 4.5))});",
+            f"shaft = clamp(shaft + shaftBandB * smoothstep({F(u(12, 0.15, 0.3))}, {F(u(13, 0.75, 0.95))}, texCoord.y) * 0.6, 0.0, 1.5);",
+        ] + grade + [
+            f"vec3 graded = mix(scene, deepTone, {F(u(16, 0.35, 0.45))} * clamp(strength, 0.0, 1.0));",
+            f"vec3 outColor = graded + Primary.rgb * shaft * {F(u(17, 0.22, 0.3))} * min(strength, 1.0);",
+        ], {"invsmooth", "vnoise", "safeOffset", "sampleAt"}
+    # surgewash
+    return [
+        "// A slow swell breathes through the sway and the grade together.",
+        f"float swell = 0.5 + 0.5 * sin(anim * {F(u(18, 0.15, 0.3))} + ParamsB.x * 6.2831);",
+    ] + caustic_sway(" * (0.7 + 0.3 * swell)") + shafts + grade + [
+        f"vec3 graded = mix(scene, deepTone, ({F(u(16, 0.3, 0.4))} + {F(u(19, 0.12, 0.2))} * swell) * clamp(strength, 0.0, 1.0));",
+        f"vec3 outColor = graded + Primary.rgb * shaft * {F(u(17, 0.12, 0.2))} * min(strength, 1.0);",
+    ], {"invsmooth", "vnoise", "safeOffset", "sampleAt"}
+
+
+def fam_thermal(v, u):
+    # Luma -> false-color ramp built from the FxConfig palette, biased by a
+    # slowly DRIFTING hotspot field. Strictly a per-pixel remap: no hard cuts,
+    # the only motion is the sub-0.1-rate noise drift (flicker-free).
+    ramp = [
+        "// False-color ramp: cold Secondary depths through the palette to a",
+        "// white-hot peak.",
+        f"vec3 coldTone = Secondary.rgb * {F(u(8, 0.14, 0.22))};",
+        f"vec3 ramped = mix(coldTone, Secondary.rgb, smoothstep(0.0, {F(u(9, 0.42, 0.5))}, heat));",
+        f"ramped = mix(ramped, Primary.rgb, smoothstep({F(u(10, 0.36, 0.44))}, {F(u(11, 0.72, 0.82))}, heat));",
+        f"ramped = mix(ramped, vec3(1.0), smoothstep({F(u(12, 0.84, 0.9))}, 1.0, heat));",
+        "vec3 outColor = mix(base, ramped, clamp(strength, 0.0, 1.0));",
+    ]
+    blob = [
+        "// Drifting hotspot field biases the reading before the ramp.",
+        f"float blob = vnoise(texCoord * {F(u(0, 3.0, 5.5))} + vec2(anim * {F(u(1, 0.04, 0.08))}, anim * {F(u(2, 0.02, 0.05))}));",
+    ]
+    if v == "classic":
+        return blob + [
+            f"float heat = clamp(baseLuma + (blob - 0.5) * {F(u(3, 0.2, 0.3))} * min(strength, 1.0), 0.0, 1.0);",
+        ] + ramp, {"luma", "vnoise"}
+    if v == "inverted":
+        return blob + [
+            "// Inverted sensor: shadows read hot, highlights read cold.",
+            f"float heat = clamp(1.0 - baseLuma + (blob - 0.5) * {F(u(3, 0.2, 0.3))} * min(strength, 1.0), 0.0, 1.0);",
+        ] + ramp, {"luma", "vnoise"}
+    if v == "banded":
+        levels = float(int(u(4, 5.0, 8.99)))
+        return blob + [
+            "// Quantized isotherm bands, like a cheap thermography readout.",
+            f"float heat = clamp(baseLuma + (blob - 0.5) * {F(u(3, 0.18, 0.26))} * min(strength, 1.0), 0.0, 1.0);",
+            f"heat = floor(heat * {F(levels)} + 0.5) / {F(levels)};",
+        ] + ramp, {"luma", "vnoise"}
+    # hotspots
+    return blob + [
+        "// A second, tighter octave makes distinct wandering hot blobs.",
+        f"float blobB = vnoise(texCoord * {F(u(4, 7.0, 11.0))} - vec2(anim * {F(u(5, 0.03, 0.06))}, anim * {F(u(6, 0.05, 0.09))}));",
+        f"float heat = clamp(baseLuma + (blob * 0.6 + blobB * 0.4 - 0.5) * {F(u(3, 0.3, 0.45))} * min(strength, 1.0), 0.0, 1.0);",
+    ] + ramp, {"luma", "vnoise"}
+
+
+def fam_sketch(v, u):
+    # 4-tap Sobel (cross-difference) edge ink over a contrast-flattened,
+    # paper-tinted base. The edge taps are pixel-scale (well inside the
+    # safeOffset bound) and the look is static: day-wrap-trivially-safe.
+    taps = [
+        "// 4-tap cross-difference Sobel over scene luma.",
+        f"vec2 texel = {F(u(0, 1.0, 1.6))} / safeInSize;",
+        "float gl = lumaAt(texCoord + safeOffset(vec2(-texel.x, 0.0)));",
+        "float gr = lumaAt(texCoord + safeOffset(vec2(texel.x, 0.0)));",
+        "float gu = lumaAt(texCoord + safeOffset(vec2(0.0, -texel.y)));",
+        "float gd = lumaAt(texCoord + safeOffset(vec2(0.0, texel.y)));",
+        f"float edge = clamp(length(vec2(gr - gl, gd - gu)) * {F(u(1, 2.8, 4.2))}, 0.0, 1.0);",
+        "// Paper base: contrast-flattened luma with a palette paper tint.",
+        f"float flatTone = {F(u(2, 0.52, 0.62))} + {F(u(3, 0.28, 0.36))} * baseLuma;",
+        "vec3 paper = vec3(flatTone) * mix(vec3(1.0), Secondary.rgb, ParamsB.z);",
+    ]
+    if v == "ink":
+        return taps + [
+            f"vec3 inked = mix(paper, Primary.rgb * {F(u(4, 0.1, 0.2))}, edge);",
+            "vec3 outColor = mix(base, inked, clamp(strength, 0.0, 1.0));",
+        ], {"luma", "lumaAt", "safeOffset"}
+    if v == "crosshatch":
+        ang = u(4, 0.5, 1.0)
+        return taps + [
+            "// Shadow crosshatch: two static gratings bite where the scene is dark.",
+            f"float h1 = 0.5 + 0.5 * sin((texCoord.x * {F(math.cos(ang))} + texCoord.y * {F(math.sin(ang))}) * {F(u(5, 320.0, 420.0))});",
+            f"float h2 = 0.5 + 0.5 * sin((texCoord.x * {F(-math.sin(ang))} + texCoord.y * {F(math.cos(ang))}) * {F(u(6, 300.0, 400.0))});",
+            f"float shadowMask = smoothstep({F(u(7, 0.3, 0.4))}, {F(u(8, 0.75, 0.9))}, 1.0 - baseLuma);",
+            f"float hatch = clamp(smoothstep(0.6, 1.0, h1) + smoothstep(0.65, 1.0, h2), 0.0, 1.0) * shadowMask;",
+            f"vec3 inked = mix(paper, Primary.rgb * {F(u(9, 0.12, 0.2))}, clamp(edge + hatch * {F(u(10, 0.5, 0.7))}, 0.0, 1.0));",
+            "vec3 outColor = mix(base, inked, clamp(strength, 0.0, 1.0));",
+        ], {"luma", "lumaAt", "safeOffset"}
+    if v == "charcoal":
+        return taps + [
+            "// Charcoal: soft wide strokes broken up by a static grain mask.",
+            f"float soft = pow(edge, {F(u(4, 0.55, 0.7))});",
+            f"float grain = vnoise(texCoord * safeInSize * {F(u(5, 0.04, 0.08))});",
+            f"vec3 inked = mix(paper, Secondary.rgb * {F(u(6, 0.15, 0.25))}, clamp(soft * (0.55 + 0.45 * grain), 0.0, 1.0));",
+            "vec3 outColor = mix(base, inked, clamp(strength, 0.0, 1.0));",
+        ], {"luma", "lumaAt", "safeOffset", "vnoise"}
+    # blueprint
+    return taps + [
+        "// Blueprint: glowing drafting lines over a deep palette paper.",
+        f"vec3 paperDeep = Secondary.rgb * ({F(u(4, 0.2, 0.3))} + {F(u(5, 0.1, 0.18))} * baseLuma);",
+        f"vec3 inked = paperDeep + Primary.rgb * edge * {F(u(6, 0.7, 0.9))};",
+        "vec3 outColor = mix(base, inked, clamp(strength, 0.0, 1.0));",
+    ], {"luma", "lumaAt", "safeOffset"}
+
+
+def fam_starburst(v, u):
+    # Bright-pass directional streaks: 4-6 arms, <= 12 decaying arm taps total
+    # (the compile-safety streak-tap budget; the center bright term reuses the
+    # prelude's undisplaced `base` fetch instead of a 13th texture tap).
+    # Distinct from bloomglow's starburst variant (3 double-ended axes, single
+    # tap per arm): these are one-sided arms with multiple decaying taps each.
+    # ParamsA.w may be packed as 0.0 for this family, so the bright threshold
+    # is floor-guarded via max().
+    tail = [
+        "// Additive calibration: capped strength, attenuated on bright scenes.",
+        f"vec3 outColor = base + streak * mix(vec3(1.0), Primary.rgb, {F(u(9, 0.55, 0.75))}) * min(strength, 1.0) * (1.0 - {F(u(10, 0.3, 0.45))} * baseLuma);",
+    ]
+    thr = f"max(ParamsA.w, {F(u(1, 0.35, 0.5))})"
+    center = "vec3 streak = base * max(baseLuma - thr, 0.0) * 0.3;"
+    if v == "four":
+        return [
+            "// 4-arm starburst: 3 decaying bright-pass taps down each arm.",
+            f"vec2 texel = {F(u(0, 4.0, 7.0))} / safeInSize;",
+            f"float thr = {thr};",
+            center,
+            "for (int i = 0; i < 4; i++) {",
+            f"    float armAng = float(i) * 1.5708 + {F(u(2, 0.0, 0.7))};",
+            "    vec2 arm = vec2(cos(armAng), sin(armAng)) * texel;",
+            "    streak += brightTap(texCoord + safeOffset(arm), thr) * 0.1;",
+            f"    streak += brightTap(texCoord + safeOffset(arm * {F(u(3, 2.0, 2.5))}), thr) * 0.06;",
+            f"    streak += brightTap(texCoord + safeOffset(arm * {F(u(4, 3.2, 3.9))}), thr) * 0.035;",
+            "}",
+        ] + tail, {"luma", "brightTap", "safeOffset"}
+    if v == "five":
+        return [
+            "// 5-arm starburst: an off-kilter iris star, 2 taps per arm.",
+            f"vec2 texel = {F(u(0, 4.0, 7.0))} / safeInSize;",
+            f"float thr = {thr};",
+            center,
+            "for (int i = 0; i < 5; i++) {",
+            f"    float armAng = float(i) * 1.2566 + {F(u(2, 0.0, 0.6))};",
+            "    vec2 arm = vec2(cos(armAng), sin(armAng)) * texel;",
+            "    streak += brightTap(texCoord + safeOffset(arm), thr) * 0.11;",
+            f"    streak += brightTap(texCoord + safeOffset(arm * {F(u(3, 2.1, 2.6))}), thr) * 0.055;",
+            "}",
+        ] + tail, {"luma", "brightTap", "safeOffset"}
+    if v == "six":
+        return [
+            "// 6-arm starburst: a dense snowflake star, 2 taps per arm.",
+            f"vec2 texel = {F(u(0, 3.5, 6.0))} / safeInSize;",
+            f"float thr = {thr};",
+            center,
+            "for (int i = 0; i < 6; i++) {",
+            f"    float armAng = float(i) * 1.0472 + {F(u(2, 0.0, 0.5))};",
+            "    vec2 arm = vec2(cos(armAng), sin(armAng)) * texel;",
+            "    streak += brightTap(texCoord + safeOffset(arm), thr) * 0.1;",
+            f"    streak += brightTap(texCoord + safeOffset(arm * {F(u(3, 2.1, 2.6))}), thr) * 0.05;",
+            "}",
+        ] + tail, {"luma", "brightTap", "safeOffset"}
+    # spinning
+    return [
+        "// 4-arm burst that slowly wheels on GameTime (calm, sub-strobe rate).",
+        f"vec2 texel = {F(u(0, 4.0, 7.0))} / safeInSize;",
+        f"float thr = {thr};",
+        f"float wheel = anim * {F(u(2, 0.06, 0.14))};",
+        center,
+        "for (int i = 0; i < 4; i++) {",
+        "    float armAng = float(i) * 1.5708 + wheel;",
+        "    vec2 arm = vec2(cos(armAng), sin(armAng)) * texel;",
+        "    streak += brightTap(texCoord + safeOffset(arm), thr) * 0.11;",
+        f"    streak += brightTap(texCoord + safeOffset(arm * {F(u(3, 2.1, 2.6))}), thr) * 0.06;",
+        "}",
+    ] + tail, {"luma", "brightTap", "safeOffset"}
+
+
+def fam_vhs(v, u):
+    # Tape-deck artifacts: scanline-phase wobble + intermittent line dropouts
+    # + chroma bleed. Dropout/tracking rerolls are quantized SLOWLY: the
+    # floor() multiplier is <= 0.3, so even a drift-boosted max-Speed anim
+    # (~9.8/s at id 419) rerolls under ~3 Hz -- the same photosensitivity
+    # discipline the glitch/scanlines families get from the JSON SPEED_CLAMP
+    # (which does not cover these new families yet, hence the in-shader cap).
+    # The frame counter wraps at 1024 to keep hash inputs fp32-friendly.
+    prelude = [
+        "float vhsK = min(ParamsA.y, 1.0);",
+        f"float frame = mod(floor(anim * {F(u(0, 0.18, 0.3))}), 1024.0);",
+        f"float row = floor(texCoord.y * {F(u(1, 90.0, 140.0))});",
+        "// Scanline-phase wobble: every row leans on a slow sine phase.",
+        f"float phaseWobble = sin(texCoord.y * {F(u(2, 240.0, 340.0))} + anim * {F(u(3, 0.8, 1.4))}) * {F(u(4, 0.0012, 0.002))} * vhsK * animAmp;",
+    ]
+    bleed_tail = [
+        "// Chroma bleed: the color channels smear sideways off the luma. The",
+        "// row shift and the bleed are summed before the single clamp.",
+        f"float bleed = {F(u(5, 0.0025, 0.0042))} * vhsK;",
+        "float red = sampleAt(texCoord + safeOffset(baseOff + vec2(bleed, 0.0))).r;",
+        "float green = sampleAt(texCoord + safeOffset(baseOff)).g;",
+        f"float blue = sampleAt(texCoord + safeOffset(baseOff - vec2(bleed * {F(u(6, 1.4, 1.9))}, 0.0))).b;",
+        "vec3 taped = vec3(red, green, blue);",
+    ]
+    if v == "tracking":
+        return prelude + [
+            "// A tracking band crawls up the tape and shears the rows it crosses.",
+            f"float bandPos = fract(anim * {F(u(7, 0.03, 0.06))});",
+            f"float bandMask = invsmooth(0.0, {F(u(8, 0.05, 0.09))}, abs(texCoord.y - bandPos));",
+            f"float shear = (hash11(row * 3.7 + frame * 17.3) - 0.5) * {F(u(9, 0.02, 0.035))} * vhsK * bandMask;",
+            "vec2 baseOff = vec2(phaseWobble + shear, 0.0);",
+        ] + bleed_tail + [
+            f"taped = mix(taped, vec3(luma(taped)) * {F(u(10, 1.1, 1.3))}, bandMask * {F(u(11, 0.35, 0.5))} * vhsK);",
+            "vec3 outColor = mix(taped, taped * Primary.rgb, ParamsB.z);",
+        ], {"luma", "invsmooth", "hash11", "safeOffset", "sampleAt"}
+    if v == "dropout":
+        return prelude + [
+            "// Intermittent line dropouts: rare rows lose signal to pale static.",
+            "float dropRoll = hash11(row * 7.31 + frame * 13.7);",
+            f"float drop = step({F(u(7, 0.94, 0.97))}, dropRoll);",
+            "vec2 baseOff = vec2(phaseWobble, 0.0);",
+        ] + bleed_tail + [
+            f"float snowNoise = hash21(vec2(floor(texCoord.x * {F(u(8, 160.0, 240.0))}), row + frame));",
+            f"taped = mix(taped, vec3({F(u(9, 0.75, 0.9))}) * (0.6 + 0.4 * snowNoise), drop * {F(u(10, 0.6, 0.8))} * vhsK);",
+            "vec3 outColor = mix(taped, taped * Primary.rgb, ParamsB.z);",
+        ], {"hash11", "hash21", "safeOffset", "sampleAt"}
+    if v == "headswitch":
+        return prelude + [
+            "// Head-switch tear: the bottom edge of the frame always shears.",
+            f"float switchZone = invsmooth(0.0, {F(u(7, 0.05, 0.09))}, texCoord.y);",
+            f"float shear = switchZone * (sin(anim * {F(u(8, 0.5, 0.9))} + texCoord.y * {F(u(9, 60.0, 90.0))}) * 0.5 + 0.7) * {F(u(10, 0.008, 0.014))} * vhsK;",
+            "vec2 baseOff = vec2(phaseWobble + shear, 0.0);",
+        ] + bleed_tail + [
+            f"taped = mix(taped, vec3(luma(taped)), switchZone * {F(u(11, 0.3, 0.5))});",
+            "vec3 outColor = mix(taped, taped * Primary.rgb, ParamsB.z);",
+        ], {"luma", "invsmooth", "safeOffset", "sampleAt"}
+    # worn
+    return prelude + [
+        "// Worn tape: per-row micro-jitter plus an all-over grain film.",
+        f"float rowJitter = (hash11(row + frame * 91.7) - 0.5) * {F(u(7, 0.0015, 0.0025))} * vhsK;",
+        "vec2 baseOff = vec2(phaseWobble + rowJitter, 0.0);",
+    ] + bleed_tail + [
+        f"float film = hash21(floor(texCoord * safeInSize * {F(u(8, 0.4, 0.6))}) + vec2(frame, 0.0)) - 0.5;",
+        f"taped += vec3(film) * {F(u(9, 0.035, 0.06))} * vhsK;",
+        "vec3 outColor = mix(taped, taped * Primary.rgb, ParamsB.z);",
+    ], {"hash11", "hash21", "safeOffset", "sampleAt"}
+
+
+def fam_gloom(v, u):
+    # Breathing dark vignette + cold desaturation lift + slow luminance pulse.
+    # Every sine rate here is <= 0.45 on anim (well under 1 Hz even at max
+    # Speed with drift boost), and the shared ParamsB.w luma floor still
+    # guarantees the world never crushes below ~0.35x.
+    cold = [
+        "// Cold lift: the scene drains toward a Secondary-tinted grey.",
+        "vec3 coldGrey = vec3(baseLuma) * mix(vec3(1.0), Secondary.rgb, ParamsB.z);",
+        f"vec3 chilled = mix(base, coldGrey, {F(u(8, 0.4, 0.55))} * clamp(strength, 0.0, 1.0));",
+    ]
+    if v == "dusk":
+        return cold + [
+            f"float breathe = 0.5 + 0.5 * sin(anim * {F(u(0, 0.25, 0.45))} + ParamsB.x * 6.2831);",
+            f"float reach = {F(u(1, 0.3, 0.38))} + {F(u(2, 0.08, 0.14))} * breathe;",
+            f"float rim = smoothstep(reach, reach + {F(u(3, 0.35, 0.5))}, centerDist);",
+            f"float swell = 1.0 - {F(u(4, 0.08, 0.14))} * (0.5 + 0.5 * sin(anim * {F(u(5, 0.12, 0.25))}));",
+            "vec3 dimmed = chilled * swell;",
+            f"vec3 outColor = mix(dimmed, Primary.rgb * {F(u(6, 0.08, 0.16))}, rim * clamp(strength, 0.0, 1.0) * {F(u(7, 0.6, 0.75))});",
+        ], {"luma"}
+    if v == "creeping":
+        return cold + [
+            "// The dark rim creeps inward along a noise-eaten front, then recedes.",
+            f"float front = vnoise(texCoord * {F(u(0, 4.0, 8.0))} + vec2(anim * {F(u(1, 0.02, 0.05))}, 0.0));",
+            f"float breathe = 0.5 + 0.5 * sin(anim * {F(u(2, 0.18, 0.35))} + ParamsB.x * 6.2831);",
+            f"float reach = {F(u(3, 0.26, 0.34))} + {F(u(4, 0.1, 0.16))} * breathe;",
+            f"float rim = smoothstep(reach, reach + {F(u(5, 0.3, 0.42))}, centerDist + (front - 0.5) * {F(u(6, 0.16, 0.26))});",
+            f"float swell = 1.0 - {F(u(7, 0.07, 0.12))} * breathe;",
+            "vec3 dimmed = chilled * swell;",
+            f"vec3 outColor = mix(dimmed, Primary.rgb * {F(u(9, 0.06, 0.14))}, rim * clamp(strength, 0.0, 1.0) * {F(u(10, 0.6, 0.75))});",
+        ], {"luma", "vnoise"}
+    if v == "heartbeat":
+        return cold + [
+            "// Double-lobed slow pulse (a sub-1 Hz heartbeat, never a strobe).",
+            f"float beatPhase = anim * {F(u(0, 0.3, 0.45))} + ParamsB.x * 6.2831;",
+            "float lub = max(sin(beatPhase), 0.0);",
+            f"float dub = max(sin(beatPhase + {F(u(1, 2.2, 2.6))}), 0.0);",
+            f"float beat = lub * lub + {F(u(2, 0.4, 0.6))} * dub * dub;",
+            f"float swell = 1.0 - {F(u(3, 0.1, 0.16))} * beat;",
+            f"float rim = smoothstep({F(u(4, 0.3, 0.38))}, {F(u(5, 0.68, 0.8))}, centerDist + beat * {F(u(6, 0.05, 0.09))});",
+            "vec3 dimmed = chilled * swell;",
+            f"vec3 outColor = mix(dimmed, Primary.rgb * {F(u(7, 0.07, 0.14))}, rim * clamp(strength, 0.0, 1.0) * {F(u(9, 0.55, 0.7))});",
+        ], {"luma"}
+    # hollow
+    return cold + [
+        "// Hollow heart: color drains from the CENTER, the rim sinks to dusk.",
+        f"float core = invsmooth({F(u(0, 0.1, 0.18))}, {F(u(1, 0.45, 0.6))}, centerDist);",
+        f"vec3 drained = mix(chilled, vec3(baseLuma) * {F(u(2, 0.8, 0.92))}, core * clamp(strength, 0.0, 1.0) * {F(u(3, 0.5, 0.7))});",
+        f"float rim = smoothstep({F(u(4, 0.34, 0.42))}, {F(u(5, 0.7, 0.85))}, centerDist);",
+        f"float swell = 1.0 - {F(u(6, 0.06, 0.11))} * (0.5 + 0.5 * sin(anim * {F(u(7, 0.15, 0.3))} + ParamsB.x * 6.2831));",
+        "vec3 dimmed = drained * swell;",
+        f"vec3 outColor = mix(dimmed, Primary.rgb * {F(u(9, 0.06, 0.12))}, rim * clamp(strength, 0.0, 1.0) * {F(u(10, 0.55, 0.7))});",
+    ], {"luma", "invsmooth"}
+
+
 FAMILY_BODIES = {
     "tint": fam_tint,
     "wobble": fam_wobble,
@@ -1201,6 +1684,14 @@ FAMILY_BODIES = {
     "huedrift": fam_huedrift,
     "dreamblur": fam_dreamblur,
     "moire": fam_moire,
+    "spectral": fam_spectral,
+    "aberration": fam_aberration,
+    "underwater": fam_underwater,
+    "thermal": fam_thermal,
+    "sketch": fam_sketch,
+    "starburst": fam_starburst,
+    "vhs": fam_vhs,
+    "gloom": fam_gloom,
 }
 
 
