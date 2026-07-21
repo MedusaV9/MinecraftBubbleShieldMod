@@ -348,7 +348,7 @@ void main() {
     // bright features, plus the deep volume's own Beer-Lambert opacity;
     // pattern-free areas stay dark AND thin (anti-washout).
     float presence = smoothstep(0.02, 0.30, pattern);
-    float alpha = vertexColor.a * min(0.0602 + 0.3348 * presence + 0.4198 * pattern + 0.0843 * (1.0 - deepTrans), 0.8512);
+    float alpha = vertexColor.a * min(0.0602 + 0.2748 * presence + 0.4198 * pattern + 0.0843 * (1.0 - deepTrans), 0.8512);
     // [layer:v5:backface]
     // v5 back-face densify/dim (gl_FrontFacing is a builtin, no uniform
     // needed): the INSIDE of the far shell recedes toward the dark stop

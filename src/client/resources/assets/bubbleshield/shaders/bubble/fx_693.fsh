@@ -280,6 +280,14 @@ void main() {
     float sway = 0.8300 * sin(time * 0.209440);
     vec2 auv = vec2(baseUV.x * 3.0000 + (baseUV.y - 0.5) * sway + time * 0.132500, baseUV.y * 3.0000);
     vec2 wuv = warp1(auv, midPer, time);
+    // [layer:v5:polefade]
+    // v5 pole guard: at v = 0/1 EVERY u maps to the same sphere point,
+    // so this family's longitude-dependent 2D signature would pinch
+    // into an apex starburst. The composer fades the signature (and any
+    // longitude-dependent post color mix) toward a longitude-independent
+    // body level near the poles; the 3D deep volume underneath is
+    // pole-safe by construction, so the caps still read as material.
+    float poleFade = smoothstep(0.015, 0.0975, min(baseUV.y, 1.0 - baseUV.y));
     float du = baseUV.x - 0.5;
     float sfAng = safeAtan(baseUV.y - 0.5, sin(du * 6.2831853) * 0.5);
     float sfRad = length(vec2(sin(du * 3.1415927), baseUV.y - 0.5)) * 2.0;
@@ -294,7 +302,9 @@ void main() {
     }
     float sfLimb = rimGraze() * 0.5451;
     float sfGran = fbm2(wuv, midPer) * 0.18;
-    float mid = clamp(sfArcs + sfLimb + sfGran, 0.0, 1.35);
+    // pole guard on arcs + granulation (longitude-dependent); the limb
+    // term is view-based (pole-safe) and stays outside the fade
+    float mid = clamp(mix(0.1000, sfArcs + sfGran, poleFade) + sfLimb, 0.0, 1.35);
 
     // [layer:rim:graze_film]
     // Silhouette / band lift so the membrane reads as a curved shell:
@@ -337,8 +347,8 @@ void main() {
     rgb = mix(rgb, softHot, 0.2985 * smoothstep(0.55, 1.10, pattern));
     vec3 accent = accentPalette(0.3868 + pattern * 0.3567);
     rgb = mix(rgb, rgb * (0.55 + 0.9 * accent), 0.3148);
-    // flare tips burn at the (luma-capped) hot stop
-    rgb = mix(rgb, hotStop, clamp(sfArcs, 0.0, 1.0) * 0.5322);
+    // flare tips burn at the (luma-capped) hot stop; pole-faded
+    rgb = mix(rgb, hotStop, clamp(sfArcs, 0.0, 1.0) * 0.5322 * poleFade);
     vec3 rimFilm = thinFilm(0.9328 + pattern * 0.8137 + baseUV.y * 0.8529);
     rgb = mix(rgb, rgb * (0.6 + 0.8 * rimFilm), clamp(rim, 0.0, 1.0) * 0.3918);
     // Two-band chromatic dispersion on the rim (thin-film-like), biased

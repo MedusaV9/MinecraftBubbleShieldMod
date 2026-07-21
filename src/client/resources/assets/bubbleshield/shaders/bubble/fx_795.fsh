@@ -247,6 +247,14 @@ void main() {
     // Signature structure of this effect, domain-warped and animated.
     vec2 auv = vec2(baseUV.x * 6.0000, baseUV.y * 6.0000) + vec2(0.470000, -0.180000) * time;
     vec2 wuv = auv + 0.1243 * curl2(auv + vec2(0.0, time * 0.073333), midPer);
+    // [layer:v5:polefade]
+    // v5 pole guard: at v = 0/1 EVERY u maps to the same sphere point,
+    // so this family's longitude-dependent 2D signature would pinch
+    // into an apex starburst. The composer fades the signature (and any
+    // longitude-dependent post color mix) toward a longitude-independent
+    // body level near the poles; the 3D deep volume underneath is
+    // pole-safe by construction, so the caps still read as material.
+    float poleFade = smoothstep(0.015, 0.0916, min(baseUV.y, 1.0 - baseUV.y));
     vec2 rcUV = vec2(baseUV.x * 14.0000, baseUV.y * 4.0000);
     vec2 rcI = floor(rcUV);
     vec2 rcF = fract(rcUV);
@@ -262,7 +270,10 @@ void main() {
     float rcPhase = fract(time * 0.122500 - rcI.x / 14.0000 + rcI.y * 0.37);
     float rcLit = pow(clamp(1.0 - rcPhase * 1.3929, 0.0, 1.0), 2.6103);
     float rcRail = invsmooth(0.004, 0.0235, abs(abs(rcF.y - 0.5) - 0.46));
-    float mid = clamp(rcGlyph * (0.2419 + 0.9794 * rcLit) + rcRail * 0.2366, 0.0, 1.25);
+    // pole guard on the glyphs/ignition (their cell column is a
+    // longitude id); the rails are latitude-only (pole-safe) and keep
+    // ringing the caps
+    float mid = clamp(mix(0.0800, rcGlyph * (0.2419 + 0.9794 * rcLit), poleFade) + rcRail * 0.2366, 0.0, 1.25);
 
     // [layer:rim:lat]
     // Silhouette / band lift so the membrane reads as a curved shell:

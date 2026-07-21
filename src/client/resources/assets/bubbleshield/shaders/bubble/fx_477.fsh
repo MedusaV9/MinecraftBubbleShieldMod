@@ -234,6 +234,14 @@ void main() {
     float sway = 1.0516 * sin(time * 0.162316);
     vec2 auv = vec2(baseUV.x * 3.0000 + (baseUV.y - 0.5) * sway + time * -0.085000, baseUV.y * 3.0000);
     vec2 wuv = auv;
+    // [layer:v5:polefade]
+    // v5 pole guard: at v = 0/1 EVERY u maps to the same sphere point,
+    // so this family's longitude-dependent 2D signature would pinch
+    // into an apex starburst. The composer fades the signature (and any
+    // longitude-dependent post color mix) toward a longitude-independent
+    // body level near the poles; the 3D deep volume underneath is
+    // pole-safe by construction, so the caps still read as material.
+    float poleFade = smoothstep(0.015, 0.0951, min(baseUV.y, 1.0 - baseUV.y));
     float du = baseUV.x - 0.5;
     float pgAng = safeAtan(baseUV.y - 0.5, sin(du * 6.2831853) * 0.5);
     float pgRad = length(vec2(sin(du * 3.1415927), baseUV.y - 0.5)) * 2.0;
@@ -249,6 +257,9 @@ void main() {
     float pgCore = invsmooth(0.01, 0.1146, pgRad) * 1.2 + invsmooth(0.0, 0.05, pgRad) * 0.8;
     float pgTip = pgBolts * smoothstep(0.6161, 1.0, pgRad) * 0.8;
     float mid = clamp(pgBolts * smoothstep(0.03, 0.15, pgRad) + pgCore + pgTip, 0.0, 1.4);
+    // pole guard: filaments crossing an apex would starburst; fade to
+    // the near-transparent between-bolt level
+    mid = mix(0.0300, mid, poleFade);
 
     // [layer:rim:lat]
     // Silhouette / band lift so the membrane reads as a curved shell:

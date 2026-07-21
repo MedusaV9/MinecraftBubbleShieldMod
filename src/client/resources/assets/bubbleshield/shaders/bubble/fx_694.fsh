@@ -311,6 +311,14 @@ void main() {
     float ft = time + 0.1541 * jump;
     vec2 auv = vec2(baseUV.x * 8.0000, baseUV.y * 8.0000) + vec2(-0.106667, 0.150000) * ft;
     vec2 wuv = auv;
+    // [layer:v5:polefade]
+    // v5 pole guard: at v = 0/1 EVERY u maps to the same sphere point,
+    // so this family's longitude-dependent 2D signature would pinch
+    // into an apex starburst. The composer fades the signature (and any
+    // longitude-dependent post color mix) toward a longitude-independent
+    // body level near the poles; the 3D deep volume underneath is
+    // pole-safe by construction, so the caps still read as material.
+    float poleFade = smoothstep(0.015, 0.0990, min(baseUV.y, 1.0 - baseUV.y));
     vec3 iceA = voro2(wuv, midPer, 0.0);
     // slope-scaled parallax: the deeper sheet slides along rimDir,
     // farther where the view grazes (screen-space: seam-safe)
@@ -321,6 +329,9 @@ void main() {
     float sheen = fbm2(wuv + vec2(time * 0.026667, 0.0), midPer);
     float glint = pow(0.5 + 0.5 * sin(time * 0.408407 + iceA.z * 6.2831853), 9.2475);
     float mid = clamp(crackA * 0.8707 + crackB * 0.4767 + sheen * 0.1749 + glint * 0.35, 0.0, 1.25);
+    // pole guard: crack sheets converge on the apexes; fade toward the
+    // ice body's sheen level
+    mid = mix(0.2000, mid, poleFade);
 
     // [layer:rim:graze_film]
     // Silhouette / band lift so the membrane reads as a curved shell:
@@ -364,8 +375,9 @@ void main() {
     vec3 accent = accentPalette(0.8596 + pattern * 0.4828);
     rgb = mix(rgb, rgb * (0.55 + 0.9 * accent), 0.2943);
     // the deeper crack sheet reads colder and darker (secondary
-    // cast): depth through color separation, not just brightness
-    rgb = mix(rgb, mix(secCol, deepStop, 0.5), clamp(crackB * (1.0 - crackA), 0.0, 1.0) * 0.4635);
+    // cast): depth through color separation, not just brightness;
+    // pole-faded -- the crack lattice is longitude-dependent there
+    rgb = mix(rgb, mix(secCol, deepStop, 0.5), clamp(crackB * (1.0 - crackA), 0.0, 1.0) * 0.4635 * poleFade);
     vec3 rimFilm = thinFilm(1.1090 + pattern * 1.5286 + baseUV.y * 0.9787);
     rgb = mix(rgb, rgb * (0.6 + 0.8 * rimFilm), clamp(rim, 0.0, 1.0) * 0.2568);
     // Two-band chromatic dispersion on the rim (thin-film-like), biased

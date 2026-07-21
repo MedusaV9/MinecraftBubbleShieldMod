@@ -258,7 +258,10 @@ void main() {
     vec3 vrS = rotA(spinAxis, time * 0.047124) * (sdir * 13.0740);
     vec3 vrCell = floor(vrS);
     float vrH = hash31(vrCell);
-    float vrStar = step(0.8259, vrH) * invsmooth(0.08, 0.42, length(fract(vrS) - 0.5)) * (0.6 + 0.4 * sin(time * (1.5 + 2.0 * vrH) + vrH * 31.0));
+    // day-wrap-safe twinkle: the hash picks an INTEGER cycles/day
+    // (287..668 ~= the old 1.5..3.5 rad/s) and only offsets the phase
+    float vrTurns = 287.0 + floor(vrH * 382.0);
+    float vrStar = step(0.8259, vrH) * invsmooth(0.08, 0.42, length(fract(vrS) - 0.5)) * (0.6 + 0.4 * sin(time * vrTurns * (6.2831853 / 1200.0) + vrH * 31.0));
     float vrGlow = vrCrack * (0.9260 + 0.7255 * vrStar) + vrWide * vrStar * 0.35;
     float mid = clamp(vrGlow + vrWide * 0.1505, 0.0, 1.3);
 

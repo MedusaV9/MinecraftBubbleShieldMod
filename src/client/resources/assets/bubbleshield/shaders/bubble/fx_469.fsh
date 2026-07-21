@@ -208,14 +208,18 @@ float rimGraze() {
 }
 
 // hash-cell twinkle: sparse offset star points with per-cell phase;
-// cells wrap every px in x so the field tiles the u seam
+// cells wrap every px in x so the field tiles the u seam. The per-
+// cell rate is an INTEGER number of cycles per day (the hash picks
+// the integer and offsets the phase), so the daily time wrap
+// 1200 -> 0 lands exactly on a whole cycle -- no twinkle snap.
 float sparkle(vec2 p, float t, float px) {
     vec2 cellId = floor(p);
     vec2 f = fract(p) - 0.5;
     float h = cellHash(cellId, px);
     vec2 off = vec2(cellHash(cellId + 11.3, px), cellHash(cellId + 27.9, px)) - 0.5;
     float d = length(f - off * 0.55);
-    float tw = pow(0.5 + 0.5 * sin(t * (2.0 + 5.0 * h) + h * 39.0), 6.0);
+    float turns = 382.0 + floor(h * 955.0);
+    float tw = pow(0.5 + 0.5 * sin(t * turns * (6.2831853 / 1200.0) + h * 39.0), 6.0);
     return step(0.7978, h) * invsmooth(0.02, 0.22, d) * tw;
 }
 
@@ -297,11 +301,21 @@ void main() {
     float ft = time + 0.1964 * jump;
     vec2 auv = vec2(baseUV.x * 8.0000, baseUV.y * 8.0000) + vec2(0.073333, 0.450000) * ft;
     vec2 wuv = warp1(auv, midPer, time);
+    // [layer:v5:polefade]
+    // v5 pole guard: at v = 0/1 EVERY u maps to the same sphere point,
+    // so this family's longitude-dependent 2D signature would pinch
+    // into an apex starburst. The composer fades the signature (and any
+    // longitude-dependent post color mix) toward a longitude-independent
+    // body level near the poles; the 3D deep volume underneath is
+    // pole-safe by construction, so the caps still read as material.
+    float poleFade = smoothstep(0.015, 0.1213, min(baseUV.y, 1.0 - baseUV.y));
     vec3 sgV = voro2(wuv, midPer, 0.0);
     float sgLead = invsmooth(0.008, 0.0850, sgV.x);
     float sgLight = 0.55 + 0.45 * sin(time * 0.303687 + sgV.z * 6.2831853);
     float sgBevel = smoothstep(0.0, 0.2843, sgV.x);
     float mid = clamp((1.0 - sgLead) * (0.4509 + 0.4093 * sgLight) * (0.75 + 0.25 * sgBevel), 0.0, 1.2);
+    // pole guard: the pane lattice varies with longitude at the apexes
+    mid = mix(0.5000, mid, poleFade);
 
     // [layer:rim:graze_sparkle]
     // Silhouette / band lift so the membrane reads as a curved shell:
@@ -346,9 +360,10 @@ void main() {
     vec3 accent = accentPalette(0.1903 + pattern * 0.5531);
     rgb = mix(rgb, rgb * (0.55 + 0.9 * accent), 0.3668);
     // per-pane hue: each cell tints through its own palette position;
-    // the lead lines sink to the dark stop (bounded, recolor-safe)
-    rgb = mix(rgb, rgb * (0.45 + 1.1 * accentPalette(sgV.z * 0.9482 + 0.0774)), 0.3366);
-    rgb = mix(rgb, deepStop, clamp(sgLead, 0.0, 1.0) * 0.6789);
+    // the lead lines sink to the dark stop (bounded, recolor-safe);
+    // both pole-faded -- pane ids/borders are longitude-dependent there
+    rgb = mix(rgb, rgb * (0.45 + 1.1 * accentPalette(sgV.z * 0.9482 + 0.0774)), 0.3366 * poleFade);
+    rgb = mix(rgb, deepStop, clamp(sgLead, 0.0, 1.0) * 0.6789 * poleFade);
     // Two-band chromatic dispersion on the rim (thin-film-like), biased
     // to vertexColor.rgb: band 1 multiplies the wide glow into the
     // palette-driven rgb, band 2 pulls the thin hot line toward the (also

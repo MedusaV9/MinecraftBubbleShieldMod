@@ -122,14 +122,18 @@ float rimLat(vec2 uv) {
 }
 
 // hash-cell twinkle: sparse offset star points with per-cell phase;
-// cells wrap every px in x so the field tiles the u seam
+// cells wrap every px in x so the field tiles the u seam. The per-
+// cell rate is an INTEGER number of cycles per day (the hash picks
+// the integer and offsets the phase), so the daily time wrap
+// 1200 -> 0 lands exactly on a whole cycle -- no twinkle snap.
 float sparkle(vec2 p, float t, float px) {
     vec2 cellId = floor(p);
     vec2 f = fract(p) - 0.5;
     float h = cellHash(cellId, px);
     vec2 off = vec2(cellHash(cellId + 11.3, px), cellHash(cellId + 27.9, px)) - 0.5;
     float d = length(f - off * 0.55);
-    float tw = pow(0.5 + 0.5 * sin(t * (2.0 + 5.0 * h) + h * 39.0), 6.0);
+    float turns = 382.0 + floor(h * 955.0);
+    float tw = pow(0.5 + 0.5 * sin(t * turns * (6.2831853 / 1200.0) + h * 39.0), 6.0);
     return step(0.7402, h) * invsmooth(0.02, 0.22, d) * tw;
 }
 
@@ -221,6 +225,14 @@ void main() {
     // Signature structure of this effect, domain-warped and animated.
     vec2 auv = vec2(baseUV.x * 6.0000, baseUV.y * 6.0000) + vec2(-0.500000, 0.266667) * time;
     vec2 wuv = auv;
+    // [layer:v5:polefade]
+    // v5 pole guard: at v = 0/1 EVERY u maps to the same sphere point,
+    // so this family's longitude-dependent 2D signature would pinch
+    // into an apex starburst. The composer fades the signature (and any
+    // longitude-dependent post color mix) toward a longitude-independent
+    // body level near the poles; the 3D deep volume underneath is
+    // pole-safe by construction, so the caps still read as material.
+    float poleFade = smoothstep(0.015, 0.1354, min(baseUV.y, 1.0 - baseUV.y));
     vec2 rcUV = vec2(baseUV.x * 14.0000, baseUV.y * 4.0000);
     vec2 rcI = floor(rcUV);
     vec2 rcF = fract(rcUV);
@@ -236,7 +248,10 @@ void main() {
     float rcPhase = fract(time * 0.075000 - rcI.x / 14.0000 + rcI.y * 0.37);
     float rcLit = pow(clamp(1.0 - rcPhase * 1.3896, 0.0, 1.0), 1.5084);
     float rcRail = invsmooth(0.004, 0.0317, abs(abs(rcF.y - 0.5) - 0.46));
-    float mid = clamp(rcGlyph * (0.1663 + 0.7959 * rcLit) + rcRail * 0.3246, 0.0, 1.25);
+    // pole guard on the glyphs/ignition (their cell column is a
+    // longitude id); the rails are latitude-only (pole-safe) and keep
+    // ringing the caps
+    float mid = clamp(mix(0.0800, rcGlyph * (0.1663 + 0.7959 * rcLit), poleFade) + rcRail * 0.3246, 0.0, 1.25);
 
     // [layer:rim:lat]
     // Silhouette / band lift so the membrane reads as a curved shell:
@@ -249,7 +264,7 @@ void main() {
     rim = clamp(rim + 0.8908 * rimLine, 0.0, 1.4);
 
     // Flourish accent + micro grain keep large areas alive up close.
-    float flourish = 0.2344 * sparkle(wuv * 2.0 + 7.7, time * 1.4, midPer.x * 2.0);
+    float flourish = 0.2344 * sparkle(wuv * 2.0 + 7.7, time * 2.0, midPer.x * 2.0);
     float grain = 0.0941 * (cellHash(floor(wuv * 50.0000) + vec2(floor(time * 6.0), 0.0), 300.0000) - 0.5);
 
     // Recolor-safe composite v4: the whole pattern is graded through the

@@ -265,6 +265,14 @@ void main() {
     // stays exact (the y period carries a margin for the stretch)
     vec2 auv = vec2(baseUV.x * 13.0000 + time * 0.184167, (baseUV.y - 0.5) * 13.0000 * breathe + 6.5000 + time * -0.287500);
     vec2 wuv = warp1(auv, midPer, time);
+    // [layer:v5:polefade]
+    // v5 pole guard: at v = 0/1 EVERY u maps to the same sphere point,
+    // so this family's longitude-dependent 2D signature would pinch
+    // into an apex starburst. The composer fades the signature (and any
+    // longitude-dependent post color mix) toward a longitude-independent
+    // body level near the poles; the 3D deep volume underneath is
+    // pole-safe by construction, so the caps still read as material.
+    float poleFade = smoothstep(0.015, 0.1450, min(baseUV.y, 1.0 - baseUV.y));
     vec2 glC = vec2(0.2953 + 0.1141 * sin(time * 0.047124), 0.6333 + 0.0626 * cos(time * 0.068068));
     vec2 glD = vec2(sin((baseUV.x - glC.x) * 6.2831853) * 0.1592, baseUV.y - glC.y);
     float glR = length(glD) + 0.02;
@@ -280,11 +288,17 @@ void main() {
         vec2 sc = floor(su);
         vec2 sf = fract(su) - 0.5;
         float sh = cellHash(sc + vec2(fi * 53.0, 0.0), layerPx);
-        float tw = 0.6 + 0.4 * sin(time * (1.0 + 2.5 * sh) + sh * 44.0);
+        // day-wrap-safe twinkle: the hash picks an INTEGER cycles/day
+        // (191..668 ~= the old 1.0..3.5 rad/s) and only offsets the phase
+        float glTurns = 191.0 + floor(sh * 478.0);
+        float tw = 0.6 + 0.4 * sin(time * glTurns * (6.2831853 / 1200.0) + sh * 44.0);
         glStars += step(0.8694, sh) * invsmooth(0.03, 0.16, length(sf - (vec2(cellHash(sc + 4.7, layerPx), cellHash(sc + 9.3, layerPx)) - 0.5) * 0.55)) * tw;
     }
     float glRing = invsmooth(0.0, 0.0432, abs(glR - 0.1509));
     float mid = clamp(glStars * (1.0 + glRing * 1.4933) + glRing * 0.5125, 0.0, 1.3);
+    // pole guard: the warped star lattice varies with longitude at the
+    // apexes; fade to empty sky there (stars are sparse anyway)
+    mid = mix(0.0200, mid, poleFade);
 
     // [layer:rim:lat]
     // Silhouette / band lift so the membrane reads as a curved shell:

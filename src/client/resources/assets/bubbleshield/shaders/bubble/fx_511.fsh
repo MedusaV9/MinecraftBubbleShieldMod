@@ -263,6 +263,14 @@ void main() {
     float ft = time + 0.3754 * jump;
     vec2 auv = vec2(baseUV.x * 9.0000, baseUV.y * 9.0000) + vec2(-0.015000, -0.348333) * ft;
     vec2 wuv = auv + 0.2347 * curl2(auv + vec2(0.0, time * 0.073333), midPer);
+    // [layer:v5:polefade]
+    // v5 pole guard: at v = 0/1 EVERY u maps to the same sphere point,
+    // so this family's longitude-dependent 2D signature would pinch
+    // into an apex starburst. The composer fades the signature (and any
+    // longitude-dependent post color mix) toward a longitude-independent
+    // body level near the poles; the 3D deep volume underneath is
+    // pole-safe by construction, so the caps still read as material.
+    float poleFade = smoothstep(0.015, 0.1489, min(baseUV.y, 1.0 - baseUV.y));
     vec2 glC = vec2(0.6383 + 0.0950 * sin(time * 0.089012), 0.5467 + 0.1088 * cos(time * 0.036652));
     vec2 glD = vec2(sin((baseUV.x - glC.x) * 6.2831853) * 0.1592, baseUV.y - glC.y);
     float glR = length(glD) + 0.02;
@@ -278,11 +286,17 @@ void main() {
         vec2 sc = floor(su);
         vec2 sf = fract(su) - 0.5;
         float sh = cellHash(sc + vec2(fi * 53.0, 0.0), layerPx);
-        float tw = 0.6 + 0.4 * sin(time * (1.0 + 2.5 * sh) + sh * 44.0);
+        // day-wrap-safe twinkle: the hash picks an INTEGER cycles/day
+        // (191..668 ~= the old 1.0..3.5 rad/s) and only offsets the phase
+        float glTurns = 191.0 + floor(sh * 478.0);
+        float tw = 0.6 + 0.4 * sin(time * glTurns * (6.2831853 / 1200.0) + sh * 44.0);
         glStars += step(0.8734, sh) * invsmooth(0.03, 0.16, length(sf - (vec2(cellHash(sc + 4.7, layerPx), cellHash(sc + 9.3, layerPx)) - 0.5) * 0.55)) * tw;
     }
     float glRing = invsmooth(0.0, 0.0398, abs(glR - 0.1210));
     float mid = clamp(glStars * (1.0 + glRing * 1.9277) + glRing * 0.4168, 0.0, 1.3);
+    // pole guard: the warped star lattice varies with longitude at the
+    // apexes; fade to empty sky there (stars are sparse anyway)
+    mid = mix(0.0200, mid, poleFade);
 
     // [layer:rim:graze_film]
     // Silhouette / band lift so the membrane reads as a curved shell:

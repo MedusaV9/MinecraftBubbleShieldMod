@@ -184,14 +184,18 @@ float rimLat(vec2 uv) {
 }
 
 // hash-cell twinkle: sparse offset star points with per-cell phase;
-// cells wrap every px in x so the field tiles the u seam
+// cells wrap every px in x so the field tiles the u seam. The per-
+// cell rate is an INTEGER number of cycles per day (the hash picks
+// the integer and offsets the phase), so the daily time wrap
+// 1200 -> 0 lands exactly on a whole cycle -- no twinkle snap.
 float sparkle(vec2 p, float t, float px) {
     vec2 cellId = floor(p);
     vec2 f = fract(p) - 0.5;
     float h = cellHash(cellId, px);
     vec2 off = vec2(cellHash(cellId + 11.3, px), cellHash(cellId + 27.9, px)) - 0.5;
     float d = length(f - off * 0.55);
-    float tw = pow(0.5 + 0.5 * sin(t * (2.0 + 5.0 * h) + h * 39.0), 6.0);
+    float turns = 382.0 + floor(h * 955.0);
+    float tw = pow(0.5 + 0.5 * sin(t * turns * (6.2831853 / 1200.0) + h * 39.0), 6.0);
     return step(0.7473, h) * invsmooth(0.02, 0.22, d) * tw;
 }
 
@@ -271,11 +275,22 @@ void main() {
     // Signature structure of this effect, domain-warped and animated.
     vec2 auv = vec2(baseUV.x * 4.0000, baseUV.y * 4.0000) + vec2(0.443333, 0.455000) * time;
     vec2 wuv = warp2(auv, midPer, time);
+    // [layer:v5:polefade]
+    // v5 pole guard: at v = 0/1 EVERY u maps to the same sphere point,
+    // so this family's longitude-dependent 2D signature would pinch
+    // into an apex starburst. The composer fades the signature (and any
+    // longitude-dependent post color mix) toward a longitude-independent
+    // body level near the poles; the 3D deep volume underneath is
+    // pole-safe by construction, so the caps still read as material.
+    float poleFade = smoothstep(0.015, 0.0956, min(baseUV.y, 1.0 - baseUV.y));
     vec2 osW = wuv + 0.4321 * curl2(wuv + vec2(0.0, time * 0.060000), midPer);
     float osTh = fbm2(osW, midPer) * 2.2289 + baseUV.y * 0.5046;
     float osBand = 0.5 + 0.5 * sin(osTh * 10.4371 - time * 0.308923);
     float osSheen = pow(clamp(osBand, 0.0, 1.0), 1.4995);
     float mid = clamp(osSheen * 1.0472 + fbm2(osW * 2.0 + vec2(3.9, 8.4), midPer * 2.0) * 0.2611, 0.0, 1.2);
+    // pole guard: the slick's thickness bands vary with longitude at
+    // the apexes; fade toward the film's mean sheen
+    mid = mix(0.4000, mid, poleFade);
 
     // [layer:rim:lat]
     // Silhouette / band lift so the membrane reads as a curved shell:
@@ -288,7 +303,7 @@ void main() {
     rim = clamp(rim + 0.7498 * rimLine, 0.0, 1.4);
 
     // Flourish accent + micro grain keep large areas alive up close.
-    float flourish = 0.1552 * sparkle(wuv * 2.0 + 7.7, time * 1.4, midPer.x * 2.0);
+    float flourish = 0.1552 * sparkle(wuv * 2.0 + 7.7, time * 2.0, midPer.x * 2.0);
     float grain = 0.0551 * (cellHash(floor(wuv * 52.0000) + vec2(floor(time * 6.0), 0.0), 208.0000) - 0.5);
 
     // Recolor-safe composite v4: the whole pattern is graded through the
@@ -319,9 +334,10 @@ void main() {
     vec3 accent = accentPalette(0.5198 + pattern * 0.6270);
     rgb = mix(rgb, rgb * (0.55 + 0.9 * accent), 0.2262);
     // hue-rotation iridescence: the film thickness spins the palette
-    // hue itself (bounded, so the owner recolor stays authoritative)
+    // hue itself (bounded, so the owner recolor stays authoritative);
+    // pole-faded -- the thickness field is longitude-dependent there
     vec3 osHue = clamp(hueSpin(baseCol, osTh * 1.9259 - 1.2428), 0.0, 1.0);
-    rgb = mix(rgb, rgb * (0.45 + 1.05 * osHue), 0.3026 * osBand);
+    rgb = mix(rgb, rgb * (0.45 + 1.05 * osHue), 0.3026 * osBand * poleFade);
     // Two-band chromatic dispersion on the rim (thin-film-like), biased
     // to vertexColor.rgb: band 1 multiplies the wide glow into the
     // palette-driven rgb, band 2 pulls the thin hot line toward the (also

@@ -163,14 +163,18 @@ float rimGraze() {
 }
 
 // hash-cell twinkle: sparse offset star points with per-cell phase;
-// cells wrap every px in x so the field tiles the u seam
+// cells wrap every px in x so the field tiles the u seam. The per-
+// cell rate is an INTEGER number of cycles per day (the hash picks
+// the integer and offsets the phase), so the daily time wrap
+// 1200 -> 0 lands exactly on a whole cycle -- no twinkle snap.
 float sparkle(vec2 p, float t, float px) {
     vec2 cellId = floor(p);
     vec2 f = fract(p) - 0.5;
     float h = cellHash(cellId, px);
     vec2 off = vec2(cellHash(cellId + 11.3, px), cellHash(cellId + 27.9, px)) - 0.5;
     float d = length(f - off * 0.55);
-    float tw = pow(0.5 + 0.5 * sin(t * (2.0 + 5.0 * h) + h * 39.0), 6.0);
+    float turns = 382.0 + floor(h * 955.0);
+    float tw = pow(0.5 + 0.5 * sin(t * turns * (6.2831853 / 1200.0) + h * 39.0), 6.0);
     return step(0.6865, h) * invsmooth(0.02, 0.22, d) * tw;
 }
 
@@ -257,6 +261,14 @@ void main() {
     float sway = 1.0638 * sin(time * 0.240855);
     vec2 auv = vec2(baseUV.x * 10.0000 + (baseUV.y - 0.5) * sway + time * -0.108333, baseUV.y * 10.0000);
     vec2 wuv = auv + 0.1051 * curl2(auv + vec2(0.0, time * 0.070000), midPer);
+    // [layer:v5:polefade]
+    // v5 pole guard: at v = 0/1 EVERY u maps to the same sphere point,
+    // so this family's longitude-dependent 2D signature would pinch
+    // into an apex starburst. The composer fades the signature (and any
+    // longitude-dependent post color mix) toward a longitude-independent
+    // body level near the poles; the 3D deep volume underneath is
+    // pole-safe by construction, so the caps still read as material.
+    float poleFade = smoothstep(0.015, 0.1391, min(baseUV.y, 1.0 - baseUV.y));
     float hpAcc = 0.0;
     for (int i = 0; i < 3; i++) {
         float fi = float(i);
@@ -266,11 +278,13 @@ void main() {
         vec2 hpD = abs(fract(hpUV) - 0.5);
         float hpGrid = smoothstep(0.4167, 0.4708, max(hpD.x, hpD.y));
         float hpScan = 0.5 + 0.5 * sin(hpUV.y * 14.6870 + time * 0.837758 - fi * 1.7);
-        hpAcc += (hpGrid * 0.5385 + hpScan * 0.1050) * (1.0 - fi * 0.1744);
+        hpAcc += (hpGrid * 0.5385 + hpScan * 0.0640) * (1.0 - fi * 0.1744);
     }
     float hpSync = invsmooth(0.0, 0.0588, abs(baseUV.y - fract(time * 0.062500)));
     float hpFlick = 0.85 + 0.15 * step(0.4, hash11(floor(time * 10.9256)));
-    float mid = clamp(hpAcc * hpFlick + hpSync * 0.5175, 0.0, 1.25);
+    // pole guard on the grid layers only; the sync band is latitude-only
+    // (pole-safe) and keeps sweeping across the caps
+    float mid = clamp(mix(0.3000, hpAcc * hpFlick, poleFade) + hpSync * 0.5175, 0.0, 1.25);
 
     // [layer:rim:graze_sparkle]
     // Silhouette / band lift so the membrane reads as a curved shell:
@@ -284,7 +298,7 @@ void main() {
     rim = clamp(rim + 0.8213 * rimLine, 0.0, 1.4);
 
     // Flourish accent + micro grain keep large areas alive up close.
-    float flourish = 0.2423 * sparkle(wuv * 2.0 + 7.7, time * 1.4, midPer.x * 2.0);
+    float flourish = 0.2423 * sparkle(wuv * 2.0 + 7.7, time * 2.0, midPer.x * 2.0);
     float grain = 0.0485 * (cellHash(floor(wuv * 57.0000) + vec2(floor(time * 6.0), 0.0), 570.0000) - 0.5);
 
     // Recolor-safe composite v4: the whole pattern is graded through the

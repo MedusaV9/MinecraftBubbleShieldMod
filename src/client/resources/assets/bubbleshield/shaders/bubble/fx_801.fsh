@@ -164,14 +164,18 @@ float rimGraze() {
 }
 
 // hash-cell twinkle: sparse offset star points with per-cell phase;
-// cells wrap every px in x so the field tiles the u seam
+// cells wrap every px in x so the field tiles the u seam. The per-
+// cell rate is an INTEGER number of cycles per day (the hash picks
+// the integer and offsets the phase), so the daily time wrap
+// 1200 -> 0 lands exactly on a whole cycle -- no twinkle snap.
 float sparkle(vec2 p, float t, float px) {
     vec2 cellId = floor(p);
     vec2 f = fract(p) - 0.5;
     float h = cellHash(cellId, px);
     vec2 off = vec2(cellHash(cellId + 11.3, px), cellHash(cellId + 27.9, px)) - 0.5;
     float d = length(f - off * 0.55);
-    float tw = pow(0.5 + 0.5 * sin(t * (2.0 + 5.0 * h) + h * 39.0), 6.0);
+    float turns = 382.0 + floor(h * 955.0);
+    float tw = pow(0.5 + 0.5 * sin(t * turns * (6.2831853 / 1200.0) + h * 39.0), 6.0);
     return step(0.7762, h) * invsmooth(0.02, 0.22, d) * tw;
 }
 
@@ -268,7 +272,9 @@ void main() {
         rfLight += rfTrans * rfD * (1.0 - fi * 0.1214);
         rfTrans *= 1.0 - rfD * 0.3820;
     }
-    float mid = clamp(rfLight * 1.2020 + (1.0 - rfTrans) * 0.2172, 0.0, 1.15);
+    // the broad (1 - transmittance) coverage term is kept low so the
+    // fog reads as distinct banks against darker gaps, not one wash
+    float mid = clamp(rfLight * 1.2020 + (1.0 - rfTrans) * 0.1538, 0.0, 1.15);
 
     // [layer:rim:graze]
     // Silhouette / band lift so the membrane reads as a curved shell:
@@ -281,7 +287,7 @@ void main() {
     rim = clamp(rim + 0.8525 * rimLine, 0.0, 1.4);
 
     // Flourish accent + micro grain keep large areas alive up close.
-    float flourish = 0.2110 * sparkle(wuv * 2.0 + 7.7, time * 1.4, midPer.x * 2.0);
+    float flourish = 0.2110 * sparkle(wuv * 2.0 + 7.7, time * 2.0, midPer.x * 2.0);
     float grain = 0.0882 * (cellHash(floor(wuv * 43.0000) + vec2(floor(time * 6.0), 0.0), 172.0000) - 0.5);
 
     // Recolor-safe composite v4: the whole pattern is graded through the
@@ -331,7 +337,7 @@ void main() {
     // bright features, plus the deep volume's own Beer-Lambert opacity;
     // pattern-free areas stay dark AND thin (anti-washout).
     float presence = smoothstep(0.02, 0.30, pattern);
-    float alpha = vertexColor.a * min(0.0648 + 0.3439 * presence + 0.3424 * pattern + 0.1430 * (1.0 - deepTrans), 0.8084);
+    float alpha = vertexColor.a * min(0.0648 + 0.2639 * presence + 0.3424 * pattern + 0.1430 * (1.0 - deepTrans), 0.8084);
     // [layer:v5:backface]
     // v5 back-face densify/dim (gl_FrontFacing is a builtin, no uniform
     // needed): the INSIDE of the far shell recedes toward the dark stop

@@ -175,14 +175,18 @@ float rimGraze() {
 }
 
 // hash-cell twinkle: sparse offset star points with per-cell phase;
-// cells wrap every px in x so the field tiles the u seam
+// cells wrap every px in x so the field tiles the u seam. The per-
+// cell rate is an INTEGER number of cycles per day (the hash picks
+// the integer and offsets the phase), so the daily time wrap
+// 1200 -> 0 lands exactly on a whole cycle -- no twinkle snap.
 float sparkle(vec2 p, float t, float px) {
     vec2 cellId = floor(p);
     vec2 f = fract(p) - 0.5;
     float h = cellHash(cellId, px);
     vec2 off = vec2(cellHash(cellId + 11.3, px), cellHash(cellId + 27.9, px)) - 0.5;
     float d = length(f - off * 0.55);
-    float tw = pow(0.5 + 0.5 * sin(t * (2.0 + 5.0 * h) + h * 39.0), 6.0);
+    float turns = 382.0 + floor(h * 955.0);
+    float tw = pow(0.5 + 0.5 * sin(t * turns * (6.2831853 / 1200.0) + h * 39.0), 6.0);
     return step(0.7464, h) * invsmooth(0.02, 0.22, d) * tw;
 }
 
@@ -278,7 +282,10 @@ void main() {
     vec3 vrS = rotA(spinAxis, time * 0.026180) * (sdir * 13.3163);
     vec3 vrCell = floor(vrS);
     float vrH = hash31(vrCell);
-    float vrStar = step(0.8035, vrH) * invsmooth(0.08, 0.42, length(fract(vrS) - 0.5)) * (0.6 + 0.4 * sin(time * (1.5 + 2.0 * vrH) + vrH * 31.0));
+    // day-wrap-safe twinkle: the hash picks an INTEGER cycles/day
+    // (287..668 ~= the old 1.5..3.5 rad/s) and only offsets the phase
+    float vrTurns = 287.0 + floor(vrH * 382.0);
+    float vrStar = step(0.8035, vrH) * invsmooth(0.08, 0.42, length(fract(vrS) - 0.5)) * (0.6 + 0.4 * sin(time * vrTurns * (6.2831853 / 1200.0) + vrH * 31.0));
     float vrGlow = vrCrack * (0.7430 + 0.6976 * vrStar) + vrWide * vrStar * 0.35;
     float mid = clamp(vrGlow + vrWide * 0.1111, 0.0, 1.3);
 

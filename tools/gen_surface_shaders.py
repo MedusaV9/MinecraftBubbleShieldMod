@@ -151,6 +151,27 @@ Design (see /tmp/shader_plan.md sections 1, 2, 4.1 and AGENTS.md):
   soft-knee highlight rolloff. Only builtins (gl_FrontFacing, gl_FragCoord)
   -- no new uniforms, no textures; the vertexColor.a dissolve still wins.
 
+* v5 correctness fixes (also gated to FAMILIES_V5, so pre-v5 bytes never
+  change):
+  - DAY-WRAP twinkles: hash-picked twinkle RATES like sin(time*(a + b*h))
+    are NOT integer multiples of 2*pi/1200, so they snapped at the daily
+    1200 -> 0 wrap. In v5 files the hash now picks an INTEGER turns-per-day
+    (sin(time * turns * (2*pi/1200)) with turns = floor-of-hash in the old
+    rad/s range) and only offsets the phase -- the wrap lands exactly on a
+    whole cycle. Applies to the v5 variant of the sparkle helper (the glint
+    flourish also switches its time multiplier 1.4 -> 2.0 so the caller
+    scaling stays an integer cycle count), GRAVLENS star twinkle and
+    VOIDRIFT star twinkle.
+  - POLE GUARD: at v = 0/1 EVERY u maps to the same sphere point, so the 13
+    v5 families whose MID signature lives on the 2D UV domain (FAMILIES_V5
+    minus FAMILIES_3D_MID) pinched into apex starbursts. Each of them now
+    fades its longitude-dependent signature (and every longitude-dependent
+    post-pass color mix) toward a longitude-independent body level near the
+    poles via `poleFade` (latitude smoothstep, baked width); latitude-only
+    or view-based terms (rails, sync bands, rim limb) are kept OUTSIDE the
+    fade so the caps still read. The 7 sphere-direction v5 families are
+    pole-uniform by construction and need no guard.
+
 * Per-id assignment table: EVERY id reads its family from the current
   EffectRegistry.java surface column (parsed at generation time as ground
   truth) -- the registry, not any modulo cycle, decides which family an id
@@ -903,6 +924,28 @@ def helper_source(name: str, c: dict) -> str:
             f"    return clamp(poles + {c['rlEqW']} * belt, 0.0, 1.0);\n"
             "}")
     if name == "sparkle":
+        if c.get("isV5"):
+            # v5 day-wrap fix: the old rate 2.0 + 5.0*h rad/s is not an
+            # integer multiple of 2*pi/1200, so the twinkle snapped at the
+            # daily time wrap. The hash now picks an INTEGER cycles-per-day
+            # in the same perceptual range (2..7 rad/s ~= 382..1336 c/day)
+            # and only offsets the phase.
+            return (
+                "// hash-cell twinkle: sparse offset star points with per-cell phase;\n"
+                "// cells wrap every px in x so the field tiles the u seam. The per-\n"
+                "// cell rate is an INTEGER number of cycles per day (the hash picks\n"
+                "// the integer and offsets the phase), so the daily time wrap\n"
+                "// 1200 -> 0 lands exactly on a whole cycle -- no twinkle snap.\n"
+                "float sparkle(vec2 p, float t, float px) {\n"
+                "    vec2 cellId = floor(p);\n"
+                "    vec2 f = fract(p) - 0.5;\n"
+                "    float h = cellHash(cellId, px);\n"
+                "    vec2 off = vec2(cellHash(cellId + 11.3, px), cellHash(cellId + 27.9, px)) - 0.5;\n"
+                "    float d = length(f - off * 0.55);\n"
+                "    float turns = 382.0 + floor(h * 955.0);\n"
+                "    float tw = pow(0.5 + 0.5 * sin(t * turns * (6.2831853 / 1200.0) + h * 39.0), 6.0);\n"
+                f"    return step({c['sparkTh']}, h) * invsmooth(0.02, 0.22, d) * tw;\n"
+                "}")
         return (
             "// hash-cell twinkle: sparse offset star points with per-cell phase;\n"
             "// cells wrap every px in x so the field tiles the u seam\n"
@@ -1604,7 +1647,9 @@ def mid_composer(family: str, c: dict):
             f"    rfLight += rfTrans * rfD * (1.0 - fi * {F(0.85 / steps)});",
             f"    rfTrans *= 1.0 - rfD * {F(u(47, 0.30, 0.45))};",
             "}",
-            f"float mid = clamp(rfLight * {F(u(48, 0.9, 1.3))} + (1.0 - rfTrans) * {F(u(49, 0.15, 0.25))}, 0.0, 1.15);",
+            "// the broad (1 - transmittance) coverage term is kept low so the",
+            "// fog reads as distinct banks against darker gaps, not one wash",
+            f"float mid = clamp(rfLight * {F(u(48, 0.9, 1.3))} + (1.0 - rfTrans) * {F(u(49, 0.10, 0.18))}, 0.0, 1.15);",
         ], [])
     if family == "PRISMDISPERSE":
         # 3D: gradient pseudo-normal (central-difference fbm3, sdir-biased so
@@ -1653,11 +1698,13 @@ def mid_composer(family: str, c: dict):
             "    vec2 hpD = abs(fract(hpUV) - 0.5);",
             f"    float hpGrid = smoothstep({F(0.5 - gw)}, {F(0.5 - gw * 0.35)}, max(hpD.x, hpD.y));",
             f"    float hpScan = 0.5 + 0.5 * sin(hpUV.y * {F(u(43, 9.0, 16.0))} + time * {qs(44, 0.5, 1.1)} - fi * 1.7);",
-            f"    hpAcc += (hpGrid * {F(u(45, 0.50, 0.70))} + hpScan * {F(u(46, 0.10, 0.20))}) * (1.0 - fi * {F(u(47, 0.16, 0.24))});",
+            f"    hpAcc += (hpGrid * {F(u(45, 0.50, 0.70))} + hpScan * {F(u(46, 0.06, 0.14))}) * (1.0 - fi * {F(u(47, 0.16, 0.24))});",
             "}",
             f"float hpSync = invsmooth(0.0, {F(u(48, 0.04, 0.08))}, abs(baseUV.y - fract(time * {F6(quant_fract_speed(u(40, 0.05, 0.12)))})));",
             f"float hpFlick = 0.85 + 0.15 * step(0.4, hash11(floor(time * {F(u(49, 8.0, 14.0))})));",
-            f"float mid = clamp(hpAcc * hpFlick + hpSync * {F(u(55, 0.35, 0.55))}, 0.0, 1.25);",
+            "// pole guard on the grid layers only; the sync band is latitude-only",
+            "// (pole-safe) and keeps sweeping across the caps",
+            f"float mid = clamp(mix({F(0.30)}, hpAcc * hpFlick, poleFade) + hpSync * {F(u(55, 0.35, 0.55))}, 0.0, 1.25);",
         ], [])
     if family == "ORBITTRAP":
         # 3D-fed 2D fractal: a Julia iteration on the (rotated) sphere-
@@ -1716,7 +1763,7 @@ def mid_composer(family: str, c: dict):
             f"float csSpec = pow(clamp(dot(csN, csL), 0.0, 1.0), {F(u(22, 8.0, 16.0))});",
             f"float csTw = 0.5 + 0.5 * sin(time * {qs(23, 0.7, 1.5)} + csId * 39.0);",
             f"float csFill = 0.5 + 0.5 * sin(csId * 6.2831853 + dot(csDir, csN) * {F(u(24, 3.0, 6.0))});",
-            f"float mid = clamp(csEdge * {F(u(25, 0.45, 0.70))} + csSpec * ({F(u(17, 0.55, 0.85))} + 0.3 * csTw) + csFill * {F(u(16, 0.15, 0.28))}, 0.0, 1.3);",
+            f"float mid = clamp(csEdge * {F(u(25, 0.45, 0.70))} + csSpec * ({F(u(17, 0.55, 0.85))} + 0.3 * csTw) + csFill * {F(u(16, 0.10, 0.22))}, 0.0, 1.3);",
         ]
         return (["invsmooth"], cs_lines, [])
     if family == "FLUIDINK":
@@ -1731,10 +1778,13 @@ def mid_composer(family: str, c: dict):
             f"float fiInk = fbm2(wuv + fiR * {F(u(43, 2.0, 3.2))}, midPer);",
             f"float fiVein = pow(clamp(1.0 - abs(2.0 * fiR.x - 1.0), 0.0, 1.0), {F(u(44, 3.0, 6.0))});",
             f"float mid = clamp(fiInk * {F(u(45, 0.9, 1.2))} + fiVein * {F(u(46, 0.30, 0.50))}, 0.0, 1.2);",
+            "// pole guard: the marbling varies with longitude at the apexes",
+            f"mid = mix({F(0.45)}, mid, poleFade);",
         ], [
             "// advected palette: the warp field itself steers the accent",
-            "// position, so the hue bands ride the marbling (bounded mix)",
-            f"rgb = mix(rgb, rgb * (0.55 + 0.9 * accentPalette(fiQ.x * {F(u(47, 0.5, 0.9))} + fiR.y * {F(u(48, 0.4, 0.8))})), {F(u(49, 0.25, 0.40))});",
+            "// position, so the hue bands ride the marbling (bounded mix);",
+            "// pole-faded -- the warp vectors are longitude-dependent there",
+            f"rgb = mix(rgb, rgb * (0.55 + 0.9 * accentPalette(fiQ.x * {F(u(47, 0.5, 0.9))} + fiR.y * {F(u(48, 0.4, 0.8))})), {F(u(49, 0.25, 0.40))} * poleFade);",
         ])
     if family == "IRISFILM":
         # 2D: full-hue thin film -- a MULTI-HARMONIC spectral phase ramp
@@ -1748,8 +1798,11 @@ def mid_composer(family: str, c: dict):
             "vec3 ifPhase = 6.2831853 * ifThick * vec3(1.0, 0.8065, 0.6452);",
             f"vec3 ifFilm = vec3(0.34) + 0.22 * cos(ifPhase) + 0.22 * cos(ifPhase * 2.0 + vec3(0.7, 1.9, 3.1)) + 0.22 * cos(ifPhase * 3.0 + vec3(2.3, 4.1, 0.9));",
             f"float mid = clamp(dot(clamp(ifFilm, 0.0, 1.0), vec3(0.3333)) * {F(u(44, 1.0, 1.4))} * ifGraze + {F(u(45, 0.10, 0.22))}, 0.0, 1.2);",
+            "// pole guard: the film thickness varies with longitude at the apexes",
+            f"mid = mix({F(0.35)}, mid, poleFade);",
         ], [
-            f"rgb = mix(rgb, rgb * (0.5 + {F(u(46, 1.1, 1.5))} * clamp(ifFilm, 0.0, 1.0)), {F(u(47, 0.30, 0.45))} * ifGraze);",
+            "// pole-faded: ifFilm's thickness field is longitude-dependent",
+            f"rgb = mix(rgb, rgb * (0.5 + {F(u(46, 1.1, 1.5))} * clamp(ifFilm, 0.0, 1.0)), {F(u(47, 0.30, 0.45))} * ifGraze * poleFade);",
         ])
     if family == "AETHERSMOKE":
         # 3D: volumetric smoke -- ONE curl-style advection vector field
@@ -1786,11 +1839,14 @@ def mid_composer(family: str, c: dict):
             f"float sgLight = 0.55 + 0.45 * sin(time * {qs(41, 0.3, 0.7)} + sgV.z * 6.2831853);",
             f"float sgBevel = smoothstep(0.0, {F(u(42, 0.25, 0.45))}, sgV.x);",
             f"float mid = clamp((1.0 - sgLead) * ({F(u(43, 0.45, 0.65))} + {F(u(44, 0.30, 0.45))} * sgLight) * (0.75 + 0.25 * sgBevel), 0.0, 1.2);",
+            "// pole guard: the pane lattice varies with longitude at the apexes",
+            f"mid = mix({F(0.50)}, mid, poleFade);",
         ], [
             "// per-pane hue: each cell tints through its own palette position;",
-            "// the lead lines sink to the dark stop (bounded, recolor-safe)",
-            f"rgb = mix(rgb, rgb * (0.45 + 1.1 * accentPalette(sgV.z * {F(u(45, 0.6, 1.0))} + {F(u(46, 0.0, 1.0))})), {F(u(47, 0.30, 0.45))});",
-            f"rgb = mix(rgb, deepStop, clamp(sgLead, 0.0, 1.0) * {F(u(48, 0.55, 0.75))});",
+            "// the lead lines sink to the dark stop (bounded, recolor-safe);",
+            "// both pole-faded -- pane ids/borders are longitude-dependent there",
+            f"rgb = mix(rgb, rgb * (0.45 + 1.1 * accentPalette(sgV.z * {F(u(45, 0.6, 1.0))} + {F(u(46, 0.0, 1.0))})), {F(u(47, 0.30, 0.45))} * poleFade);",
+            f"rgb = mix(rgb, deepStop, clamp(sgLead, 0.0, 1.0) * {F(u(48, 0.55, 0.75))} * poleFade);",
         ])
     if family == "PHANTOMECHO":
         # 2D: spectral afterimage -- FOUR time-shifted evaluations of the
@@ -1814,6 +1870,9 @@ def mid_composer(family: str, c: dict):
             f"    peW *= {F(u(47, 0.50, 0.65))};",
             "}",
             f"float mid = clamp(peAcc * {F(u(48, 0.40, 0.60))}, 0.0, 1.25);",
+            "// pole guard: a blob halo grazing an apex would scallop with",
+            "// longitude; the blobs live near the equator, so fade to near-empty",
+            f"mid = mix({F(0.05)}, mid, poleFade);",
         ], [])
     if family == "GRAVLENS":
         # 2D: gravitational lens -- a drifting mass point radially warps the
@@ -1837,11 +1896,17 @@ def mid_composer(family: str, c: dict):
             "    vec2 sc = floor(su);",
             "    vec2 sf = fract(su) - 0.5;",
             "    float sh = cellHash(sc + vec2(fi * 53.0, 0.0), layerPx);",
-            "    float tw = 0.6 + 0.4 * sin(time * (1.0 + 2.5 * sh) + sh * 44.0);",
+            "    // day-wrap-safe twinkle: the hash picks an INTEGER cycles/day",
+            "    // (191..668 ~= the old 1.0..3.5 rad/s) and only offsets the phase",
+            "    float glTurns = 191.0 + floor(sh * 478.0);",
+            "    float tw = 0.6 + 0.4 * sin(time * glTurns * (6.2831853 / 1200.0) + sh * 44.0);",
             f"    glStars += step({F(u(47, 0.78, 0.88))}, sh) * invsmooth(0.03, 0.16, length(sf - (vec2(cellHash(sc + 4.7, layerPx), cellHash(sc + 9.3, layerPx)) - 0.5) * 0.55)) * tw;",
             "}",
             f"float glRing = invsmooth(0.0, {F(u(48, 0.030, 0.055))}, abs(glR - {F(u(49, 0.10, 0.18))}));",
             f"float mid = clamp(glStars * (1.0 + glRing * {F(u(55, 1.2, 2.0))}) + glRing * {F(u(56, 0.35, 0.55))}, 0.0, 1.3);",
+            "// pole guard: the warped star lattice varies with longitude at the",
+            "// apexes; fade to empty sky there (stars are sparse anyway)",
+            f"mid = mix({F(0.02)}, mid, poleFade);",
         ], [])
     if family == "MYCELIA":
         # 2D: fungal threads -- a per-cell node network whose branches are
@@ -1867,6 +1932,9 @@ def mid_composer(family: str, c: dict):
             "// traveling growth pulse: a wavefront sweeps the network by phase",
             f"float myPulse = pow(0.5 + 0.5 * sin(time * {qs(43, 0.5, 1.1)} - (myI.y + myPh * {F(u(44, 2.0, 5.0))}) * {F(u(45, 0.8, 1.6))}), {F(u(46, 3.0, 6.0))});",
             f"float mid = clamp(myFil * ({F(u(47, 0.45, 0.65))} + {F(u(48, 0.45, 0.65))} * myPulse) + myNode * 0.5 * myPulse + myGlow * 0.15 * myPulse, 0.0, 1.2);",
+            "// pole guard: the thread lattice pinches at the apexes; fade toward",
+            "// the network's sparse body level",
+            f"mid = mix({F(0.10)}, mid, poleFade);",
         ], [])
     if family == "SOLARFLARE":
         # 2D polar: solar prominences -- three arcing filament LOOPS anchored
@@ -1889,10 +1957,12 @@ def mid_composer(family: str, c: dict):
             "}",
             f"float sfLimb = rimGraze() * {F(u(49, 0.5, 0.8))};",
             "float sfGran = fbm2(wuv, midPer) * 0.18;",
-            "float mid = clamp(sfArcs + sfLimb + sfGran, 0.0, 1.35);",
+            "// pole guard on arcs + granulation (longitude-dependent); the limb",
+            "// term is view-based (pole-safe) and stays outside the fade",
+            f"float mid = clamp(mix({F(0.10)}, sfArcs + sfGran, poleFade) + sfLimb, 0.0, 1.35);",
         ], [
-            "// flare tips burn at the (luma-capped) hot stop",
-            f"rgb = mix(rgb, hotStop, clamp(sfArcs, 0.0, 1.0) * {F(u(55, 0.35, 0.55))});",
+            "// flare tips burn at the (luma-capped) hot stop; pole-faded",
+            f"rgb = mix(rgb, hotStop, clamp(sfArcs, 0.0, 1.0) * {F(u(55, 0.35, 0.55))} * poleFade);",
         ])
     if family == "DEEPICE":
         # 2D: cracked ice depth -- TWO crack-voronoi sheets; the deeper sheet
@@ -1910,10 +1980,14 @@ def mid_composer(family: str, c: dict):
             f"float sheen = fbm2(wuv + vec2(time * {qpx(44, 0.01, 0.04)}, 0.0), midPer);",
             f"float glint = pow(0.5 + 0.5 * sin(time * {qs(45, 0.4, 0.9)} + iceA.z * 6.2831853), {F(u(46, 6.0, 10.0))});",
             f"float mid = clamp(crackA * {F(u(47, 0.70, 0.95))} + crackB * {F(u(48, 0.35, 0.50))} + sheen * {F(u(49, 0.15, 0.30))} + glint * 0.35, 0.0, 1.25);",
+            "// pole guard: crack sheets converge on the apexes; fade toward the",
+            "// ice body's sheen level",
+            f"mid = mix({F(0.20)}, mid, poleFade);",
         ], [
             "// the deeper crack sheet reads colder and darker (secondary",
-            "// cast): depth through color separation, not just brightness",
-            f"rgb = mix(rgb, mix(secCol, deepStop, 0.5), clamp(crackB * (1.0 - crackA), 0.0, 1.0) * {F(u(55, 0.35, 0.55))});",
+            "// cast): depth through color separation, not just brightness;",
+            "// pole-faded -- the crack lattice is longitude-dependent there",
+            f"rgb = mix(rgb, mix(secCol, deepStop, 0.5), clamp(crackB * (1.0 - crackA), 0.0, 1.0) * {F(u(55, 0.35, 0.55))} * poleFade);",
         ])
     if family == "RUNECIRCUIT":
         # 2D: polar glyph bands -- integer cells per band (seam-aligned by
@@ -1939,7 +2013,10 @@ def mid_composer(family: str, c: dict):
             f"float rcPhase = fract(time * {F6(quant_fract_speed(u(44, 0.06, 0.14)))} - rcI.x / {F(float(rc_n))} + rcI.y * 0.37);",
             f"float rcLit = pow(clamp(1.0 - rcPhase * {F(u(45, 1.15, 1.60))}, 0.0, 1.0), {F(u(46, 1.5, 2.8))});",
             f"float rcRail = invsmooth(0.004, {F(u(47, 0.020, 0.035))}, abs(abs(rcF.y - 0.5) - 0.46));",
-            f"float mid = clamp(rcGlyph * ({F(u(48, 0.15, 0.30))} + {F(u(49, 0.75, 1.00))} * rcLit) + rcRail * {F(u(55, 0.20, 0.35))}, 0.0, 1.25);",
+            "// pole guard on the glyphs/ignition (their cell column is a",
+            "// longitude id); the rails are latitude-only (pole-safe) and keep",
+            "// ringing the caps",
+            f"float mid = clamp(mix({F(0.08)}, rcGlyph * ({F(u(48, 0.15, 0.30))} + {F(u(49, 0.75, 1.00))} * rcLit), poleFade) + rcRail * {F(u(55, 0.20, 0.35))}, 0.0, 1.25);",
         ], [])
     if family == "OILSLICK":
         # 2D: oil-on-water -- a curl-warped thickness field whose value
@@ -1952,11 +2029,15 @@ def mid_composer(family: str, c: dict):
             f"float osBand = 0.5 + 0.5 * sin(osTh * {F(u(43, 7.0, 12.0))} - time * {qs(44, 0.2, 0.5)});",
             f"float osSheen = pow(clamp(osBand, 0.0, 1.0), {F(u(45, 1.4, 2.4))});",
             f"float mid = clamp(osSheen * {F(u(46, 0.8, 1.1))} + fbm2(osW * 2.0 + vec2(3.9, 8.4), midPer * 2.0) * {F(u(47, 0.15, 0.30))}, 0.0, 1.2);",
+            "// pole guard: the slick's thickness bands vary with longitude at",
+            "// the apexes; fade toward the film's mean sheen",
+            f"mid = mix({F(0.40)}, mid, poleFade);",
         ], [
             "// hue-rotation iridescence: the film thickness spins the palette",
-            "// hue itself (bounded, so the owner recolor stays authoritative)",
+            "// hue itself (bounded, so the owner recolor stays authoritative);",
+            "// pole-faded -- the thickness field is longitude-dependent there",
             f"vec3 osHue = clamp(hueSpin(baseCol, osTh * {F(u(48, 1.2, 2.2))} - {F(u(49, 0.8, 1.6))}), 0.0, 1.0);",
-            f"rgb = mix(rgb, rgb * (0.45 + 1.05 * osHue), {F(u(55, 0.28, 0.42))} * osBand);",
+            f"rgb = mix(rgb, rgb * (0.45 + 1.05 * osHue), {F(u(55, 0.28, 0.42))} * osBand * poleFade);",
         ])
     if family == "PLASMAGLOBE":
         # 2D polar: a tesla globe -- FIVE thin filaments anchored at the
@@ -1981,6 +2062,9 @@ def mid_composer(family: str, c: dict):
             f"float pgCore = invsmooth(0.01, {F(u(49, 0.10, 0.18))}, pgRad) * 1.2 + invsmooth(0.0, 0.05, pgRad) * 0.8;",
             f"float pgTip = pgBolts * smoothstep({F(u(55, 0.55, 0.75))}, 1.0, pgRad) * 0.8;",
             "float mid = clamp(pgBolts * smoothstep(0.03, 0.15, pgRad) + pgCore + pgTip, 0.0, 1.4);",
+            "// pole guard: filaments crossing an apex would starburst; fade to",
+            "// the near-transparent between-bolt level",
+            f"mid = mix({F(0.03)}, mid, poleFade);",
         ], [])
     if family == "ECTOPLASM":
         # 2D: ghost goo -- a v-stretched, downward-advected warped fbm body
@@ -1997,9 +2081,13 @@ def mid_composer(family: str, c: dict):
             "float ecEdge = ecMask * (1.0 - ecMask) * 4.0;",
             f"float ecSheen = pow(0.5 + 0.5 * sin(ecBody * {F(u(46, 6.0, 11.0))} - time * {qs(47, 0.3, 0.7)}), {F(u(48, 2.0, 4.0))});",
             f"float mid = clamp(ecMask * ({F(u(49, 0.50, 0.70))} + 0.3 * ecSheen) + ecEdge * {F(u(55, 0.50, 0.80))}, 0.0, 1.2);",
+            "// pole guard, DIRECTIONAL: the goo hangs from the top (v = 0), so",
+            "// the top apex fades to a thick cap and the bottom to a thin drip",
+            f"mid = mix(mix({F(0.55)}, {F(0.08)}, baseUV.y), mid, poleFade);",
         ], [
-            "// drip rims catch the light: the goo boundary lifts to the hot stop",
-            f"rgb = mix(rgb, hotStop, clamp(ecEdge, 0.0, 1.0) * {F(u(56, 0.25, 0.40))});",
+            "// drip rims catch the light: the goo boundary lifts to the hot",
+            "// stop; pole-faded -- the boundary is longitude-dependent there",
+            f"rgb = mix(rgb, hotStop, clamp(ecEdge, 0.0, 1.0) * {F(u(56, 0.25, 0.40))} * poleFade);",
         ])
     if family == "VOIDRIFT":
         # 3D: a dark shell torn by crack SDFs (ridged fbm3 pushed to a very
@@ -2015,7 +2103,10 @@ def mid_composer(family: str, c: dict):
             f"vec3 vrS = rotA(spinAxis, time * {qs(45, 0.02, 0.06)}) * (sdir * {F(u(46, 9.0, 16.0))});",
             "vec3 vrCell = floor(vrS);",
             "float vrH = hash31(vrCell);",
-            f"float vrStar = step({F(u(47, 0.75, 0.85))}, vrH) * invsmooth(0.08, 0.42, length(fract(vrS) - 0.5)) * (0.6 + 0.4 * sin(time * (1.5 + 2.0 * vrH) + vrH * 31.0));",
+            "// day-wrap-safe twinkle: the hash picks an INTEGER cycles/day",
+            "// (287..668 ~= the old 1.5..3.5 rad/s) and only offsets the phase",
+            "float vrTurns = 287.0 + floor(vrH * 382.0);",
+            f"float vrStar = step({F(u(47, 0.75, 0.85))}, vrH) * invsmooth(0.08, 0.42, length(fract(vrS) - 0.5)) * (0.6 + 0.4 * sin(time * vrTurns * (6.2831853 / 1200.0) + vrH * 31.0));",
             f"float vrGlow = vrCrack * ({F(u(48, 0.70, 1.00))} + {F(u(49, 0.50, 0.80))} * vrStar) + vrWide * vrStar * 0.35;",
             f"float mid = clamp(vrGlow + vrWide * {F(u(55, 0.08, 0.16))}, 0.0, 1.3);",
         ], [
@@ -2055,14 +2146,17 @@ FAMILY_PRESENCE = {
     # v5 families (only ever read once a registry row references them, so
     # adding these entries cannot perturb any existing id's draws or bytes).
     "SPECTRALVEIL": {"floor": (0.10, 0.18), "gain": (0.38, 0.52), "amax": (0.72, 0.82), "sat": (1.10, 1.35)},
-    "RAYMARCHFOG":  {"floor": (0.30, 0.40), "gain": (0.28, 0.40), "amax": (0.80, 0.88), "sat": (1.25, 1.50), "cover": (0.70, 0.95)},
+    # RAYMARCHFOG/CRYSTALSDF/FLUIDINK/AETHERSMOKE (and ECTOPLASM below) read
+    # washed-out/pale in review: their presence floors are lowered modestly
+    # so the gaps between features thin out instead of holding a pale wash.
+    "RAYMARCHFOG":  {"floor": (0.22, 0.32), "gain": (0.28, 0.40), "amax": (0.80, 0.88), "sat": (1.25, 1.50), "cover": (0.70, 0.95)},
     "PRISMDISPERSE": {"floor": (0.24, 0.34), "gain": (0.34, 0.50), "sat": (1.20, 1.45)},
     "HOLOPARALLAX": {"floor": (0.10, 0.18), "gain": (0.48, 0.62), "amax": (0.78, 0.86)},
     "ORBITTRAP":    {"floor": (0.12, 0.20), "gain": (0.44, 0.58), "sat": (1.18, 1.42)},
-    "CRYSTALSDF":   {"floor": (0.26, 0.38), "gain": (0.36, 0.52), "sat": (1.12, 1.38)},
-    "FLUIDINK":     {"floor": (0.28, 0.38), "gain": (0.32, 0.46), "sat": (1.18, 1.42)},
+    "CRYSTALSDF":   {"floor": (0.20, 0.30), "gain": (0.36, 0.52), "sat": (1.12, 1.38)},
+    "FLUIDINK":     {"floor": (0.22, 0.32), "gain": (0.32, 0.46), "sat": (1.18, 1.42)},
     "IRISFILM":     {"floor": (0.16, 0.26), "gain": (0.38, 0.54), "amax": (0.74, 0.84), "sat": (1.25, 1.50)},
-    "AETHERSMOKE":  {"floor": (0.24, 0.34), "gain": (0.30, 0.44), "sat": (1.15, 1.40), "cover": (0.75, 1.00)},
+    "AETHERSMOKE":  {"floor": (0.18, 0.28), "gain": (0.30, 0.44), "sat": (1.15, 1.40), "cover": (0.75, 1.00)},
     "STAINEDGLASS": {"floor": (0.30, 0.42), "gain": (0.34, 0.48), "amax": (0.84, 0.90), "sat": (1.20, 1.45)},
     "PHANTOMECHO":  {"floor": (0.08, 0.16), "gain": (0.46, 0.62), "amax": (0.74, 0.84)},
     "GRAVLENS":     {"floor": (0.08, 0.14), "gain": (0.48, 0.62)},
@@ -2072,7 +2166,7 @@ FAMILY_PRESENCE = {
     "RUNECIRCUIT":  {"floor": (0.10, 0.18), "gain": (0.48, 0.64)},
     "OILSLICK":     {"floor": (0.26, 0.36), "gain": (0.32, 0.46), "sat": (1.25, 1.50)},
     "PLASMAGLOBE":  {"floor": (0.06, 0.12), "gain": (0.50, 0.66), "amax": (0.80, 0.88)},
-    "ECTOPLASM":    {"floor": (0.18, 0.28), "gain": (0.40, 0.56), "sat": (1.12, 1.38)},
+    "ECTOPLASM":    {"floor": (0.14, 0.22), "gain": (0.40, 0.56), "sat": (1.12, 1.38)},
     "VOIDRIFT":     {"floor": (0.14, 0.24), "gain": (0.42, 0.58)},
 }
 
@@ -2204,6 +2298,11 @@ def emit_shader(asg: dict) -> str:
     mid_scale = u(31, *MID_SCALE_RANGES[family])
     flourish = FLOURISHES[int(u(33, 0.0, 3.999))]
     use3d_mid = family in FAMILIES_3D_MID
+    # v5 gate, needed before the composer/flourish/helper sections: it keys
+    # the day-safe sparkle variant, the integer glint time multiplier and the
+    # 2D-family pole guard. Byte-safety: false for every pre-v5 family.
+    is_v5 = family in FAMILIES_V5
+    c["isV5"] = is_v5
 
     # Integer lattice periods: sx cells per u wrap for the MID domain (the y
     # period gets a +2 margin so pulse breathing and warp offsets never expose
@@ -2330,8 +2429,11 @@ def emit_shader(asg: dict) -> str:
             f"float flourish = {F(u(60, 0.10, 0.28))} * pow(clamp(fbm2(wuv + vec2(-time * {F6(quant_drift(u(61, 0.07, 0.15), float(sx)))}, time * {F6(quant_drift(0.07, float(syp)))}), midPer), 0.0, 1.0), 2.0);"]
     elif flourish == "glint":
         needs.add("sparkle")
+        # v5: the sparkle helper runs at integer cycles/day, so the caller's
+        # time multiplier must be an INTEGER too (1.4x would de-quantize it).
+        glint_tmul = "2.0" if is_v5 else "1.4"
         flourish_lines = [
-            f"float flourish = {F(u(60, 0.15, 0.35))} * sparkle(wuv * 2.0 + 7.7, time * 1.4, midPer.x * 2.0);"]
+            f"float flourish = {F(u(60, 0.15, 0.35))} * sparkle(wuv * 2.0 + 7.7, time * {glint_tmul}, midPer.x * 2.0);"]
     elif flourish == "echo":
         needs.add("ringPulse")
         flourish_lines = [
@@ -2426,9 +2528,8 @@ def emit_shader(asg: dict) -> str:
     # v5 quality-layer knobs, read ONLY for the 20 v5 families. Byte-safety:
     # the 128 draws are materialized up front and u() is a positional lookup,
     # so conditionally reading spare indices here can never shift any other
-    # knob -- and no registry id maps to a v5 family yet, so no existing file
+    # knob -- ids below 420 never map to a v5 family, so no pre-v5 file
     # gains these lines.
-    is_v5 = family in FAMILIES_V5
     if is_v5:
         v5_bf_dim = F(u(8, 0.25, 0.45))     # back-face recede toward the dark stop
         v5_bf_dens = F(u(74, 0.15, 0.35))   # back-face alpha densify
@@ -2439,6 +2540,7 @@ def emit_shader(asg: dict) -> str:
         v5_knee = u(70, 0.62, 0.78)         # soft-knee highlight start
         v5_knee_k = F(u(71, 1.6, 2.6))      # soft-knee compression steepness
         v5_dither = F(u(75, 0.06, 0.14))    # blue-noise alpha dither amplitude
+        v5_pole_w = u(109, 0.09, 0.15)      # pole-guard fade latitude (2D-mid families)
     sec_ang, sec_sat, sec_val = secondary_consts(
         asg["primary"], asg["secondary"] if asg.get("secondary") is not None else asg["primary"])
 
@@ -2575,6 +2677,15 @@ def emit_shader(asg: dict) -> str:
         lines.append("    " + ln)
     for ln in warp_lines:
         lines.append("    " + ln)
+    if is_v5 and not use3d_mid:
+        lines.append("    // [layer:v5:polefade]")
+        lines.append("    // v5 pole guard: at v = 0/1 EVERY u maps to the same sphere point,")
+        lines.append("    // so this family's longitude-dependent 2D signature would pinch")
+        lines.append("    // into an apex starburst. The composer fades the signature (and any")
+        lines.append("    // longitude-dependent post color mix) toward a longitude-independent")
+        lines.append("    // body level near the poles; the 3D deep volume underneath is")
+        lines.append("    // pole-safe by construction, so the caps still read as material.")
+        lines.append(f"    float poleFade = smoothstep(0.015, {F(v5_pole_w)}, min(baseUV.y, 1.0 - baseUV.y));")
     for ln in mid_lines:
         lines.append("    " + ln)
     lines.append("")

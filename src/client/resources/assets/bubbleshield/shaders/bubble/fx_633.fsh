@@ -257,6 +257,14 @@ void main() {
     // stays exact (the y period carries a margin for the stretch)
     vec2 auv = vec2(baseUV.x * 4.0000 + time * 0.286667, (baseUV.y - 0.5) * 4.0000 * breathe + 2.0000 + time * -0.255000);
     vec2 wuv = warp2(auv, midPer, time);
+    // [layer:v5:polefade]
+    // v5 pole guard: at v = 0/1 EVERY u maps to the same sphere point,
+    // so this family's longitude-dependent 2D signature would pinch
+    // into an apex starburst. The composer fades the signature (and any
+    // longitude-dependent post color mix) toward a longitude-independent
+    // body level near the poles; the 3D deep volume underneath is
+    // pole-safe by construction, so the caps still read as material.
+    float poleFade = smoothstep(0.015, 0.1385, min(baseUV.y, 1.0 - baseUV.y));
     float du = baseUV.x - 0.5;
     float sfAng = safeAtan(baseUV.y - 0.5, sin(du * 6.2831853) * 0.5);
     float sfRad = length(vec2(sin(du * 3.1415927), baseUV.y - 0.5)) * 2.0;
@@ -271,7 +279,9 @@ void main() {
     }
     float sfLimb = rimGraze() * 0.5021;
     float sfGran = fbm2(wuv, midPer) * 0.18;
-    float mid = clamp(sfArcs + sfLimb + sfGran, 0.0, 1.35);
+    // pole guard on arcs + granulation (longitude-dependent); the limb
+    // term is view-based (pole-safe) and stays outside the fade
+    float mid = clamp(mix(0.1000, sfArcs + sfGran, poleFade) + sfLimb, 0.0, 1.35);
 
     // [layer:rim:graze]
     // Silhouette / band lift so the membrane reads as a curved shell:
@@ -314,8 +324,8 @@ void main() {
     rgb = mix(rgb, softHot, 0.2037 * smoothstep(0.55, 1.10, pattern));
     vec3 accent = accentPalette(0.4182 + pattern * 0.3539);
     rgb = mix(rgb, rgb * (0.55 + 0.9 * accent), 0.2971);
-    // flare tips burn at the (luma-capped) hot stop
-    rgb = mix(rgb, hotStop, clamp(sfArcs, 0.0, 1.0) * 0.3645);
+    // flare tips burn at the (luma-capped) hot stop; pole-faded
+    rgb = mix(rgb, hotStop, clamp(sfArcs, 0.0, 1.0) * 0.3645 * poleFade);
     // Two-band chromatic dispersion on the rim (thin-film-like), biased
     // to vertexColor.rgb: band 1 multiplies the wide glow into the
     // palette-driven rgb, band 2 pulls the thin hot line toward the (also

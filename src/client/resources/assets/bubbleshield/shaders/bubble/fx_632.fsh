@@ -259,6 +259,14 @@ void main() {
     float sway = 1.2758 * sin(time * 0.225147);
     vec2 auv = vec2(baseUV.x * 10.0000 + (baseUV.y - 0.5) * sway + time * -0.141667, baseUV.y * 10.0000);
     vec2 wuv = auv + 0.2515 * curl2(auv + vec2(0.0, time * 0.070000), midPer);
+    // [layer:v5:polefade]
+    // v5 pole guard: at v = 0/1 EVERY u maps to the same sphere point,
+    // so this family's longitude-dependent 2D signature would pinch
+    // into an apex starburst. The composer fades the signature (and any
+    // longitude-dependent post color mix) toward a longitude-independent
+    // body level near the poles; the 3D deep volume underneath is
+    // pole-safe by construction, so the caps still read as material.
+    float poleFade = smoothstep(0.015, 0.1197, min(baseUV.y, 1.0 - baseUV.y));
     vec2 myI = floor(wuv);
     vec2 myF = fract(wuv);
     vec2 myN0 = vec2(cellHash(myI, midPer.x), cellHash(myI + 71.3, midPer.x)) * 0.6 + 0.2;
@@ -277,6 +285,9 @@ void main() {
     // traveling growth pulse: a wavefront sweeps the network by phase
     float myPulse = pow(0.5 + 0.5 * sin(time * 0.958186 - (myI.y + myPh * 4.9803) * 0.8671), 4.6364);
     float mid = clamp(myFil * (0.5878 + 0.5795 * myPulse) + myNode * 0.5 * myPulse + myGlow * 0.15 * myPulse, 0.0, 1.2);
+    // pole guard: the thread lattice pinches at the apexes; fade toward
+    // the network's sparse body level
+    mid = mix(0.1000, mid, poleFade);
 
     // [layer:rim:lat]
     // Silhouette / band lift so the membrane reads as a curved shell:

@@ -163,14 +163,18 @@ float rimGraze() {
 }
 
 // hash-cell twinkle: sparse offset star points with per-cell phase;
-// cells wrap every px in x so the field tiles the u seam
+// cells wrap every px in x so the field tiles the u seam. The per-
+// cell rate is an INTEGER number of cycles per day (the hash picks
+// the integer and offsets the phase), so the daily time wrap
+// 1200 -> 0 lands exactly on a whole cycle -- no twinkle snap.
 float sparkle(vec2 p, float t, float px) {
     vec2 cellId = floor(p);
     vec2 f = fract(p) - 0.5;
     float h = cellHash(cellId, px);
     vec2 off = vec2(cellHash(cellId + 11.3, px), cellHash(cellId + 27.9, px)) - 0.5;
     float d = length(f - off * 0.55);
-    float tw = pow(0.5 + 0.5 * sin(t * (2.0 + 5.0 * h) + h * 39.0), 6.0);
+    float turns = 382.0 + floor(h * 955.0);
+    float tw = pow(0.5 + 0.5 * sin(t * turns * (6.2831853 / 1200.0) + h * 39.0), 6.0);
     return step(0.7751, h) * invsmooth(0.02, 0.22, d) * tw;
 }
 
@@ -253,11 +257,21 @@ void main() {
     float sway = 1.4347 * sin(time * 0.120428);
     vec2 auv = vec2(baseUV.x * 5.0000 + (baseUV.y - 0.5) * sway + time * 0.129167, baseUV.y * 5.0000);
     vec2 wuv = auv;
+    // [layer:v5:polefade]
+    // v5 pole guard: at v = 0/1 EVERY u maps to the same sphere point,
+    // so this family's longitude-dependent 2D signature would pinch
+    // into an apex starburst. The composer fades the signature (and any
+    // longitude-dependent post color mix) toward a longitude-independent
+    // body level near the poles; the 3D deep volume underneath is
+    // pole-safe by construction, so the caps still read as material.
+    float poleFade = smoothstep(0.015, 0.1425, min(baseUV.y, 1.0 - baseUV.y));
     vec2 fiQ = vec2(fbm2(wuv + vec2(0.0, time * 0.105000), midPer), fbm2(wuv + vec2(5.2, 1.3), midPer));
     vec2 fiR = vec2(fbm2(wuv + fiQ * 2.1847 + vec2(1.7, 9.2) + vec2(time * 0.054167, 0.0), midPer), fbm2(wuv + fiQ * 2.1847 + vec2(8.3, 2.8), midPer));
     float fiInk = fbm2(wuv + fiR * 2.0517, midPer);
     float fiVein = pow(clamp(1.0 - abs(2.0 * fiR.x - 1.0), 0.0, 1.0), 5.5416);
     float mid = clamp(fiInk * 1.1029 + fiVein * 0.4571, 0.0, 1.2);
+    // pole guard: the marbling varies with longitude at the apexes
+    mid = mix(0.4500, mid, poleFade);
 
     // [layer:rim:graze_sparkle]
     // Silhouette / band lift so the membrane reads as a curved shell:
@@ -302,8 +316,9 @@ void main() {
     vec3 accent = accentPalette(0.1288 + pattern * 0.3013);
     rgb = mix(rgb, rgb * (0.55 + 0.9 * accent), 0.2072);
     // advected palette: the warp field itself steers the accent
-    // position, so the hue bands ride the marbling (bounded mix)
-    rgb = mix(rgb, rgb * (0.55 + 0.9 * accentPalette(fiQ.x * 0.8679 + fiR.y * 0.7215)), 0.3713);
+    // position, so the hue bands ride the marbling (bounded mix);
+    // pole-faded -- the warp vectors are longitude-dependent there
+    rgb = mix(rgb, rgb * (0.55 + 0.9 * accentPalette(fiQ.x * 0.8679 + fiR.y * 0.7215)), 0.3713 * poleFade);
     // Two-band chromatic dispersion on the rim (thin-film-like), biased
     // to vertexColor.rgb: band 1 multiplies the wide glow into the
     // palette-driven rgb, band 2 pulls the thin hot line toward the (also
@@ -324,7 +339,7 @@ void main() {
     // bright features, plus the deep volume's own Beer-Lambert opacity;
     // pattern-free areas stay dark AND thin (anti-washout).
     float presence = smoothstep(0.02, 0.30, pattern);
-    float alpha = vertexColor.a * min(0.0720 + 0.3165 * presence + 0.3647 * pattern + 0.0824 * (1.0 - deepTrans), 0.8504);
+    float alpha = vertexColor.a * min(0.0720 + 0.2565 * presence + 0.3647 * pattern + 0.0824 * (1.0 - deepTrans), 0.8504);
     // [layer:v5:backface]
     // v5 back-face densify/dim (gl_FrontFacing is a builtin, no uniform
     // needed): the INSIDE of the far shell recedes toward the dark stop

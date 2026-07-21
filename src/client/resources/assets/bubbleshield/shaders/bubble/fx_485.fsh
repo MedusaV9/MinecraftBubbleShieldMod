@@ -168,14 +168,18 @@ float rimGraze() {
 }
 
 // hash-cell twinkle: sparse offset star points with per-cell phase;
-// cells wrap every px in x so the field tiles the u seam
+// cells wrap every px in x so the field tiles the u seam. The per-
+// cell rate is an INTEGER number of cycles per day (the hash picks
+// the integer and offsets the phase), so the daily time wrap
+// 1200 -> 0 lands exactly on a whole cycle -- no twinkle snap.
 float sparkle(vec2 p, float t, float px) {
     vec2 cellId = floor(p);
     vec2 f = fract(p) - 0.5;
     float h = cellHash(cellId, px);
     vec2 off = vec2(cellHash(cellId + 11.3, px), cellHash(cellId + 27.9, px)) - 0.5;
     float d = length(f - off * 0.55);
-    float tw = pow(0.5 + 0.5 * sin(t * (2.0 + 5.0 * h) + h * 39.0), 6.0);
+    float turns = 382.0 + floor(h * 955.0);
+    float tw = pow(0.5 + 0.5 * sin(t * turns * (6.2831853 / 1200.0) + h * 39.0), 6.0);
     return step(0.7512, h) * invsmooth(0.02, 0.22, d) * tw;
 }
 
@@ -288,7 +292,7 @@ void main() {
     float csSpec = pow(clamp(dot(csN, csL), 0.0, 1.0), 12.8096);
     float csTw = 0.5 + 0.5 * sin(time * 1.172861 + csId * 39.0);
     float csFill = 0.5 + 0.5 * sin(csId * 6.2831853 + dot(csDir, csN) * 4.5982);
-    float mid = clamp(csEdge * 0.4772 + csSpec * (0.8115 + 0.3 * csTw) + csFill * 0.1659, 0.0, 1.3);
+    float mid = clamp(csEdge * 0.4772 + csSpec * (0.8115 + 0.3 * csTw) + csFill * 0.1147, 0.0, 1.3);
 
     // [layer:rim:graze_sparkle]
     // Silhouette / band lift so the membrane reads as a curved shell:
@@ -352,7 +356,7 @@ void main() {
     // bright features, plus the deep volume's own Beer-Lambert opacity;
     // pattern-free areas stay dark AND thin (anti-washout).
     float presence = smoothstep(0.02, 0.30, pattern);
-    float alpha = vertexColor.a * min(0.0530 + 0.3198 * presence + 0.4757 * pattern + 0.1462 * (1.0 - deepTrans), 0.8125);
+    float alpha = vertexColor.a * min(0.0530 + 0.2498 * presence + 0.4757 * pattern + 0.1462 * (1.0 - deepTrans), 0.8125);
     // [layer:v5:backface]
     // v5 back-face densify/dim (gl_FrontFacing is a builtin, no uniform
     // needed): the INSIDE of the far shell recedes toward the dark stop

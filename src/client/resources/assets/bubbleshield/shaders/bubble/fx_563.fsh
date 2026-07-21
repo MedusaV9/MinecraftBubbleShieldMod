@@ -272,6 +272,14 @@ void main() {
     float sway = 0.9570 * sin(time * 0.225147);
     vec2 auv = vec2(baseUV.x * 10.0000 + (baseUV.y - 0.5) * sway + time * -0.025000, baseUV.y * 10.0000);
     vec2 wuv = warp1(auv, midPer, time);
+    // [layer:v5:polefade]
+    // v5 pole guard: at v = 0/1 EVERY u maps to the same sphere point,
+    // so this family's longitude-dependent 2D signature would pinch
+    // into an apex starburst. The composer fades the signature (and any
+    // longitude-dependent post color mix) toward a longitude-independent
+    // body level near the poles; the 3D deep volume underneath is
+    // pole-safe by construction, so the caps still read as material.
+    float poleFade = smoothstep(0.015, 0.1361, min(baseUV.y, 1.0 - baseUV.y));
     float hpAcc = 0.0;
     for (int i = 0; i < 3; i++) {
         float fi = float(i);
@@ -281,11 +289,13 @@ void main() {
         vec2 hpD = abs(fract(hpUV) - 0.5);
         float hpGrid = smoothstep(0.3913, 0.4619, max(hpD.x, hpD.y));
         float hpScan = 0.5 + 0.5 * sin(hpUV.y * 10.8437 + time * 0.947714 - fi * 1.7);
-        hpAcc += (hpGrid * 0.6299 + hpScan * 0.1648) * (1.0 - fi * 0.2095);
+        hpAcc += (hpGrid * 0.6299 + hpScan * 0.1118) * (1.0 - fi * 0.2095);
     }
     float hpSync = invsmooth(0.0, 0.0722, abs(baseUV.y - fract(time * 0.115000)));
     float hpFlick = 0.85 + 0.15 * step(0.4, hash11(floor(time * 13.6584)));
-    float mid = clamp(hpAcc * hpFlick + hpSync * 0.5224, 0.0, 1.25);
+    // pole guard on the grid layers only; the sync band is latitude-only
+    // (pole-safe) and keeps sweeping across the caps
+    float mid = clamp(mix(0.3000, hpAcc * hpFlick, poleFade) + hpSync * 0.5224, 0.0, 1.25);
 
     // [layer:rim:graze]
     // Silhouette / band lift so the membrane reads as a curved shell:

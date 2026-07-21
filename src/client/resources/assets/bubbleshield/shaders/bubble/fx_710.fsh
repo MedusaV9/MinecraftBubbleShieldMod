@@ -278,6 +278,14 @@ void main() {
     float sway = 1.2607 * sin(time * 0.136136);
     vec2 auv = vec2(baseUV.x * 4.0000 + (baseUV.y - 0.5) * sway + time * -0.023333, baseUV.y * 4.0000);
     vec2 wuv = warp2(auv, midPer, time);
+    // [layer:v5:polefade]
+    // v5 pole guard: at v = 0/1 EVERY u maps to the same sphere point,
+    // so this family's longitude-dependent 2D signature would pinch
+    // into an apex starburst. The composer fades the signature (and any
+    // longitude-dependent post color mix) toward a longitude-independent
+    // body level near the poles; the 3D deep volume underneath is
+    // pole-safe by construction, so the caps still read as material.
+    float poleFade = smoothstep(0.015, 0.1178, min(baseUV.y, 1.0 - baseUV.y));
     float peAcc = 0.0;
     float peW = 1.0;
     for (int e = 0; e < 4; e++) {
@@ -294,6 +302,9 @@ void main() {
         peW *= 0.5956;
     }
     float mid = clamp(peAcc * 0.5195, 0.0, 1.25);
+    // pole guard: a blob halo grazing an apex would scallop with
+    // longitude; the blobs live near the equator, so fade to near-empty
+    mid = mix(0.0500, mid, poleFade);
 
     // [layer:rim:lat]
     // Silhouette / band lift so the membrane reads as a curved shell:

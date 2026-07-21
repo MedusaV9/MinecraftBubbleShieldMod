@@ -317,7 +317,9 @@ void main() {
         rfLight += rfTrans * rfD * (1.0 - fi * 0.1214);
         rfTrans *= 1.0 - rfD * 0.3589;
     }
-    float mid = clamp(rfLight * 1.0493 + (1.0 - rfTrans) * 0.1962, 0.0, 1.15);
+    // the broad (1 - transmittance) coverage term is kept low so the
+    // fog reads as distinct banks against darker gaps, not one wash
+    float mid = clamp(rfLight * 1.0493 + (1.0 - rfTrans) * 0.1369, 0.0, 1.15);
 
     // [layer:rim:lat]
     // Silhouette / band lift so the membrane reads as a curved shell:
@@ -380,7 +382,7 @@ void main() {
     // bright features, plus the deep volume's own Beer-Lambert opacity;
     // pattern-free areas stay dark AND thin (anti-washout).
     float presence = smoothstep(0.02, 0.30, pattern);
-    float alpha = vertexColor.a * min(0.0779 + 0.3499 * presence + 0.2851 * pattern + 0.1411 * (1.0 - deepTrans), 0.8761);
+    float alpha = vertexColor.a * min(0.0779 + 0.2699 * presence + 0.2851 * pattern + 0.1411 * (1.0 - deepTrans), 0.8761);
     // [layer:v5:backface]
     // v5 back-face densify/dim (gl_FrontFacing is a builtin, no uniform
     // needed): the INSIDE of the far shell recedes toward the dark stop

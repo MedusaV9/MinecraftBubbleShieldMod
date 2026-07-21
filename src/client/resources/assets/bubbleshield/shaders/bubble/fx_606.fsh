@@ -266,11 +266,21 @@ void main() {
     float ft = time + 0.2906 * jump;
     vec2 auv = vec2(baseUV.x * 5.0000, baseUV.y * 5.0000) + vec2(0.087500, -0.472500) * ft;
     vec2 wuv = warp1(auv, midPer, time);
+    // [layer:v5:polefade]
+    // v5 pole guard: at v = 0/1 EVERY u maps to the same sphere point,
+    // so this family's longitude-dependent 2D signature would pinch
+    // into an apex starburst. The composer fades the signature (and any
+    // longitude-dependent post color mix) toward a longitude-independent
+    // body level near the poles; the 3D deep volume underneath is
+    // pole-safe by construction, so the caps still read as material.
+    float poleFade = smoothstep(0.015, 0.1467, min(baseUV.y, 1.0 - baseUV.y));
     vec2 fiQ = vec2(fbm2(wuv + vec2(0.0, time * 0.070000), midPer), fbm2(wuv + vec2(5.2, 1.3), midPer));
     vec2 fiR = vec2(fbm2(wuv + fiQ * 2.5660 + vec2(1.7, 9.2) + vec2(time * 0.070833, 0.0), midPer), fbm2(wuv + fiQ * 2.5660 + vec2(8.3, 2.8), midPer));
     float fiInk = fbm2(wuv + fiR * 2.5597, midPer);
     float fiVein = pow(clamp(1.0 - abs(2.0 * fiR.x - 1.0), 0.0, 1.0), 3.0355);
     float mid = clamp(fiInk * 1.1159 + fiVein * 0.3047, 0.0, 1.2);
+    // pole guard: the marbling varies with longitude at the apexes
+    mid = mix(0.4500, mid, poleFade);
 
     // [layer:rim:graze]
     // Silhouette / band lift so the membrane reads as a curved shell:
@@ -314,8 +324,9 @@ void main() {
     vec3 accent = accentPalette(0.7428 + pattern * 0.3423);
     rgb = mix(rgb, rgb * (0.55 + 0.9 * accent), 0.2444);
     // advected palette: the warp field itself steers the accent
-    // position, so the hue bands ride the marbling (bounded mix)
-    rgb = mix(rgb, rgb * (0.55 + 0.9 * accentPalette(fiQ.x * 0.7381 + fiR.y * 0.6451)), 0.2975);
+    // position, so the hue bands ride the marbling (bounded mix);
+    // pole-faded -- the warp vectors are longitude-dependent there
+    rgb = mix(rgb, rgb * (0.55 + 0.9 * accentPalette(fiQ.x * 0.7381 + fiR.y * 0.6451)), 0.2975 * poleFade);
     // Two-band chromatic dispersion on the rim (thin-film-like), biased
     // to vertexColor.rgb: band 1 multiplies the wide glow into the
     // palette-driven rgb, band 2 pulls the thin hot line toward the (also
@@ -336,7 +347,7 @@ void main() {
     // bright features, plus the deep volume's own Beer-Lambert opacity;
     // pattern-free areas stay dark AND thin (anti-washout).
     float presence = smoothstep(0.02, 0.30, pattern);
-    float alpha = vertexColor.a * min(0.0675 + 0.3156 * presence + 0.3458 * pattern + 0.1373 * (1.0 - deepTrans), 0.8235);
+    float alpha = vertexColor.a * min(0.0675 + 0.2556 * presence + 0.3458 * pattern + 0.1373 * (1.0 - deepTrans), 0.8235);
     // [layer:v5:backface]
     // v5 back-face densify/dim (gl_FrontFacing is a builtin, no uniform
     // needed): the INSIDE of the far shell recedes toward the dark stop

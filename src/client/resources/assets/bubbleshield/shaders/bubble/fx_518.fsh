@@ -168,14 +168,18 @@ float rimGraze() {
 }
 
 // hash-cell twinkle: sparse offset star points with per-cell phase;
-// cells wrap every px in x so the field tiles the u seam
+// cells wrap every px in x so the field tiles the u seam. The per-
+// cell rate is an INTEGER number of cycles per day (the hash picks
+// the integer and offsets the phase), so the daily time wrap
+// 1200 -> 0 lands exactly on a whole cycle -- no twinkle snap.
 float sparkle(vec2 p, float t, float px) {
     vec2 cellId = floor(p);
     vec2 f = fract(p) - 0.5;
     float h = cellHash(cellId, px);
     vec2 off = vec2(cellHash(cellId + 11.3, px), cellHash(cellId + 27.9, px)) - 0.5;
     float d = length(f - off * 0.55);
-    float tw = pow(0.5 + 0.5 * sin(t * (2.0 + 5.0 * h) + h * 39.0), 6.0);
+    float turns = 382.0 + floor(h * 955.0);
+    float tw = pow(0.5 + 0.5 * sin(t * turns * (6.2831853 / 1200.0) + h * 39.0), 6.0);
     return step(0.7713, h) * invsmooth(0.02, 0.22, d) * tw;
 }
 
@@ -257,6 +261,14 @@ void main() {
     float ft = time + 0.4420 * jump;
     vec2 auv = vec2(baseUV.x * 9.0000, baseUV.y * 9.0000) + vec2(0.382500, 0.284167) * ft;
     vec2 wuv = auv + 0.1471 * curl2(auv + vec2(0.0, time * 0.073333), midPer);
+    // [layer:v5:polefade]
+    // v5 pole guard: at v = 0/1 EVERY u maps to the same sphere point,
+    // so this family's longitude-dependent 2D signature would pinch
+    // into an apex starburst. The composer fades the signature (and any
+    // longitude-dependent post color mix) toward a longitude-independent
+    // body level near the poles; the 3D deep volume underneath is
+    // pole-safe by construction, so the caps still read as material.
+    float poleFade = smoothstep(0.015, 0.0944, min(baseUV.y, 1.0 - baseUV.y));
     vec2 ecUV = vec2(wuv.x, baseUV.y * 3.8860 + time * 0.123056);
     float ecBody = fbm2(ecUV, vec2(midPer.x, 3.8860));
     float ecDrip = fbm2(vec2(ecUV.x * 2.0, ecUV.y * 0.6) + vec2(7.7, 2.3), vec2(midPer.x * 2.0, 2.3316));
@@ -264,6 +276,9 @@ void main() {
     float ecEdge = ecMask * (1.0 - ecMask) * 4.0;
     float ecSheen = pow(0.5 + 0.5 * sin(ecBody * 6.4387 - time * 0.586431), 3.3074);
     float mid = clamp(ecMask * (0.6619 + 0.3 * ecSheen) + ecEdge * 0.6494, 0.0, 1.2);
+    // pole guard, DIRECTIONAL: the goo hangs from the top (v = 0), so
+    // the top apex fades to a thick cap and the bottom to a thin drip
+    mid = mix(mix(0.5500, 0.0800, baseUV.y), mid, poleFade);
 
     // [layer:rim:graze_sparkle]
     // Silhouette / band lift so the membrane reads as a curved shell:
@@ -277,7 +292,7 @@ void main() {
     rim = clamp(rim + 0.6307 * rimLine, 0.0, 1.4);
 
     // Flourish accent + micro grain keep large areas alive up close.
-    float flourish = 0.1786 * sparkle(wuv * 2.0 + 7.7, time * 1.4, midPer.x * 2.0);
+    float flourish = 0.1786 * sparkle(wuv * 2.0 + 7.7, time * 2.0, midPer.x * 2.0);
     float grain = 0.0588 * (cellHash(floor(wuv * 41.0000) + vec2(floor(time * 6.0), 0.0), 369.0000) - 0.5);
 
     // Recolor-safe composite v4: the whole pattern is graded through the
@@ -307,8 +322,9 @@ void main() {
     rgb = mix(rgb, softHot, 0.3818 * smoothstep(0.55, 1.10, pattern));
     vec3 accent = accentPalette(0.3451 + pattern * 0.3743);
     rgb = mix(rgb, rgb * (0.55 + 0.9 * accent), 0.1924);
-    // drip rims catch the light: the goo boundary lifts to the hot stop
-    rgb = mix(rgb, hotStop, clamp(ecEdge, 0.0, 1.0) * 0.3323);
+    // drip rims catch the light: the goo boundary lifts to the hot
+    // stop; pole-faded -- the boundary is longitude-dependent there
+    rgb = mix(rgb, hotStop, clamp(ecEdge, 0.0, 1.0) * 0.3323 * poleFade);
     // Two-band chromatic dispersion on the rim (thin-film-like), biased
     // to vertexColor.rgb: band 1 multiplies the wide glow into the
     // palette-driven rgb, band 2 pulls the thin hot line toward the (also
@@ -329,7 +345,7 @@ void main() {
     // bright features, plus the deep volume's own Beer-Lambert opacity;
     // pattern-free areas stay dark AND thin (anti-washout).
     float presence = smoothstep(0.02, 0.30, pattern);
-    float alpha = vertexColor.a * min(0.0617 + 0.2632 * presence + 0.5054 * pattern + 0.0863 * (1.0 - deepTrans), 0.8421);
+    float alpha = vertexColor.a * min(0.0617 + 0.2066 * presence + 0.5054 * pattern + 0.0863 * (1.0 - deepTrans), 0.8421);
     // [layer:v5:backface]
     // v5 back-face densify/dim (gl_FrontFacing is a builtin, no uniform
     // needed): the INSIDE of the far shell recedes toward the dark stop

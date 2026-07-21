@@ -164,14 +164,18 @@ float rimGraze() {
 }
 
 // hash-cell twinkle: sparse offset star points with per-cell phase;
-// cells wrap every px in x so the field tiles the u seam
+// cells wrap every px in x so the field tiles the u seam. The per-
+// cell rate is an INTEGER number of cycles per day (the hash picks
+// the integer and offsets the phase), so the daily time wrap
+// 1200 -> 0 lands exactly on a whole cycle -- no twinkle snap.
 float sparkle(vec2 p, float t, float px) {
     vec2 cellId = floor(p);
     vec2 f = fract(p) - 0.5;
     float h = cellHash(cellId, px);
     vec2 off = vec2(cellHash(cellId + 11.3, px), cellHash(cellId + 27.9, px)) - 0.5;
     float d = length(f - off * 0.55);
-    float tw = pow(0.5 + 0.5 * sin(t * (2.0 + 5.0 * h) + h * 39.0), 6.0);
+    float turns = 382.0 + floor(h * 955.0);
+    float tw = pow(0.5 + 0.5 * sin(t * turns * (6.2831853 / 1200.0) + h * 39.0), 6.0);
     return step(0.7848, h) * invsmooth(0.02, 0.22, d) * tw;
 }
 
@@ -262,6 +266,14 @@ void main() {
     // Signature structure of this effect, domain-warped and animated.
     vec2 auv = vec2(baseUV.x * 8.0000, baseUV.y * 8.0000) + vec2(-0.180000, -0.158333) * time;
     vec2 wuv = auv + 0.2440 * curl2(auv + vec2(0.0, time * 0.066667), midPer);
+    // [layer:v5:polefade]
+    // v5 pole guard: at v = 0/1 EVERY u maps to the same sphere point,
+    // so this family's longitude-dependent 2D signature would pinch
+    // into an apex starburst. The composer fades the signature (and any
+    // longitude-dependent post color mix) toward a longitude-independent
+    // body level near the poles; the 3D deep volume underneath is
+    // pole-safe by construction, so the caps still read as material.
+    float poleFade = smoothstep(0.015, 0.1425, min(baseUV.y, 1.0 - baseUV.y));
     vec2 myI = floor(wuv);
     vec2 myF = fract(wuv);
     vec2 myN0 = vec2(cellHash(myI, midPer.x), cellHash(myI + 71.3, midPer.x)) * 0.6 + 0.2;
@@ -280,6 +292,9 @@ void main() {
     // traveling growth pulse: a wavefront sweeps the network by phase
     float myPulse = pow(0.5 + 0.5 * sin(time * 1.000074 - (myI.y + myPh * 4.8246) * 1.1534), 3.7809);
     float mid = clamp(myFil * (0.6363 + 0.4994 * myPulse) + myNode * 0.5 * myPulse + myGlow * 0.15 * myPulse, 0.0, 1.2);
+    // pole guard: the thread lattice pinches at the apexes; fade toward
+    // the network's sparse body level
+    mid = mix(0.1000, mid, poleFade);
 
     // [layer:rim:graze_film]
     // Silhouette / band lift so the membrane reads as a curved shell:
@@ -292,7 +307,7 @@ void main() {
     rim = clamp(rim + 0.5028 * rimLine, 0.0, 1.4);
 
     // Flourish accent + micro grain keep large areas alive up close.
-    float flourish = 0.1946 * sparkle(wuv * 2.0 + 7.7, time * 1.4, midPer.x * 2.0);
+    float flourish = 0.1946 * sparkle(wuv * 2.0 + 7.7, time * 2.0, midPer.x * 2.0);
     float grain = 0.0704 * (cellHash(floor(wuv * 56.0000) + vec2(floor(time * 6.0), 0.0), 448.0000) - 0.5);
 
     // Recolor-safe composite v4: the whole pattern is graded through the

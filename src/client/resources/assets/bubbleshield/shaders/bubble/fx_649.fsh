@@ -301,11 +301,21 @@ void main() {
     // stays exact (the y period carries a margin for the stretch)
     vec2 auv = vec2(baseUV.x * 9.0000 + time * 0.082500, (baseUV.y - 0.5) * 9.0000 * breathe + 4.5000 + time * -0.018333);
     vec2 wuv = warp2(auv, midPer, time);
+    // [layer:v5:polefade]
+    // v5 pole guard: at v = 0/1 EVERY u maps to the same sphere point,
+    // so this family's longitude-dependent 2D signature would pinch
+    // into an apex starburst. The composer fades the signature (and any
+    // longitude-dependent post color mix) toward a longitude-independent
+    // body level near the poles; the 3D deep volume underneath is
+    // pole-safe by construction, so the caps still read as material.
+    float poleFade = smoothstep(0.015, 0.0932, min(baseUV.y, 1.0 - baseUV.y));
     vec3 sgV = voro2(wuv, midPer, 0.0);
     float sgLead = invsmooth(0.008, 0.0644, sgV.x);
     float sgLight = 0.55 + 0.45 * sin(time * 0.685914 + sgV.z * 6.2831853);
     float sgBevel = smoothstep(0.0, 0.3672, sgV.x);
     float mid = clamp((1.0 - sgLead) * (0.5413 + 0.4221 * sgLight) * (0.75 + 0.25 * sgBevel), 0.0, 1.2);
+    // pole guard: the pane lattice varies with longitude at the apexes
+    mid = mix(0.5000, mid, poleFade);
 
     // [layer:rim:graze]
     // Silhouette / band lift so the membrane reads as a curved shell:
@@ -349,9 +359,10 @@ void main() {
     vec3 accent = accentPalette(0.0878 + pattern * 0.6436);
     rgb = mix(rgb, rgb * (0.55 + 0.9 * accent), 0.3869);
     // per-pane hue: each cell tints through its own palette position;
-    // the lead lines sink to the dark stop (bounded, recolor-safe)
-    rgb = mix(rgb, rgb * (0.45 + 1.1 * accentPalette(sgV.z * 0.8132 + 0.5873)), 0.3057);
-    rgb = mix(rgb, deepStop, clamp(sgLead, 0.0, 1.0) * 0.7054);
+    // the lead lines sink to the dark stop (bounded, recolor-safe);
+    // both pole-faded -- pane ids/borders are longitude-dependent there
+    rgb = mix(rgb, rgb * (0.45 + 1.1 * accentPalette(sgV.z * 0.8132 + 0.5873)), 0.3057 * poleFade);
+    rgb = mix(rgb, deepStop, clamp(sgLead, 0.0, 1.0) * 0.7054 * poleFade);
     // Two-band chromatic dispersion on the rim (thin-film-like), biased
     // to vertexColor.rgb: band 1 multiplies the wide glow into the
     // palette-driven rgb, band 2 pulls the thin hot line toward the (also

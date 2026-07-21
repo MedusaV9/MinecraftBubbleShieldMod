@@ -280,7 +280,7 @@ void main() {
     float csSpec = pow(clamp(dot(csN, csL), 0.0, 1.0), 15.5838);
     float csTw = 0.5 + 0.5 * sin(time * 1.282817 + csId * 39.0);
     float csFill = 0.5 + 0.5 * sin(csId * 6.2831853 + dot(csDir, csN) * 5.6033);
-    float mid = clamp(csEdge * 0.5645 + csSpec * (0.5689 + 0.3 * csTw) + csFill * 0.2651, 0.0, 1.3);
+    float mid = clamp(csEdge * 0.5645 + csSpec * (0.5689 + 0.3 * csTw) + csFill * 0.2063, 0.0, 1.3);
 
     // [layer:rim:graze]
     // Silhouette / band lift so the membrane reads as a curved shell:
@@ -343,7 +343,7 @@ void main() {
     // bright features, plus the deep volume's own Beer-Lambert opacity;
     // pattern-free areas stay dark AND thin (anti-washout).
     float presence = smoothstep(0.02, 0.30, pattern);
-    float alpha = vertexColor.a * min(0.0688 + 0.3516 * presence + 0.5036 * pattern + 0.1306 * (1.0 - deepTrans), 0.8066);
+    float alpha = vertexColor.a * min(0.0688 + 0.2763 * presence + 0.5036 * pattern + 0.1306 * (1.0 - deepTrans), 0.8066);
     // [layer:v5:backface]
     // v5 back-face densify/dim (gl_FrontFacing is a builtin, no uniform
     // needed): the INSIDE of the far shell recedes toward the dark stop

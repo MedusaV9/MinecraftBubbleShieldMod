@@ -242,11 +242,21 @@ void main() {
     // Signature structure of this effect, domain-warped and animated.
     vec2 auv = vec2(baseUV.x * 5.0000, baseUV.y * 5.0000) + vec2(-0.200000, -0.116667) * time;
     vec2 wuv = auv + 0.1298 * curl2(auv + vec2(0.0, time * 0.070000), midPer);
+    // [layer:v5:polefade]
+    // v5 pole guard: at v = 0/1 EVERY u maps to the same sphere point,
+    // so this family's longitude-dependent 2D signature would pinch
+    // into an apex starburst. The composer fades the signature (and any
+    // longitude-dependent post color mix) toward a longitude-independent
+    // body level near the poles; the 3D deep volume underneath is
+    // pole-safe by construction, so the caps still read as material.
+    float poleFade = smoothstep(0.015, 0.1379, min(baseUV.y, 1.0 - baseUV.y));
     float ifThick = fbm2(wuv + vec2(time * 0.041667, 0.0), midPer) * 1.4588 + baseUV.y * 1.2088 + 0.5453;
     float ifGraze = 0.35 + 0.65 * rimGraze();
     vec3 ifPhase = 6.2831853 * ifThick * vec3(1.0, 0.8065, 0.6452);
     vec3 ifFilm = vec3(0.34) + 0.22 * cos(ifPhase) + 0.22 * cos(ifPhase * 2.0 + vec3(0.7, 1.9, 3.1)) + 0.22 * cos(ifPhase * 3.0 + vec3(2.3, 4.1, 0.9));
     float mid = clamp(dot(clamp(ifFilm, 0.0, 1.0), vec3(0.3333)) * 1.1971 * ifGraze + 0.1238, 0.0, 1.2);
+    // pole guard: the film thickness varies with longitude at the apexes
+    mid = mix(0.3500, mid, poleFade);
 
     // [layer:rim:graze_film]
     // Silhouette / band lift so the membrane reads as a curved shell:
@@ -289,7 +299,8 @@ void main() {
     rgb = mix(rgb, softHot, 0.3684 * smoothstep(0.55, 1.10, pattern));
     vec3 accent = accentPalette(0.3449 + pattern * 0.4057);
     rgb = mix(rgb, rgb * (0.55 + 0.9 * accent), 0.3943);
-    rgb = mix(rgb, rgb * (0.5 + 1.3022 * clamp(ifFilm, 0.0, 1.0)), 0.4163 * ifGraze);
+    // pole-faded: ifFilm's thickness field is longitude-dependent
+    rgb = mix(rgb, rgb * (0.5 + 1.3022 * clamp(ifFilm, 0.0, 1.0)), 0.4163 * ifGraze * poleFade);
     vec3 rimFilm = thinFilm(0.7971 + pattern * 1.5166 + baseUV.y * 0.6786);
     rgb = mix(rgb, rgb * (0.6 + 0.8 * rimFilm), clamp(rim, 0.0, 1.0) * 0.3638);
     // Two-band chromatic dispersion on the rim (thin-film-like), biased

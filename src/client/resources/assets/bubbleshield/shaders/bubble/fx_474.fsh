@@ -324,6 +324,14 @@ void main() {
     float ft = time + 0.2973 * jump;
     vec2 auv = vec2(baseUV.x * 6.0000, baseUV.y * 6.0000) + vec2(-0.115000, -0.033333) * ft;
     vec2 wuv = auv + 0.2132 * curl2(auv + vec2(0.0, time * 0.073333), midPer);
+    // [layer:v5:polefade]
+    // v5 pole guard: at v = 0/1 EVERY u maps to the same sphere point,
+    // so this family's longitude-dependent 2D signature would pinch
+    // into an apex starburst. The composer fades the signature (and any
+    // longitude-dependent post color mix) toward a longitude-independent
+    // body level near the poles; the 3D deep volume underneath is
+    // pole-safe by construction, so the caps still read as material.
+    float poleFade = smoothstep(0.015, 0.1053, min(baseUV.y, 1.0 - baseUV.y));
     vec3 iceA = voro2(wuv, midPer, 0.0);
     // slope-scaled parallax: the deeper sheet slides along rimDir,
     // farther where the view grazes (screen-space: seam-safe)
@@ -334,6 +342,9 @@ void main() {
     float sheen = fbm2(wuv + vec2(time * 0.020000, 0.0), midPer);
     float glint = pow(0.5 + 0.5 * sin(time * 0.890118 + iceA.z * 6.2831853), 6.7814);
     float mid = clamp(crackA * 0.8011 + crackB * 0.4649 + sheen * 0.2118 + glint * 0.35, 0.0, 1.25);
+    // pole guard: crack sheets converge on the apexes; fade toward the
+    // ice body's sheen level
+    mid = mix(0.2000, mid, poleFade);
 
     // [layer:rim:lat]
     // Silhouette / band lift so the membrane reads as a curved shell:
@@ -377,8 +388,9 @@ void main() {
     vec3 accent = accentPalette(0.0678 + pattern * 0.6260);
     rgb = mix(rgb, rgb * (0.55 + 0.9 * accent), 0.3094);
     // the deeper crack sheet reads colder and darker (secondary
-    // cast): depth through color separation, not just brightness
-    rgb = mix(rgb, mix(secCol, deepStop, 0.5), clamp(crackB * (1.0 - crackA), 0.0, 1.0) * 0.4370);
+    // cast): depth through color separation, not just brightness;
+    // pole-faded -- the crack lattice is longitude-dependent there
+    rgb = mix(rgb, mix(secCol, deepStop, 0.5), clamp(crackB * (1.0 - crackA), 0.0, 1.0) * 0.4370 * poleFade);
     // Two-band chromatic dispersion on the rim (thin-film-like), biased
     // to vertexColor.rgb: band 1 multiplies the wide glow into the
     // palette-driven rgb, band 2 pulls the thin hot line toward the (also

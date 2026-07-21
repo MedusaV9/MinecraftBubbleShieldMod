@@ -267,6 +267,14 @@ void main() {
     // Signature structure of this effect, domain-warped and animated.
     vec2 auv = vec2(baseUV.x * 6.0000, baseUV.y * 6.0000) + vec2(-0.225000, -0.293333) * time;
     vec2 wuv = auv + 0.2065 * curl2(auv + vec2(0.0, time * 0.073333), midPer);
+    // [layer:v5:polefade]
+    // v5 pole guard: at v = 0/1 EVERY u maps to the same sphere point,
+    // so this family's longitude-dependent 2D signature would pinch
+    // into an apex starburst. The composer fades the signature (and any
+    // longitude-dependent post color mix) toward a longitude-independent
+    // body level near the poles; the 3D deep volume underneath is
+    // pole-safe by construction, so the caps still read as material.
+    float poleFade = smoothstep(0.015, 0.1312, min(baseUV.y, 1.0 - baseUV.y));
     vec2 ecUV = vec2(wuv.x, baseUV.y * 3.5685 + time * 0.092186);
     float ecBody = fbm2(ecUV, vec2(midPer.x, 3.5685));
     float ecDrip = fbm2(vec2(ecUV.x * 2.0, ecUV.y * 0.6) + vec2(7.7, 2.3), vec2(midPer.x * 2.0, 2.1411));
@@ -274,6 +282,9 @@ void main() {
     float ecEdge = ecMask * (1.0 - ecMask) * 4.0;
     float ecSheen = pow(0.5 + 0.5 * sin(ecBody * 9.5975 - time * 0.680678), 3.5703);
     float mid = clamp(ecMask * (0.6704 + 0.3 * ecSheen) + ecEdge * 0.6341, 0.0, 1.2);
+    // pole guard, DIRECTIONAL: the goo hangs from the top (v = 0), so
+    // the top apex fades to a thick cap and the bottom to a thin drip
+    mid = mix(mix(0.5500, 0.0800, baseUV.y), mid, poleFade);
 
     // [layer:rim:graze]
     // Silhouette / band lift so the membrane reads as a curved shell:
@@ -316,8 +327,9 @@ void main() {
     rgb = mix(rgb, softHot, 0.2468 * smoothstep(0.55, 1.10, pattern));
     vec3 accent = accentPalette(0.7158 + pattern * 0.4901);
     rgb = mix(rgb, rgb * (0.55 + 0.9 * accent), 0.2701);
-    // drip rims catch the light: the goo boundary lifts to the hot stop
-    rgb = mix(rgb, hotStop, clamp(ecEdge, 0.0, 1.0) * 0.3376);
+    // drip rims catch the light: the goo boundary lifts to the hot
+    // stop; pole-faded -- the boundary is longitude-dependent there
+    rgb = mix(rgb, hotStop, clamp(ecEdge, 0.0, 1.0) * 0.3376 * poleFade);
     // Two-band chromatic dispersion on the rim (thin-film-like), biased
     // to vertexColor.rgb: band 1 multiplies the wide glow into the
     // palette-driven rgb, band 2 pulls the thin hot line toward the (also
@@ -338,7 +350,7 @@ void main() {
     // bright features, plus the deep volume's own Beer-Lambert opacity;
     // pattern-free areas stay dark AND thin (anti-washout).
     float presence = smoothstep(0.02, 0.30, pattern);
-    float alpha = vertexColor.a * min(0.0677 + 0.2509 * presence + 0.4029 * pattern + 0.1217 * (1.0 - deepTrans), 0.8227);
+    float alpha = vertexColor.a * min(0.0677 + 0.1967 * presence + 0.4029 * pattern + 0.1217 * (1.0 - deepTrans), 0.8227);
     // [layer:v5:backface]
     // v5 back-face densify/dim (gl_FrontFacing is a builtin, no uniform
     // needed): the INSIDE of the far shell recedes toward the dark stop

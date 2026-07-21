@@ -208,14 +208,18 @@ float rimGraze() {
 }
 
 // hash-cell twinkle: sparse offset star points with per-cell phase;
-// cells wrap every px in x so the field tiles the u seam
+// cells wrap every px in x so the field tiles the u seam. The per-
+// cell rate is an INTEGER number of cycles per day (the hash picks
+// the integer and offsets the phase), so the daily time wrap
+// 1200 -> 0 lands exactly on a whole cycle -- no twinkle snap.
 float sparkle(vec2 p, float t, float px) {
     vec2 cellId = floor(p);
     vec2 f = fract(p) - 0.5;
     float h = cellHash(cellId, px);
     vec2 off = vec2(cellHash(cellId + 11.3, px), cellHash(cellId + 27.9, px)) - 0.5;
     float d = length(f - off * 0.55);
-    float tw = pow(0.5 + 0.5 * sin(t * (2.0 + 5.0 * h) + h * 39.0), 6.0);
+    float turns = 382.0 + floor(h * 955.0);
+    float tw = pow(0.5 + 0.5 * sin(t * turns * (6.2831853 / 1200.0) + h * 39.0), 6.0);
     return step(0.7387, h) * invsmooth(0.02, 0.22, d) * tw;
 }
 
@@ -298,6 +302,14 @@ void main() {
     // Signature structure of this effect, domain-warped and animated.
     vec2 auv = vec2(baseUV.x * 7.0000, baseUV.y * 7.0000) + vec2(-0.455000, 0.037500) * time;
     vec2 wuv = warp2(auv, midPer, time);
+    // [layer:v5:polefade]
+    // v5 pole guard: at v = 0/1 EVERY u maps to the same sphere point,
+    // so this family's longitude-dependent 2D signature would pinch
+    // into an apex starburst. The composer fades the signature (and any
+    // longitude-dependent post color mix) toward a longitude-independent
+    // body level near the poles; the 3D deep volume underneath is
+    // pole-safe by construction, so the caps still read as material.
+    float poleFade = smoothstep(0.015, 0.0945, min(baseUV.y, 1.0 - baseUV.y));
     vec3 iceA = voro2(wuv, midPer, 0.0);
     // slope-scaled parallax: the deeper sheet slides along rimDir,
     // farther where the view grazes (screen-space: seam-safe)
@@ -308,6 +320,9 @@ void main() {
     float sheen = fbm2(wuv + vec2(time * 0.023333, 0.0), midPer);
     float glint = pow(0.5 + 0.5 * sin(time * 0.675442 + iceA.z * 6.2831853), 6.0666);
     float mid = clamp(crackA * 0.7159 + crackB * 0.4905 + sheen * 0.2862 + glint * 0.35, 0.0, 1.25);
+    // pole guard: crack sheets converge on the apexes; fade toward the
+    // ice body's sheen level
+    mid = mix(0.2000, mid, poleFade);
 
     // [layer:rim:graze]
     // Silhouette / band lift so the membrane reads as a curved shell:
@@ -320,7 +335,7 @@ void main() {
     rim = clamp(rim + 0.7359 * rimLine, 0.0, 1.4);
 
     // Flourish accent + micro grain keep large areas alive up close.
-    float flourish = 0.3225 * sparkle(wuv * 2.0 + 7.7, time * 1.4, midPer.x * 2.0);
+    float flourish = 0.3225 * sparkle(wuv * 2.0 + 7.7, time * 2.0, midPer.x * 2.0);
     float grain = 0.0770 * (cellHash(floor(wuv * 61.0000) + vec2(floor(time * 6.0), 0.0), 427.0000) - 0.5);
 
     // Recolor-safe composite v4: the whole pattern is graded through the
@@ -351,8 +366,9 @@ void main() {
     vec3 accent = accentPalette(0.5422 + pattern * 0.6065);
     rgb = mix(rgb, rgb * (0.55 + 0.9 * accent), 0.3017);
     // the deeper crack sheet reads colder and darker (secondary
-    // cast): depth through color separation, not just brightness
-    rgb = mix(rgb, mix(secCol, deepStop, 0.5), clamp(crackB * (1.0 - crackA), 0.0, 1.0) * 0.4405);
+    // cast): depth through color separation, not just brightness;
+    // pole-faded -- the crack lattice is longitude-dependent there
+    rgb = mix(rgb, mix(secCol, deepStop, 0.5), clamp(crackB * (1.0 - crackA), 0.0, 1.0) * 0.4405 * poleFade);
     // Two-band chromatic dispersion on the rim (thin-film-like), biased
     // to vertexColor.rgb: band 1 multiplies the wide glow into the
     // palette-driven rgb, band 2 pulls the thin hot line toward the (also

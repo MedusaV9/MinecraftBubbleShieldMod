@@ -254,11 +254,22 @@ void main() {
     // stays exact (the y period carries a margin for the stretch)
     vec2 auv = vec2(baseUV.x * 5.0000 + time * 0.062500, (baseUV.y - 0.5) * 5.0000 * breathe + 2.5000 + time * 0.140000);
     vec2 wuv = auv;
+    // [layer:v5:polefade]
+    // v5 pole guard: at v = 0/1 EVERY u maps to the same sphere point,
+    // so this family's longitude-dependent 2D signature would pinch
+    // into an apex starburst. The composer fades the signature (and any
+    // longitude-dependent post color mix) toward a longitude-independent
+    // body level near the poles; the 3D deep volume underneath is
+    // pole-safe by construction, so the caps still read as material.
+    float poleFade = smoothstep(0.015, 0.1133, min(baseUV.y, 1.0 - baseUV.y));
     vec2 osW = wuv + 0.6647 * curl2(wuv + vec2(0.0, time * 0.058333), midPer);
     float osTh = fbm2(osW, midPer) * 1.8876 + baseUV.y * 0.8423;
     float osBand = 0.5 + 0.5 * sin(osTh * 8.3363 - time * 0.335103);
     float osSheen = pow(clamp(osBand, 0.0, 1.0), 1.9145);
     float mid = clamp(osSheen * 1.0653 + fbm2(osW * 2.0 + vec2(3.9, 8.4), midPer * 2.0) * 0.2305, 0.0, 1.2);
+    // pole guard: the slick's thickness bands vary with longitude at
+    // the apexes; fade toward the film's mean sheen
+    mid = mix(0.4000, mid, poleFade);
 
     // [layer:rim:lat]
     // Silhouette / band lift so the membrane reads as a curved shell:
@@ -302,9 +313,10 @@ void main() {
     vec3 accent = accentPalette(0.4388 + pattern * 0.3967);
     rgb = mix(rgb, rgb * (0.55 + 0.9 * accent), 0.4413);
     // hue-rotation iridescence: the film thickness spins the palette
-    // hue itself (bounded, so the owner recolor stays authoritative)
+    // hue itself (bounded, so the owner recolor stays authoritative);
+    // pole-faded -- the thickness field is longitude-dependent there
     vec3 osHue = clamp(hueSpin(baseCol, osTh * 1.6750 - 1.5847), 0.0, 1.0);
-    rgb = mix(rgb, rgb * (0.45 + 1.05 * osHue), 0.3134 * osBand);
+    rgb = mix(rgb, rgb * (0.45 + 1.05 * osHue), 0.3134 * osBand * poleFade);
     // Two-band chromatic dispersion on the rim (thin-film-like), biased
     // to vertexColor.rgb: band 1 multiplies the wide glow into the
     // palette-driven rgb, band 2 pulls the thin hot line toward the (also

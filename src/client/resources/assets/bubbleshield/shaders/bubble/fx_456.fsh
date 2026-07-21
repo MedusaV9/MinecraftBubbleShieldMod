@@ -252,11 +252,22 @@ void main() {
     // Signature structure of this effect, domain-warped and animated.
     vec2 auv = vec2(baseUV.x * 7.0000, baseUV.y * 7.0000) + vec2(0.221667, 0.390000) * time;
     vec2 wuv = auv;
+    // [layer:v5:polefade]
+    // v5 pole guard: at v = 0/1 EVERY u maps to the same sphere point,
+    // so this family's longitude-dependent 2D signature would pinch
+    // into an apex starburst. The composer fades the signature (and any
+    // longitude-dependent post color mix) toward a longitude-independent
+    // body level near the poles; the 3D deep volume underneath is
+    // pole-safe by construction, so the caps still read as material.
+    float poleFade = smoothstep(0.015, 0.1245, min(baseUV.y, 1.0 - baseUV.y));
     vec2 osW = wuv + 0.3731 * curl2(wuv + vec2(0.0, time * 0.060000), midPer);
     float osTh = fbm2(osW, midPer) * 2.3145 + baseUV.y * 0.6394;
     float osBand = 0.5 + 0.5 * sin(osTh * 7.8480 - time * 0.319395);
     float osSheen = pow(clamp(osBand, 0.0, 1.0), 1.5242);
     float mid = clamp(osSheen * 0.9852 + fbm2(osW * 2.0 + vec2(3.9, 8.4), midPer * 2.0) * 0.1985, 0.0, 1.2);
+    // pole guard: the slick's thickness bands vary with longitude at
+    // the apexes; fade toward the film's mean sheen
+    mid = mix(0.4000, mid, poleFade);
 
     // [layer:rim:graze_film]
     // Silhouette / band lift so the membrane reads as a curved shell:
@@ -300,9 +311,10 @@ void main() {
     vec3 accent = accentPalette(0.8187 + pattern * 0.6440);
     rgb = mix(rgb, rgb * (0.55 + 0.9 * accent), 0.2268);
     // hue-rotation iridescence: the film thickness spins the palette
-    // hue itself (bounded, so the owner recolor stays authoritative)
+    // hue itself (bounded, so the owner recolor stays authoritative);
+    // pole-faded -- the thickness field is longitude-dependent there
     vec3 osHue = clamp(hueSpin(baseCol, osTh * 1.2147 - 1.4812), 0.0, 1.0);
-    rgb = mix(rgb, rgb * (0.45 + 1.05 * osHue), 0.3576 * osBand);
+    rgb = mix(rgb, rgb * (0.45 + 1.05 * osHue), 0.3576 * osBand * poleFade);
     vec3 rimFilm = thinFilm(0.4180 + pattern * 1.2137 + baseUV.y * 0.5494);
     rgb = mix(rgb, rgb * (0.6 + 0.8 * rimFilm), clamp(rim, 0.0, 1.0) * 0.2786);
     // Two-band chromatic dispersion on the rim (thin-film-like), biased
