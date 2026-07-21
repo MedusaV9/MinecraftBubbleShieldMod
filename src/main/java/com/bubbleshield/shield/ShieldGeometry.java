@@ -207,9 +207,11 @@ public final class ShieldGeometry {
 	 * longer than this cannot have tunneled. RING: the tube diameter
 	 * {@code 2 * 0.3 r}. DIAMOND: the tips taper to zero thickness, so every
 	 * fast-moving segment near a tip is a candidate (conservative 0); PYRAMID
-	 * (apex), HOURGLASS (waist and cone rims) and STAR (lobe tips) taper to zero
-	 * the same way. LENS: the flat side's smallest full-width chord is bounded
-	 * below by the {@code 0.9 r} polar diameter (conservative {@code 0.45 r}).
+	 * (apex), HOURGLASS (waist and cone rims), STAR (lobe tips) and LENS (the
+	 * oblate spheroid's equator rim, whose vertical thickness
+	 * {@code 2 * 0.45 r * sqrt(1 - rho^2 / r^2)} goes to ZERO as {@code rho -> r},
+	 * so a fast rim chord spans arbitrarily little material) taper to zero the
+	 * same way.
 	 * The convex fat shapes use their smallest full-width chord through the deep
 	 * interior; grazing chords shorter than that only clip the outermost
 	 * {@code CROSSING_SAMPLE_STEP}-deep sliver, which the subsampling would not
@@ -218,9 +220,8 @@ public final class ShieldGeometry {
 	private static double minFeatureThickness(ShieldShape shape, double radius) {
 		return switch (shape) {
 			case SPHERE, DOME, CUBE, CYLINDER -> radius; // conservative: < the true min width (2r, 2r/sqrt(3), 1.2r)
-			case DIAMOND, PYRAMID, HOURGLASS, STAR -> 0.0; // tips/waist/lobe edges taper to zero thickness
+			case DIAMOND, PYRAMID, HOURGLASS, STAR, LENS -> 0.0; // tips/waist/lobe edges/lens rim taper to zero thickness
 			case RING -> 2.0 * RING_MINOR_FRAC * radius;
-			case LENS -> LENS_HALF_HEIGHT_FRAC * radius; // conservative: < the 0.9r polar diameter
 		};
 	}
 }

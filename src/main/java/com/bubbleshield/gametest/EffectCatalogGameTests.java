@@ -21,6 +21,7 @@ import com.bubbleshield.effect.InsideEffectBehavior;
 import com.bubbleshield.effect.SurfaceTemplate;
 import com.bubbleshield.effect.behaviors.BehaviorSupport;
 import com.bubbleshield.registry.ModBlocks;
+import com.bubbleshield.shield.ShieldGeometry;
 import com.bubbleshield.shield.ShieldShape;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -45,9 +46,10 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * Machine-enforcement of the 840-effect catalogue invariants: registry validity,
- * frozen-row golden values (PARAM_CYCLE + spot-checked V1/V2/350-milestone rows),
- * the uniqueness matrix, EN/DE lang parity incl. pairwise-distinct effect display
- * names, and the screen-fx JSON cross-check.
+ * frozen-row golden values (PARAM_CYCLE + spot-checked V1/V2/350-milestone/
+ * 420-milestone rows + the SHA-256 over all frozen rows 0..419), the uniqueness
+ * matrix, EN/DE lang parity incl. pairwise-distinct effect display names, and
+ * the screen-fx JSON cross-check.
  */
 public class EffectCatalogGameTests {
 	/**
@@ -102,16 +104,38 @@ public class EffectCatalogGameTests {
 		// ids 0..74, which must stay stable across catalogue expansions.
 		helper.assertTrue(EffectRegistry.PARAM_CYCLE == 75, "PARAM_CYCLE must stay frozen at 75, found " + EffectRegistry.PARAM_CYCLE);
 
-		// Golden freeze spot-checks: the core row fields of the frozen ids 0..349
-		// (V1/V2 catalogue 0..104 + 350-milestone rows 105..349) must never change
-		// (spot-asserted at the range edges). The float literals are the exact
-		// float32 results of the frozen derivations
-		// paramB = 0.4 + ((id * 37) % 75) / 75 and
+		// The ghost must-emit list cannot go vacuous: every listed id must still be
+		// a registered behavior (a behavior rename would otherwise silently empty
+		// the REGISTRY intersection and the capture-matrix "must visibly emit"
+		// checks would assert nothing), and the list must keep its full size (10
+		// ghost/apparition behaviors from the 420 milestone + 60 particle-only
+		// behaviors from the 840 flip).
+		helper.assertTrue(InsideEffectBehavior.REGISTRY.keySet().containsAll(GHOST_BEHAVIORS),
+				"GHOST_BEHAVIORS lists unregistered behavior ids: "
+						+ GHOST_BEHAVIORS.stream().filter(id -> !InsideEffectBehavior.REGISTRY.containsKey(id)).sorted().toList());
+		helper.assertTrue(GHOST_BEHAVIORS.size() == 70,
+				"GHOST_BEHAVIORS must keep its 70 entries (10 + 60), found " + GHOST_BEHAVIORS.size());
+
+		// The containment-gate constants are load-bearing for every capture-matrix
+		// assert: loosening MAX_DIST_FRAC (the shell margin) or SPREAD_SIGMAS (the
+		// Gaussian spread bound) would silently weaken the whole containment gate.
+		helper.assertTrue(BehaviorSupport.MAX_DIST_FRAC == 0.98,
+				"BehaviorSupport.MAX_DIST_FRAC must stay pinned at 0.98, found " + BehaviorSupport.MAX_DIST_FRAC);
+		helper.assertTrue(BehaviorSupport.SPREAD_SIGMAS == 2.5,
+				"BehaviorSupport.SPREAD_SIGMAS must stay pinned at 2.5, found " + BehaviorSupport.SPREAD_SIGMAS);
+
+		// Golden freeze spot-checks: the core row fields of the frozen ids 0..419
+		// (V1/V2 catalogue 0..104 + 350-milestone rows 105..349 + 420-milestone
+		// rows 350..419) must never change (spot-asserted at the range edges).
+		// The float literals are the exact float32 results of the frozen
+		// derivations paramB = 0.4 + ((id * 37) % 75) / 75 and
 		// behaviorStrength = 0.8 + 0.7 * ((id * 23) % 75) / 75.
 		assertFrozenRow(helper, 0, 0xFF66FFAA, 0xFF1E9E6E, 0.4F, 0.8F);
 		assertFrozenRow(helper, 74, 0xFFCFD8DC, 0xFF4E342E, 0.9066666F, 1.2853334F);
 		assertFrozenRow(helper, 104, 0xFFFFE600, 0xFF3D0099, 0.7066667F, 1.4253333F);
 		assertFrozenRow(helper, 349, 0xFF1785E6, 0xFFE67717, 0.5733333F, 0.8186667F);
+		assertFrozenRow(helper, 350, 0xFFB8FFD9, 0xFF1E4D3A, 1.0666667F, 1.0333333F);
+		assertFrozenRow(helper, 419, 0xFF6675ED, 0xFFE0ECF9, 1.1066667F, 1.1453333F);
 
 		// Exact-cover usage rule: the 840-row catalogue uses every registered
 		// behavior (each exactly CATALOGUE_VARIANTS = 7 times, per validate()).
@@ -130,25 +154,25 @@ public class EffectCatalogGameTests {
 	}
 
 	/**
-	 * The frozen id range 0..349 (V1/V2 catalogue 0..104 + the 350-milestone rows
-	 * 105..349): all their row fields must stay byte-identical across catalogue
-	 * expansions.
+	 * The frozen id range 0..419 (V1/V2 catalogue 0..104 + the 350-milestone rows
+	 * 105..349 + the 420-milestone rows 350..419): all their row fields must stay
+	 * byte-identical across catalogue expansions.
 	 */
-	private static final int FROZEN_ROW_END_EXCLUSIVE = 350;
+	private static final int FROZEN_ROW_END_EXCLUSIVE = 420;
 
 	/**
 	 * Golden SHA-256 over the canonical serialization ({@link #canonicalRow}) of
-	 * ALL frozen rows 0..349. The spot checks in {@link #allEffectsValid} guard
+	 * ALL frozen rows 0..419. The spot checks in {@link #allEffectsValid} guard
 	 * the range edges; this hash makes ANY edit to ANY field of ANY frozen row
 	 * fail — including a mid-range row nowhere near a spot check. Recompute (only
 	 * for a deliberate, reviewed freeze change) by running this test and copying
 	 * the actual hash from the failure message.
 	 */
-	private static final String FROZEN_ROWS_SHA256 = "586ab2d5ca2efc1dde7a87dab6567d810eb43813863d57cfb08dc2e1474038a8";
+	private static final String FROZEN_ROWS_SHA256 = "b2d19eb7dd11f619c60c2aa234404f2ad4f447a74b6b28e90d3e8b78ce5f1ec1";
 
 	/**
 	 * The full-freeze golden hash: canonical, locale-independent serialization of
-	 * every core row field of ids 0..349 (colors and float bits in hex, enums by
+	 * every core row field of ids 0..419 (colors and float bits in hex, enums by
 	 * name), hashed with SHA-256 and compared to {@link #FROZEN_ROWS_SHA256}.
 	 */
 	@GameTest
@@ -234,7 +258,8 @@ public class EffectCatalogGameTests {
 
 	/**
 	 * The strengthened behavior matrix, SPHERE pass: every registered behavior x
-	 * variants 0..6 x seven game times, with a survival mock player AND a hostile
+	 * variants 0..{@code CATALOGUE_VARIANTS - 1} x seven game times, with a
+	 * survival mock player AND a hostile
 	 * mob inside the bubble (so the per-entity aura/guard branches run), while a
 	 * packet-capturing mock connection records every particle the server actually
 	 * sends. Every captured emission must be inside the shell
@@ -266,6 +291,185 @@ public class EffectCatalogGameTests {
 	public void allBehaviorsContainedDome(GameTestHelper helper) {
 		runContainedMatrix(helper, ShieldShape.DOME);
 		helper.succeed();
+	}
+
+	/**
+	 * The NON-CONVEX shapes' containment matrix pass (RING / HOURGLASS / STAR): a
+	 * reduced cross-product of the sphere/dome matrix — every registered behavior
+	 * x all variants x the seven game times, but only the tightest geometry
+	 * (radius 4, the max catalogue strength 1.5, NEUTRAL context) — that asserts
+	 * the FULL reconstructed client trajectory of every captured packet against
+	 * the shape's own {@link ShieldGeometry#isInside}, not just a spherical
+	 * bound. On these shapes a straight client path between two contained
+	 * endpoints can bow OUTSIDE the volume (across the RING hole, through the
+	 * HOURGLASS waist, over a STAR inter-lobe gap), which is exactly what the
+	 * subsampled containment in {@code BehaviorSupport} (the count=0 velocity
+	 * segment and the fly-toward lerp-plus-{@code 1.2 t^4}-dip curve) must
+	 * prevent: trajectories are re-sampled here at the shared
+	 * {@code i / }{@link BehaviorSupport#TRAJECTORY_SAMPLES} fractions, which are
+	 * a subset of the server-checked samples by construction. The fly-toward
+	 * emitters (vex_wisps' ghost family peers rune_forge/seance_table,
+	 * enchant_stream, seance_circle, ...) are all part of the full behavior
+	 * sweep; a matrix-wide floor asserts enough fly-toward packets were captured
+	 * for the trajectory asserts to be non-vacuous.
+	 */
+	@GameTest(environment = CAPTURE_ENVIRONMENT, padding = 16)
+	public void allBehaviorsContainedNonConvex(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		Vec3 center = Vec3.atCenterOf(helper.absolutePos(new BlockPos(4, 2, 4)));
+
+		// Same entity setup as the sphere/dome matrix so the per-entity
+		// aura/guard branches run (see runContainedMatrix).
+		MockPlayers.CapturingMockPlayer capture = MockPlayers.createCapturingMockPlayer(helper, GameType.SURVIVAL);
+		capture.player().snapTo(center.x + 1.5, center.y + 0.5, center.z);
+		Zombie zombie = helper.spawn(EntityTypes.ZOMBIE, new Vec3(3.0, 3.0, 4.5));
+		zombie.setNoAi(true);
+		zombie.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
+		zombie.setInvulnerable(true);
+
+		long[] gameTimes = {0L, 10L, 20L, 30L, 40L, 100L, 200L};
+		float radius = 4.0F;
+
+		capture.drainParticlePackets();
+		int captured = 0;
+		int flyTowardCaptured = 0;
+		for (ShieldShape shape : new ShieldShape[] {ShieldShape.RING, ShieldShape.HOURGLASS, ShieldShape.STAR}) {
+			for (Map.Entry<String, InsideEffectBehavior> entry : InsideEffectBehavior.REGISTRY.entrySet()) {
+				for (int variant = 0; variant <= EffectRegistry.CATALOGUE_VARIANTS - 1; variant++) {
+					EffectDefinition def = EffectDefinition.of(0, 0xFFFF8800, 0xFF884400, SurfaceTemplate.AURORA, 0.5F, 0.8F,
+							entry.getKey(), variant, 1.5F, GuardStyle.NONE, ContextProfile.NONE, "block.beacon.ambient", 1.0F, 160, "tint");
+					int cellCaptured = 0;
+					for (long gameTime : gameTimes) {
+						entry.getValue().tick(level, center, radius, shape, def, gameTime, ContextState.NEUTRAL);
+						int[] counts = assertCapturedTickLegalNonConvex(helper, capture, shape, center, radius,
+								entry.getKey() + "@" + variant + " (" + shape + ", t=" + gameTime + ")");
+						cellCaptured += counts[0];
+						flyTowardCaptured += counts[1];
+					}
+
+					// The ghost behaviors are pure particle apparitions: every
+					// variant must visibly emit in every shape cell (same
+					// non-vacuousness rule as the sphere/dome matrix).
+					if (GHOST_BEHAVIORS.contains(entry.getKey())) {
+						helper.assertTrue(cellCaptured > 0, "ghost behavior " + entry.getKey() + "@" + variant
+								+ " emitted nothing under shape " + shape);
+					}
+
+					captured += cellCaptured;
+				}
+			}
+		}
+
+		// Harness sanity, mirroring runContainedMatrix: an (almost) empty capture
+		// means the mock connection stopped recording and everything above was
+		// vacuous — and the trajectory asserts specifically need real fly-toward
+		// packets to have exercised the lerp-plus-dip reconstruction.
+		helper.assertTrue(captured >= 1000,
+				"particle capture looks broken: only " + captured + " packets were recorded across the non-convex matrix");
+		helper.assertTrue(flyTowardCaptured >= 10,
+				"the non-convex matrix captured only " + flyTowardCaptured
+						+ " fly-toward packets; the trajectory containment asserts would be vacuous");
+		helper.succeed();
+	}
+
+	/**
+	 * The shape-aware sibling of {@link #assertCapturedTickLegal}: asserts every
+	 * particle packet captured since the last drain is legal for a NON-CONVEX
+	 * shape by checking the full reconstructed client trajectory point-by-point
+	 * against {@link ShieldGeometry#isInside} (the server-side checks enforce the
+	 * stricter 0.98-scaled {@code isContained} at a superset of these samples, so
+	 * a passing server can never fail here):
+	 *
+	 * <ul>
+	 *   <li>the packet position (and a TRAIL option's lerp target) must be inside;</li>
+	 *   <li>count=0 fly-toward (ENCHANT/NAUTILUS/VAULT_CONNECTION): the particle
+	 *       spawns at {@code pos + maxSpeed * dist} and flies to {@code pos} while
+	 *       dipping {@code 1.2 * t^4} blocks of Y, so that whole curve is sampled
+	 *       at {@code t = i / TRAJECTORY_SAMPLES};</li>
+	 *   <li>count=0 generic: the rendered displacement segment from {@code pos}
+	 *       to {@code pos + maxSpeed * dist} is sampled the same way;</li>
+	 *   <li>count&gt;0: all 8 corners of the {@code pos ± SPREAD_SIGMAS * dist}
+	 *       Gaussian spread box must be inside;</li>
+	 *   <li>the per-tick particle budget ({@link #MAX_PARTICLES_PER_TICK}) holds.</li>
+	 * </ul>
+	 *
+	 * @return {@code {packetsChecked, flyTowardPacketsChecked}}
+	 */
+	private static int[] assertCapturedTickLegalNonConvex(GameTestHelper helper, MockPlayers.CapturingMockPlayer capture,
+			ShieldShape shape, Vec3 center, float radius, String label) {
+		int captured = 0;
+		int flyToward = 0;
+		int tickParticles = 0;
+		for (ClientboundLevelParticlesPacket packet : capture.drainParticlePackets()) {
+			captured++;
+			tickParticles += Math.max(packet.getCount(), 1);
+			helper.assertTrue(!BehaviorSupport.AIR_UNSAFE_PARTICLES.contains(packet.getParticle().getType()),
+					label + " emits air-unsafe particle " + BuiltInRegistries.PARTICLE_TYPE.getKey(packet.getParticle().getType()));
+
+			Vec3 pos = new Vec3(packet.getX(), packet.getY(), packet.getZ());
+			assertInsideShape(helper, shape, center, radius, pos, label + " emission");
+			if (packet.getParticle() instanceof TrailParticleOption trail) {
+				assertInsideShape(helper, shape, center, radius, trail.target(), label + " trail target");
+			}
+
+			boolean flyTowardType = BehaviorSupport.FLY_TOWARD_PARTICLES.contains(packet.getParticle().getType());
+			if (packet.getCount() == 0) {
+				Vec3 end = pos.add(
+						packet.getMaxSpeed() * packet.getXDist(),
+						packet.getMaxSpeed() * packet.getYDist(),
+						packet.getMaxSpeed() * packet.getZDist());
+				if (flyTowardType) {
+					// FlyTowardsPositionParticle: spawns at end (= pos + offset),
+					// lerps to pos and dips 1.2 * t^4 blocks of Y on the way.
+					flyToward++;
+					for (int i = 0; i <= BehaviorSupport.TRAJECTORY_SAMPLES; i++) {
+						double t = (double) i / BehaviorSupport.TRAJECTORY_SAMPLES;
+						Vec3 point = end.lerp(pos, t).subtract(0.0, BehaviorSupport.FLY_TOWARD_DIP * t * t * t * t, 0.0);
+						assertInsideShape(helper, shape, center, radius, point,
+								label + " fly-toward trajectory point t=" + t);
+					}
+				} else {
+					// Generic count=0 velocity/displacement form: the particle
+					// renders along the straight pos -> end segment.
+					for (int i = 0; i <= BehaviorSupport.TRAJECTORY_SAMPLES; i++) {
+						double t = (double) i / BehaviorSupport.TRAJECTORY_SAMPLES;
+						assertInsideShape(helper, shape, center, radius, pos.lerp(end, t),
+								label + " velocity segment point t=" + t);
+					}
+				}
+			} else {
+				if (flyTowardType) {
+					// Defensive (BehaviorSupport always splits fly-toward types
+					// into count=0 packets): the dip destination must be inside.
+					assertInsideShape(helper, shape, center, radius,
+							pos.subtract(0.0, BehaviorSupport.FLY_TOWARD_DIP, 0.0), label + " fly-toward dip destination");
+				}
+
+				double hx = BehaviorSupport.SPREAD_SIGMAS * packet.getXDist();
+				double hy = BehaviorSupport.SPREAD_SIGMAS * packet.getYDist();
+				double hz = BehaviorSupport.SPREAD_SIGMAS * packet.getZDist();
+				if (hx != 0.0 || hy != 0.0 || hz != 0.0) {
+					for (int corner = 0; corner < 8; corner++) {
+						Vec3 point = pos.add(
+								(corner & 1) == 0 ? -hx : hx,
+								(corner & 2) == 0 ? -hy : hy,
+								(corner & 4) == 0 ? -hz : hz);
+						assertInsideShape(helper, shape, center, radius, point,
+								label + " " + BehaviorSupport.SPREAD_SIGMAS + "-sigma spread corner " + corner);
+					}
+				}
+			}
+		}
+
+		helper.assertTrue(tickParticles <= MAX_PARTICLES_PER_TICK,
+				label + " asked for " + tickParticles + " particles in one tick (budget " + MAX_PARTICLES_PER_TICK + ")");
+		return new int[] {captured, flyToward};
+	}
+
+	private static void assertInsideShape(GameTestHelper helper, ShieldShape shape, Vec3 center,
+			float radius, Vec3 pos, String what) {
+		helper.assertTrue(ShieldGeometry.isInside(shape, center, radius, pos),
+				what + " escapes the " + shape + " volume: " + pos + " (center " + center + ", radius " + radius + ")");
 	}
 
 	/**
@@ -325,7 +529,7 @@ public class EffectCatalogGameTests {
 		capture.drainParticlePackets();
 		int captured = 0;
 		for (Map.Entry<String, InsideEffectBehavior> entry : InsideEffectBehavior.REGISTRY.entrySet()) {
-			for (int variant = 0; variant <= 6; variant++) {
+			for (int variant = 0; variant <= EffectRegistry.CATALOGUE_VARIANTS - 1; variant++) {
 				for (float strength : new float[] {1.0F, 1.5F}) {
 					EffectDefinition def = EffectDefinition.of(0, 0xFFFF8800, 0xFF884400, SurfaceTemplate.AURORA, 0.5F, 0.8F,
 							entry.getKey(), variant, strength, GuardStyle.NONE, ContextProfile.NONE, "block.beacon.ambient", 1.0F, 160, "tint");
@@ -629,9 +833,10 @@ public class EffectCatalogGameTests {
 	/**
 	 * EN/DE parity over the ENTIRE key set (not just effect names): the key sets must be
 	 * identical, so every gui/advancement/axis key added in one language must exist in
-	 * the other. Effect names 00..419 must additionally be present in both, and the
-	 * 420 effect display names must be pairwise distinct in BOTH languages (duplicate
-	 * names would make two effects indistinguishable in the picker/boss bar).
+	 * the other. Effect names 00..{@code EffectRegistry.COUNT - 1} must additionally be
+	 * present in both, and all {@code EffectRegistry.COUNT} effect display names must be
+	 * pairwise distinct in BOTH languages (duplicate names would make two effects
+	 * indistinguishable in the picker/boss bar).
 	 */
 	@GameTest
 	public void langKeysComplete(GameTestHelper helper) {

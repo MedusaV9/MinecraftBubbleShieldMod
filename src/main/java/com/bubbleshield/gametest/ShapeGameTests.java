@@ -3,6 +3,7 @@ package com.bubbleshield.gametest;
 import com.bubbleshield.block.BubbleShieldBlockEntity;
 import com.bubbleshield.effect.behaviors.BehaviorSupport;
 import com.bubbleshield.menu.BubbleShieldMenu;
+import com.bubbleshield.net.ServerNet;
 import com.bubbleshield.registry.ModBlocks;
 import com.bubbleshield.shield.ShieldGeometry;
 import com.bubbleshield.shield.ShieldLogic;
@@ -31,11 +32,13 @@ import net.minecraft.world.phys.Vec3;
  * {@link ShieldGeometry} and its load-bearing subset-of-the-ball invariant, the
  * shape-aware {@link BehaviorSupport#containPoint} projections (containment,
  * idempotence and the identity-instance guarantee that keeps legacy sphere/dome
- * emissions byte-identical), NBT ordinal round-trip + clamp hardening, the
+ * emissions byte-identical), NBT ordinal round-trip + clamp hardening (incl.
+ * the numeric target_radius/health/max_health load clamps), the
  * player-barrier integration per shape (including the RING's deliberately
  * passable hole, the open space below a CYLINDER's bottom cap and the
- * HOURGLASS's pinched-open waist), and the settings cycle through all ten
- * ordinals.
+ * HOURGLASS's pinched-open waist), anti-tunnel interception through the RING
+ * tube, a STAR lobe gap and the LENS rim, and the settings cycle through all
+ * ten ordinals.
  */
 public class ShapeGameTests {
 	/**
@@ -171,6 +174,17 @@ public class ShapeGameTests {
 				"a mid-latitude point just inside the lens surface should be inside");
 		helper.assertTrue(!ShieldGeometry.isInside(ShieldShape.LENS, c, r, c.add(7.1, 3.2, 0.0)),
 				"a point just past the lens surface should be outside even though it is inside the sphere");
+
+		// LENS anti-tunneling: the equator rim tapers to ZERO thickness (at
+		// rho = 9.35 the lens spans only |dy| <= ~1.6), so a fast rim chord can
+		// cross clean through with both endpoints outside. The 4-block drop is
+		// shorter than the old 0.45r = 4.5 feature gate, so only a ZERO
+		// minFeatureThickness lets the subsampled sweep catch it — while a chord
+		// past the equator must still never count as crossing in.
+		helper.assertTrue(ShieldGeometry.crossedInto(ShieldShape.LENS, c, r, c.add(9.35, 2.0, 0.0), c.add(9.35, -2.0, 0.0)),
+				"a fast chord through the thin lens rim must count as crossing in");
+		helper.assertTrue(!ShieldGeometry.crossedInto(ShieldShape.LENS, c, r, c.add(10.5, 2.0, 0.0), c.add(10.5, -2.0, 0.0)),
+				"a fast chord outside the lens equator must not count as crossing in");
 
 		// HOURGLASS: two cones tip-to-tip, band ±8, taper 0.55r*|dy|/(0.8r).
 		helper.assertTrue(ShieldGeometry.isInside(ShieldShape.HOURGLASS, c, r, c.add(5.4, 7.9, 0.0)),
@@ -449,6 +463,92 @@ public class ShapeGameTests {
 	}
 
 	/**
+	 * (c2) Numeric NBT-load hardening (the {@link ShieldState#load} counterpart of
+	 * the shape ordinal clamp above): NaN, Infinity and out-of-range floats edited
+	 * into the NBT via /data or an NBT editor are rejected/clamped on load —
+	 * {@code target_radius} into the valid diameter/2 range
+	 * [{@link ShieldState#MIN_TARGET_RADIUS}, {@link ShieldState#MAX_TARGET_RADIUS}]
+	 * (kept in lockstep with ServerNet's diameter clamp, asserted below),
+	 * {@code max_health} into [1, {@link ShieldState#MAX_LOADED_HEALTH}] (so the
+	 * health/maxHealth radius fraction can never divide by zero) and
+	 * {@code health} into [0, maxHealth] — while valid in-range values load
+	 * unchanged.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT)
+	public void numericNbtTamperClampedOnLoad(GameTestHelper helper) {
+		var registries = helper.getLevel().registryAccess();
+		TagValueOutput output = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, registries);
+		new ShieldState().save(output);
+		CompoundTag base = output.buildResult();
+
+		// target_radius: NaN falls back to the default; Infinity and
+		// out-of-range values clamp into the valid diameter/2 range.
+		helper.assertTrue(loadTamperedFloat(helper, base, "target_radius", Float.NaN).targetRadius == ShieldState.DEFAULT_TARGET_RADIUS,
+				"a NaN target_radius must fall back to the default on load");
+		helper.assertTrue(loadTamperedFloat(helper, base, "target_radius", Float.POSITIVE_INFINITY).targetRadius == ShieldState.MAX_TARGET_RADIUS,
+				"an Infinity target_radius must clamp to the max radius on load");
+		helper.assertTrue(loadTamperedFloat(helper, base, "target_radius", 1.0e9F).targetRadius == ShieldState.MAX_TARGET_RADIUS,
+				"an absurd target_radius must clamp to the max radius on load");
+		helper.assertTrue(loadTamperedFloat(helper, base, "target_radius", -5.0F).targetRadius == ShieldState.MIN_TARGET_RADIUS,
+				"a negative target_radius must clamp to the min radius on load");
+		helper.assertTrue(loadTamperedFloat(helper, base, "target_radius", 12.5F).targetRadius == 12.5F,
+				"an in-range target_radius must load unchanged");
+
+		// max_health: NaN falls back to the default; zero/negatives clamp to 1
+		// (ShieldLogic.currentRadius divides by maxHealth); Infinity is capped.
+		helper.assertTrue(loadTamperedFloat(helper, base, "max_health", Float.NaN).maxHealth == ShieldState.DEFAULT_MAX_HEALTH,
+				"a NaN max_health must fall back to the default on load");
+		helper.assertTrue(loadTamperedFloat(helper, base, "max_health", 0.0F).maxHealth == 1.0F,
+				"a zero max_health must clamp to 1 on load (radius math divides by it)");
+		helper.assertTrue(loadTamperedFloat(helper, base, "max_health", -20.0F).maxHealth == 1.0F,
+				"a negative max_health must clamp to 1 on load");
+		helper.assertTrue(loadTamperedFloat(helper, base, "max_health", Float.POSITIVE_INFINITY).maxHealth == ShieldState.MAX_LOADED_HEALTH,
+				"an Infinity max_health must clamp to the finite cap on load");
+		helper.assertTrue(loadTamperedFloat(helper, base, "max_health", 300.0F).maxHealth == 300.0F,
+				"the tier-2 max_health (300) must load unchanged");
+
+		// health: NaN falls back to full; negatives clamp to 0; values above the
+		// loaded maxHealth clamp down to it.
+		ShieldState nanHealth = loadTamperedFloat(helper, base, "health", Float.NaN);
+		helper.assertTrue(nanHealth.health == nanHealth.maxHealth,
+				"a NaN health must fall back to the loaded maxHealth");
+		helper.assertTrue(loadTamperedFloat(helper, base, "health", -10.0F).health == 0.0F,
+				"a negative health must clamp to 0 on load");
+		helper.assertTrue(loadTamperedFloat(helper, base, "health", 1.0e9F).health == ShieldState.DEFAULT_MAX_HEALTH,
+				"an absurd health must clamp down to the loaded maxHealth");
+		helper.assertTrue(loadTamperedFloat(helper, base, "health", 42.0F).health == 42.0F,
+				"an in-range health must load unchanged");
+
+		// A fully poisoned save loads sane across all three fields at once.
+		CompoundTag poison = base.copy();
+		poison.putFloat("target_radius", Float.NaN);
+		poison.putFloat("health", Float.NEGATIVE_INFINITY);
+		poison.putFloat("max_health", Float.NaN);
+		ShieldState sane = new ShieldState();
+		sane.load(TagValueInput.create(ProblemReporter.DISCARDING, registries, poison));
+		helper.assertTrue(sane.targetRadius == ShieldState.DEFAULT_TARGET_RADIUS
+						&& sane.maxHealth == ShieldState.DEFAULT_MAX_HEALTH && sane.health == 0.0F,
+				"a fully poisoned save must load with default radius/maxHealth and zero health, got radius "
+						+ sane.targetRadius + " health " + sane.health + "/" + sane.maxHealth);
+
+		// The load clamp's radius bounds stay in lockstep with ServerNet's GUI
+		// diameter clamp (8..200 diameter = 4..100 radius).
+		helper.assertTrue(ShieldState.MIN_TARGET_RADIUS == ServerNet.MIN_DIAMETER / 2.0F
+						&& ShieldState.MAX_TARGET_RADIUS == ServerNet.MAX_DIAMETER / 2.0F,
+				"ShieldState's target radius bounds must mirror ServerNet's diameter clamp");
+		helper.succeed();
+	}
+
+	/** Loads a copy of {@code base} with one float field tampered to {@code value}. */
+	private static ShieldState loadTamperedFloat(GameTestHelper helper, CompoundTag base, String key, float value) {
+		CompoundTag tag = base.copy();
+		tag.putFloat(key, value);
+		ShieldState state = new ShieldState();
+		state.load(TagValueInput.create(ProblemReporter.DISCARDING, helper.getLevel().registryAccess(), tag));
+		return state;
+	}
+
+	/**
 	 * (d) Barrier integration per shape (the {@code domeGeometry} pattern): a
 	 * non-whitelisted survival player inside a CYLINDER / CUBE / DIAMOND / RING
 	 * tube / PYRAMID / LENS / HOURGLASS cone / STAR lobe is pushed out (and
@@ -580,6 +680,42 @@ public class ShapeGameTests {
 		ShieldState state = be.getShieldState();
 		helper.succeedWhen(() -> {
 			helper.assertTrue(arrow.isRemoved(), "the gap-tunneling arrow should have been absorbed (discarded)");
+			helper.assertTrue(state.health < state.maxHealth, "the shield should take damage from the intercepted fast arrow");
+		});
+	}
+
+	/**
+	 * (f3) End-to-end anti-tunneling through the LENS rim: the oblate spheroid's
+	 * equator edge tapers to ZERO thickness, so at radius 4 the slab at
+	 * rho = 3.73 is only ~1.3 blocks thick (|dy| &lt;= ~0.65). An arrow falling
+	 * ~1.7 blocks/tick straight through it starts above the slab (outside) and
+	 * ends below it (outside) within one tick — and the segment is SHORTER than
+	 * the old {@code 0.45 r = 1.8} LENS feature gate, so with that gate the
+	 * subsampled sweep never even ran and the arrow tunneled clean through. With
+	 * the LENS minimum feature thickness at 0 the subsampled
+	 * {@link ShieldGeometry#crossedInto} must intercept it: the arrow is absorbed
+	 * (discarded) and the shield takes damage.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 200, padding = 16)
+	public void fastArrowCannotTunnelThroughLensRim(GameTestHelper helper) {
+		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
+		be.addFuelSeconds(PLENTY_OF_FUEL);
+		be.getShieldState().shape = ShieldShape.LENS;
+		helper.assertTrue(be.tryActivate(), "shield should activate");
+
+		// Center (relative) is (4.5, 2.5, 4.5); at rho = 3.73 (taken along the
+		// horizontal diagonal to stay inside the 8x8 structure footprint) the
+		// lens spans y 1.848..3.152. Spawn just above the slab and fall at ~1.7
+		// blocks/tick: the crossing tick goes from y 3.30 (outside) to y ~1.60
+		// (outside), and the segment midpoint (y ~2.45, |dy| ~0.05) sits deep
+		// inside the 1.3-block slab, so only the subsampled sweep can see it.
+		double diag = 3.73 / Math.sqrt(2.0);
+		Arrow arrow = helper.spawn(EntityTypes.ARROW, new Vec3(4.5 + diag, 3.30, 4.5 + diag));
+		arrow.setDeltaMovement(0.0, -1.7, 0.0);
+
+		ShieldState state = be.getShieldState();
+		helper.succeedWhen(() -> {
+			helper.assertTrue(arrow.isRemoved(), "the rim-tunneling arrow should have been absorbed (discarded)");
 			helper.assertTrue(state.health < state.maxHealth, "the shield should take damage from the intercepted fast arrow");
 		});
 	}

@@ -29,7 +29,19 @@ import net.minecraft.world.phys.Vec3;
  *       zero-spread single-particle packets, preserving the authored look;</li>
  *   <li>count=0 fly-toward: {@link #sendFlyToward} keeps the spawn point, the
  *       destination AND the destination's built-in {@link #FLY_TOWARD_DIP}
- *       undershoot inside the shell.</li>
+ *       undershoot inside the shell;</li>
+ *   <li>non-convex shapes (RING/HOURGLASS/STAR): endpoint containment alone is
+ *       not enough there — the straight client-side path between two contained
+ *       endpoints can bow OUTSIDE the volume (across the RING hole, through the
+ *       HOURGLASS waist or a STAR inter-lobe gap) — so the count=0 velocity
+ *       segment and the whole fly-toward trajectory (lerp plus the
+ *       {@code 1.2 * t^4} dip) are additionally subsampled at
+ *       {@link #TRAJECTORY_SAMPLES}-based fractions and pulled toward a safe
+ *       anchor until EVERY sample is contained. The convex shapes
+ *       (SPHERE/DOME/CYLINDER/CUBE/DIAMOND/PYRAMID/LENS) keep the endpoint-only
+ *       fast path: their 0.98-scaled volumes are convex and every rendered
+ *       trajectory point is a convex combination of the already-checked
+ *       endpoints, so those emissions stay byte-identical.</li>
  * </ul>
  *
  * <p>The primitive is {@link #containPoint(Vec3, double, Vec3)} (or its
@@ -97,6 +109,19 @@ public final class BehaviorSupport {
 			ParticleTypes.BUBBLE,
 			ParticleTypes.BUBBLE_COLUMN_UP,
 			ParticleTypes.CURRENT_DOWN);
+
+	/**
+	 * Base subdivision count for the rendered-trajectory containment checks on the
+	 * NON-CONVEX shapes (RING/HOURGLASS/STAR): the count=0 velocity segment and
+	 * the fly-toward lerp-plus-dip curve are sampled at {@code t = i / steps}
+	 * where {@code steps} is always a MULTIPLE of this constant (finer for longer
+	 * trajectories, never coarser — see {@code trajectorySteps}). The capture
+	 * matrix gametest reconstructs trajectories at exactly the
+	 * {@code i / TRAJECTORY_SAMPLES} fractions, which are therefore always a
+	 * subset of the server-checked samples: a trajectory the server accepted can
+	 * never fail the test's reconstruction.
+	 */
+	public static final int TRAJECTORY_SAMPLES = 16;
 
 	private BehaviorSupport() {
 	}
@@ -331,6 +356,68 @@ public final class BehaviorSupport {
 	}
 
 	/**
+	 * The shapes whose (0.98-scaled) volume is NOT convex: a straight segment
+	 * between two contained points can leave the volume (across the RING's
+	 * central hole, through the HOURGLASS's pinched waist, or over a STAR
+	 * inter-lobe gap), so rendered trajectories there need subsampled checks
+	 * instead of the endpoint-only convex fast path.
+	 */
+	private static boolean isNonConvex(ShieldShape shape) {
+		return shape == ShieldShape.RING || shape == ShieldShape.HOURGLASS || shape == ShieldShape.STAR;
+	}
+
+	/**
+	 * Subdivision count for a rendered trajectory of the given length: always a
+	 * multiple of {@link #TRAJECTORY_SAMPLES} (so the capture matrix's
+	 * {@code i / TRAJECTORY_SAMPLES} reconstruction points are a subset of the
+	 * checked samples), refined for long trajectories to keep the sample spacing
+	 * at or under half a block.
+	 */
+	private static int trajectorySteps(double length) {
+		return TRAJECTORY_SAMPLES * Math.max(1, (int) Math.ceil(length / (0.5 * TRAJECTORY_SAMPLES)));
+	}
+
+	/**
+	 * Whether every subsample of the straight segment {@code from -> to} is
+	 * contained (the count=0 velocity/displacement form's rendered path). Both
+	 * endpoints are included in the sweep.
+	 */
+	private static boolean segmentContained(ShieldShape shape, Vec3 center, double radius, Vec3 from, Vec3 to) {
+		int steps = trajectorySteps(from.distanceTo(to));
+		for (int i = 0; i <= steps; i++) {
+			if (!isContained(shape, center, radius, from.lerp(to, (double) i / steps))) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * Whether the destination and the ENTIRE reconstructed fly-toward trajectory
+	 * are contained: the vanilla {@code FlyTowardsPositionParticle} at lifetime
+	 * fraction {@code t} sits at {@code lerp(spawn, dest, t) - (0, 1.2 * t^4, 0)}
+	 * (linear lerp from the spawn point to the packet position plus the
+	 * {@link #FLY_TOWARD_DIP} undershoot), so that exact curve is subsampled.
+	 */
+	private static boolean flyTowardTrajectoryContained(ShieldShape shape, Vec3 center, double radius, Vec3 spawn, Vec3 dest) {
+		if (!isContained(shape, center, radius, dest)) {
+			return false;
+		}
+
+		int steps = trajectorySteps(spawn.distanceTo(dest) + FLY_TOWARD_DIP);
+		for (int i = 0; i <= steps; i++) {
+			double t = (double) i / steps;
+			Vec3 point = spawn.lerp(dest, t).subtract(0.0, FLY_TOWARD_DIP * t * t * t * t, 0.0);
+			if (!isContained(shape, center, radius, point)) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	/**
 	 * Whether the whole axis-aligned box {@code origin ± (hx, hy, hz)} fits inside
 	 * the {@link #MAX_DIST_FRAC} volume of the shape. This is the k-sigma spread
 	 * bound {@link #sendContained} enforces with {@code h = SPREAD_SIGMAS * dist}:
@@ -495,6 +582,27 @@ public final class BehaviorSupport {
 			// Velocity/displacement form: keep the far end of speed * dist inside.
 			Vec3 end = containPoint(shape, center, radius,
 					origin.add(speed * xDist, speed * yDist, speed * zDist));
+			if (isNonConvex(shape) && !segmentContained(shape, center, radius, origin, end)) {
+				// On RING/HOURGLASS/STAR the straight client path between the two
+				// contained endpoints can bow outside (hole/waist/lobe gap): pull
+				// the far end back toward the contained origin (the trivially safe
+				// anchor of this segment) until every subsample of the rendered
+				// segment is inside. Already-safe segments passed the check above
+				// untouched, so those emissions stay byte-identical.
+				Vec3 lo = origin;
+				Vec3 hi = end;
+				for (int i = 0; i < 16; i++) {
+					Vec3 mid = lo.lerp(hi, 0.5);
+					if (segmentContained(shape, center, radius, origin, mid)) {
+						lo = mid;
+					} else {
+						hi = mid;
+					}
+				}
+
+				end = lo;
+			}
+
 			double sx = speed == 0.0 ? 0.0 : (end.x - origin.x) / speed;
 			double sy = speed == 0.0 ? 0.0 : (end.y - origin.y) / speed;
 			double sz = speed == 0.0 ? 0.0 : (end.z - origin.z) / speed;
@@ -530,6 +638,17 @@ public final class BehaviorSupport {
 	 * result is ALWAYS valid, direction-preserving, and identical to the request
 	 * whenever the request was already safe. The spawn offset is then re-anchored
 	 * on the settled destination and contained as well.
+	 *
+	 * <p>On the non-convex RING/HOURGLASS/STAR the endpoint checks are not enough
+	 * (the straight spawn-to-destination path, and the dip curve under it, can bow
+	 * outside through the hole/waist/lobe gap), so the whole reconstructed
+	 * trajectory is additionally subsampled ({@code flyTowardTrajectoryContained})
+	 * and, when any sample escapes, the emission is pulled toward the safe anchor:
+	 * at pull fraction {@code s} the destination is {@code anchor.lerp(settled, s)}
+	 * and the spawn offset scales by {@code s}, so {@code s = 0} degenerates to
+	 * the anchor's own dip curve — on the axis (or on the ring circle), contained
+	 * at every sample — and {@code s = 1} is the requested emission. Emissions
+	 * whose full trajectory was already contained pass through unchanged.
 	 */
 	public static void sendFlyToward(ServerLevel level, ParticleOptions particle, ShieldShape shape, Vec3 center, double radius,
 			Vec3 target, Vec3 spawnOffset) {
@@ -553,6 +672,28 @@ public final class BehaviorSupport {
 		}
 
 		Vec3 spawn = containPoint(shape, center, radius, settled.add(spawnOffset));
+		if (isNonConvex(shape) && !flyTowardTrajectoryContained(shape, center, radius, spawn, settled)) {
+			// The rendered path escapes the non-convex volume between its checked
+			// endpoints: bisect the pull fraction s toward the safe anchor for the
+			// largest s whose ENTIRE sampled trajectory stays contained.
+			Vec3 anchor = flyTowardAnchor(shape, center, radius, settled);
+			double lo = 0.0;
+			double hi = 1.0;
+			for (int i = 0; i < 16; i++) {
+				double mid = (lo + hi) * 0.5;
+				Vec3 midDest = anchor.lerp(settled, mid);
+				Vec3 midSpawn = containPoint(shape, center, radius, midDest.add(spawnOffset.scale(mid)));
+				if (flyTowardTrajectoryContained(shape, center, radius, midSpawn, midDest)) {
+					lo = mid;
+				} else {
+					hi = mid;
+				}
+			}
+
+			settled = anchor.lerp(settled, lo);
+			spawn = containPoint(shape, center, radius, settled.add(spawnOffset.scale(lo)));
+		}
+
 		level.sendParticles(particle, true, false, settled.x, settled.y, settled.z, 0,
 				spawn.x - settled.x, spawn.y - settled.y, spawn.z - settled.z, 1.0);
 	}

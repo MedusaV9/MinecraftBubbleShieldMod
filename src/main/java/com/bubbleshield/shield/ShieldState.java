@@ -23,6 +23,21 @@ import org.jspecify.annotations.Nullable;
 public class ShieldState {
 	public static final float DEFAULT_TARGET_RADIUS = 16.0F;
 	public static final float DEFAULT_MAX_HEALTH = 100.0F;
+	/**
+	 * Valid target radius range on NBT load: the GUI diameter range 8..200
+	 * ({@code ServerNet.MIN_DIAMETER}/{@code MAX_DIAMETER}) halved. The bounds are
+	 * duplicated here (compile-time constants, kept in lockstep by the NBT-tamper
+	 * gametest) so the pure data holder does not depend on the network package.
+	 */
+	public static final float MIN_TARGET_RADIUS = 4.0F;
+	public static final float MAX_TARGET_RADIUS = 100.0F;
+	/**
+	 * NBT-load cap for health/max_health: far above any tier's
+	 * {@code 100 * (1 + tier)} (300 at tier 2) but finite, so /data can never
+	 * smuggle Infinity-scale values into the radius shrink math, the boss-bar
+	 * progress or the sync payload.
+	 */
+	public static final float MAX_LOADED_HEALTH = 1.0e6F;
 	/** Sentinel for {@link #colorOverride}: no recolor, use the effect's authored palette. */
 	public static final int NO_COLOR_OVERRIDE = -1;
 	/**
@@ -100,6 +115,21 @@ public class ShieldState {
 		return argb == NO_COLOR_OVERRIDE || (argb & 0xFF000000) == 0xFF000000;
 	}
 
+	/**
+	 * NBT-load hardening for numeric float fields (same spirit as the
+	 * effect_id/shape/custom_name/color_override handling in {@link #load}): NaN
+	 * (which would poison every comparison and clamp downstream) falls back to
+	 * {@code fallback}, everything else — including the infinities — clamps into
+	 * {@code [min, max]}.
+	 */
+	private static float sanitizeLoadedFloat(float value, float min, float max, float fallback) {
+		if (Float.isNaN(value)) {
+			return fallback;
+		}
+
+		return Math.clamp(value, min, max);
+	}
+
 	/** Records a locally learned name-to-UUID association (lowercase key). */
 	public void rememberWhitelistUuid(String name, UUID uuid) {
 		this.whitelistNameToUuid.put(name.toLowerCase(Locale.ROOT), uuid);
@@ -156,9 +186,19 @@ public class ShieldState {
 		// Legacy saves (no key) default to ordinal 0 = NONE; tampered ordinals clamp
 		// back to NONE via byOrdinal — the same hardening as shape/mode above.
 		this.beamStyle = BeamStyle.byOrdinal(input.getIntOr("beam_style", 0));
-		this.targetRadius = input.getFloatOr("target_radius", DEFAULT_TARGET_RADIUS);
-		this.health = input.getFloatOr("health", DEFAULT_MAX_HEALTH);
-		this.maxHealth = input.getFloatOr("max_health", DEFAULT_MAX_HEALTH);
+		// Numeric hardening (same spirit as effect_id/shape above): a NaN or
+		// out-of-range float edited into the NBT would otherwise flow straight
+		// into the radius math (ShieldLogic.currentRadius divides by maxHealth
+		// and scales by targetRadius) and the boss-bar/sync payloads. NaN falls
+		// back to the default; everything else clamps into the valid range.
+		this.targetRadius = sanitizeLoadedFloat(input.getFloatOr("target_radius", DEFAULT_TARGET_RADIUS),
+				MIN_TARGET_RADIUS, MAX_TARGET_RADIUS, DEFAULT_TARGET_RADIUS);
+		// maxHealth first (health clamps against it); at least 1 so the
+		// health/maxHealth radius fraction can never divide by zero.
+		this.maxHealth = sanitizeLoadedFloat(input.getFloatOr("max_health", DEFAULT_MAX_HEALTH),
+				1.0F, MAX_LOADED_HEALTH, DEFAULT_MAX_HEALTH);
+		this.health = sanitizeLoadedFloat(input.getFloatOr("health", DEFAULT_MAX_HEALTH),
+				0.0F, this.maxHealth, this.maxHealth);
 		this.ownerUuid = input.read("owner_uuid", UUIDUtil.CODEC).orElse(null);
 		// Re-sanitize on load: a >32-char (or control-char) name edited into the NBT
 		// would throw an EncoderException in ShieldSyncS2C's stringUtf8(32) codec on
