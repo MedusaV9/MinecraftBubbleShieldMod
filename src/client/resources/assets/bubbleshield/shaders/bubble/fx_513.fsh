@@ -274,6 +274,10 @@ void main() {
     float jump = hash11(floor(time * 3.7741));
     float ft = time + 0.4311 * jump;
     vec2 auv = vec2(baseUV.x * 6.0000, baseUV.y * 6.0000) + vec2(0.055000, 0.326667) * ft;
+    // v7: SMOOTH twin of auv (same drift, plain time) for the atlas
+    // sample -- the emission mask must never ride the flicker-jumped
+    // ft, whose 2-5 Hz domain jumps read as a strobe (photosensitivity)
+    vec2 tuv = vec2(baseUV.x * 6.0000, baseUV.y * 6.0000) + vec2(0.055000, 0.326667) * time;
     vec2 wuv = auv;
     // [layer:v5:polefade]
     // v5 pole guard: at v = 0/1 EVERY u maps to the same sphere point,
@@ -304,16 +308,23 @@ void main() {
     // [layer:tex:worley_cells]
     // Real sampled detail from atlas tile 1 (worley_cells), matched to this
     // family's technique. The INTEGER repeat multiplier keeps the lookup exact
-    // across the u = 0/1 wrap (wuv spans an integer lattice period per wrap,
-    // and its drifts shift integer periods per day -- so day-wrap-safe too);
+    // across the u = 0/1 wrap (the domain spans an integer lattice period per
+    // wrap, and its drifts shift integer periods per day -- day-wrap-safe);
     // the inset clamp keeps the linear-filtered sample inside this tile.
-    vec2 texUV = wuv * 2.0000;
+    // (flicker anim: the atlas rides the SMOOTH tuv twin, never the
+    // jumped ft domain -- see the [layer:mid] anim block.)
+    vec2 texUV = tuv * 2.0000;
     vec2 tileUV = (vec2(1.0000, 0.0000) + clamp(fract(texUV), 0.004, 0.996)) * 0.25;
     vec4 atlas = texture(Sampler0, tileUV);
+    // v7 atlas pole fade: texUV is longitude-dependent, so at v = 0/1 the
+    // tile would pinch into an apex rosette. Every atlas INFLUENCE (mid
+    // lift, body grade, emission) fades to its no-atlas value at the caps.
+    float atlasPoleW = smoothstep(0.02, 0.12, min(baseUV.y, 1.0 - baseUV.y));
     float texDetail = clamp(atlas.r * 0.5309 + atlas.g * 0.3011 + atlas.b * 0.3543, 0.0, 1.0);
-    // the multi-scale texture layers modulate AND lift the signature, so the
-    // membrane carries real fine structure even between pattern features
-    mid = clamp(mid * (0.6554 + 0.5329 * texDetail) + 0.2009 * texDetail, 0.0, 1.5);
+    // the multi-scale texture layers modulate the signature and add a lift
+    // that is mostly GATED through the family's own pattern (v7) -- the
+    // signature stays dominant and dark palettes keep their dark gaps
+    mid = clamp(mid * mix(1.0, 0.6554 + 0.5329 * texDetail, atlasPoleW) + 0.1123 * texDetail * (0.2513 + 0.7487 * clamp(mid, 0.0, 1.0)) * atlasPoleW, 0.0, 1.5);
 
     // [layer:rim:graze_sparkle]
     // Silhouette / band lift so the membrane reads as a curved shell:
@@ -350,9 +361,11 @@ void main() {
     float midCover = clamp(1.0638 * mid + 0.5799 * rim, 0.0, 1.0);
     rgb = mix(deepCol, rgb, midCover);
     // [layer:tex:body] -- the sampled multi-scale detail also grades the
-    // composited body (deep volume included), so the real texture reads
-    // everywhere on the membrane, not only inside the mid signature.
-    rgb *= 0.7865 + 0.5219 * texDetail;
+    // composited body (deep volume included). v7: the grade is pole-faded
+    // and partly gated through the pattern, so the family signature stays
+    // dominant over the tile texture and the caps keep their clean body.
+    float texBody = 0.7865 + 0.5219 * texDetail;
+    rgb *= mix(1.0, texBody, atlasPoleW * (0.5186 + 0.4814 * clamp(pattern, 0.0, 1.0)));
     rgb = satLift(rgb, 1.3712);
     // Hue-preserving soft-clip on the hot crests: brightness saturates
     // toward the palette's own bright tint (1 - exp(-k * hotStop * x)),
@@ -375,45 +388,59 @@ void main() {
     // [layer:emit:atlas_a]
     // Emissive glow: atlas.a is an EMISSION mask (never transparency) --
     // filament cores / cell edges / cracks / sparkles ADD a bright, hue-
-    // preserving tint of the live palette (baseCol pushed toward white by a
-    // bounded baked amount, so recolor-safe). Scaled by the family's own
-    // pattern highlight and a slow day-quantized breath: the glow is spatial,
-    // never a full-field strobe.
-    vec3 emitCol = clamp(mix(baseCol, vec3(1.0), 0.5049), 0.0, 1.0);
-    float emit = atlas.a * (0.7263 + 0.3991 * clamp(pattern, 0.0, 1.0)) * (1.0 - 0.1029 * (0.5 + 0.5 * sin(time * 0.146608)));
-    rgb += emit * 0.9863 * emitCol;
+    // preserving tint of the live palette. v7 wash guard: both the white-
+    // mix and the emissive gain fall off with the palette's own luma, so
+    // bright palettes (chrome/pastel) glow IN HUE instead of blowing to
+    // white, while dark palettes keep their full glow. Scaled by the
+    // family's own highlights and a slow day-quantized breath -- the glow
+    // is spatial and strobe-free by construction.
+    float baseLuma = dot(baseCol, vec3(0.299, 0.587, 0.114));
+    vec3 emitCol = clamp(mix(baseCol, vec3(1.0), 0.3684 * (1.0 - 0.4990 * baseLuma)), 0.0, 1.0);
+    // strobe-free emission drive (see the v7 note above): only smooth,
+    // non-gated terms may modulate the emissive add
+    float emitDrive = clamp(0.2708 * deepPat + 0.8005 * texDetail + 0.6414 * rim + 0.1001 * v5Par, 0.0, 1.0);
+    float emit = atlas.a * (0.4058 + 0.6289 * emitDrive) * (1.0 - 0.1029 * (0.5 + 0.5 * sin(time * 0.146608))) * atlasPoleW;
+    rgb += emit * 0.9863 * (1.0 - 0.7394 * baseLuma) * emitCol;
     // [layer:v5:softknee]
     // v5 soft-knee highlight rolloff: channels over the knee compress
     // exponentially instead of clipping (continuous at the knee since
     // exp(0) = 1), so hot crests keep hue separation right up to white.
     vec3 v5Over = max(rgb - vec3(0.6297), vec3(0.0));
     rgb = min(rgb, vec3(0.6297)) + 0.3703 * (1.0 - exp(-v5Over * 2.5650));
-    // Presence alpha (family-tuned, v6 solidity lift): a firm membrane base
-    // even between features, a solid floor wherever the pattern is present,
-    // rising toward the ceiling on bright features, plus the deep volume's
-    // Beer-Lambert opacity and the emissive glow (glowing parts read dense).
-    // The vertexColor.a dissolve near whitelisted players still always wins.
+    // Presence BODY alpha (family-tuned, v6 solidity lift): a firm membrane
+    // base even between features, a solid floor wherever the pattern is
+    // present, rising toward the ceiling on bright features, plus the deep
+    // volume's Beer-Lambert opacity and the emissive glow. v7 dissolve
+    // authority: EVERY alpha modifier (emission, back-face densify, ghost
+    // thinning, dither) acts on this body value, which is clamped to the
+    // family ceiling and only THEN multiplied by vertexColor.a -- the
+    // whitelisted-player dissolve is always the final, outermost factor.
     float presence = smoothstep(0.02, 0.30, pattern);
-    float alpha = vertexColor.a * min(0.3043 + 0.2713 * presence + 0.4650 * pattern + 0.1485 * (1.0 - deepTrans) + 0.1734 * emit, 0.8485);
+    float bodyAlpha = 0.3043 + 0.2713 * presence + 0.4650 * pattern + 0.1485 * (1.0 - deepTrans) + 0.1734 * emit;
     // [layer:v5:backface]
     // v5 back-face densify/dim (gl_FrontFacing is a builtin, no uniform
     // needed): the INSIDE of the far shell recedes toward the dark stop
     // and gains alpha, so the bubble reads as a filled volume from within.
     float v5Back = gl_FrontFacing ? 0.0 : 1.0;
     rgb = mix(rgb, deepStop, v5Back * 0.2702);
-    alpha = min(alpha * (1.0 + v5Back * 0.2046), 0.8485);
+    bodyAlpha *= 1.0 + v5Back * 0.2046;
     // [layer:v5:ghostalpha]
     // v5 luminance-weighted ghost translucency: dark areas thin out while
-    // bright features hold. Multiplicative on the existing alpha, so the
-    // vertexColor.a dissolve near whitelisted players still always wins.
+    // bright features hold. Multiplicative on the body alpha (pre-clamp,
+    // pre-dissolve), so the vertexColor.a dissolve still always wins.
     float v5Luma = dot(clamp(rgb, 0.0, 1.0), vec3(0.299, 0.587, 0.114));
-    alpha *= 0.7266 + 0.2734 * smoothstep(0.03, 0.42, v5Luma);
+    bodyAlpha *= 0.7266 + 0.2734 * smoothstep(0.03, 0.42, v5Luma);
     // [layer:v5:dither]
     // v5 blue-noise-style alpha dither (interleaved gradient noise on
-    // gl_FragCoord) breaks translucency banding; multiplicative, so it is
-    // scaled by the dissolve and alpha = 0 stays exactly 0.
+    // gl_FragCoord) breaks translucency banding; multiplicative on the
+    // body alpha, so bodyAlpha = 0 stays exactly 0 and the ceiling clamp
+    // below still bounds it.
     float v5Dither = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
-    alpha = clamp(alpha * (1.0 + (v5Dither - 0.5) * 0.0772), 0.0, 1.0);
+    bodyAlpha *= 1.0 + (v5Dither - 0.5) * 0.0772;
+    // dissolve authority: clamp the body to the family ceiling FIRST, then
+    // apply the whitelisted-player dissolve as the LAST alpha operation --
+    // no path can push the final alpha above vertexColor.a * ceiling.
+    float alpha = clamp(bodyAlpha, 0.0, 0.8485) * vertexColor.a;
     vec4 color = vec4(clamp(rgb, 0.0, 1.0), alpha);
     if (color.a < 0.01) {
         discard;

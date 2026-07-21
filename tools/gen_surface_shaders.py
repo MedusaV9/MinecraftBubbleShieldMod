@@ -10,11 +10,14 @@ with a fixed precision -- so diffs stay reviewable.
 
 Design (see /tmp/shader_plan.md sections 1, 2, 4.1 and AGENTS.md):
 
-* Fragment contract (v6): `#version 330`; only `#moj_import <minecraft:fog.glsl>`
+* Fragment contract (v7): `#version 330`; only `#moj_import <minecraft:fog.glsl>`
   and `<minecraft:globals.glsl>`; inputs texCoord0 (RAW [0,1] sphere UV),
   vertexColor (rgb = palette = dominant chroma, a = dissolve; the final alpha
-  is vertexColor.a * clamp(a0 + a1 * pattern, 0, 1), so the dissolve always
-  wins), sphericalVertexDistance, cylindricalVertexDistance; out fragColor;
+  is clamp(bodyAlpha, 0, aMax) * vertexColor.a with EVERY alpha modifier --
+  emission, v5 back-face densify, ghost thinning, dither -- folded into
+  bodyAlpha BEFORE the clamp, so the dissolve multiply is the last alpha
+  operation and no path can exceed vertexColor.a * aMax),
+  sphericalVertexDistance, cylindricalVertexDistance; out fragColor;
   animation ONLY via `float time = GameTime * 1200.0;`; the ONLY uniform
   beyond the vanilla imports is `uniform sampler2D Sampler0` (the shipped
   surface atlas, see the v6 bullet below -- ShieldPipelines binds it through
@@ -223,7 +226,37 @@ Design (see /tmp/shader_plan.md sections 1, 2, 4.1 and AGENTS.md):
 * Recolor safety: pattern layers multiply vertexColor.rgb; cosine-palette /
   thin-film accents contribute only through a bounded mix biased toward
   vertexColor.rgb (weight <= 0.45); the final alpha is
-  vertexColor.a * clamp(a0 + a1 * pattern, 0, 1).
+  clamp(bodyAlpha, 0, aMax) * vertexColor.a (the dissolve multiply last).
+
+* v7 quality pass (EVERY file):
+  - DISSOLVE AUTHORITY: all alpha modifiers (atlas emission's alpha
+    contribution, v5 back-face densify, ghost alpha, blue-noise dither) act
+    on a BODY alpha that is clamped to the family ceiling and only then
+    multiplied by vertexColor.a -- the v6 ordering let the v5 densify/dither
+    exceed vertexColor.a * aMax by up to ~44% at low dissolve.
+  - ATLAS POLE FADE: texUV is longitude-dependent (and was applied after the
+    v5 poleFade), so the tile pinched into an apex rosette at v = 0/1. Every
+    atlas influence (mid lift, body grade, emission) now fades to its
+    no-atlas value at the caps via atlasPoleW (latitude smoothstep).
+  - STROBE-FREE EMISSION (photosensitivity): the emissive add never
+    oscillates faster than ~2 Hz. Flicker-anim files sample the atlas from a
+    SMOOTH `tuv` twin (same drift, plain time, never the jumped ft) and
+    drive the emission from smooth-domain terms only; the LIGHTNING /
+    HOLOGRID / HOLOPARALLAX composers export a strobe-free `emitMid` copy of
+    their signature for the emission drive (the visible strobe stays in the
+    color pattern only).
+  - WASH GUARD: the emissive gain and the emitCol white-mix both fall off
+    with the palette's own luma (computed from the LIVE vertexColor --
+    recolor-safe), so bright palettes (CHROME/MOIRE pastels) glow in hue
+    instead of blowing to white; the atlas lift into mid is smaller and
+    mostly gated through the family's own signature, and the body grade is
+    partly pattern-gated -- dark palettes read dark, sparse signatures
+    (lightning bolts, embers) stay dominant over the tile texture.
+  - STARFIELD TILE REMAP: the near-black point-star tile (index 8) gains a
+    texDetail scale+bias and an emission-mask boost for its four families;
+    GRAVLENS additionally gets a raised presence floor, a near-disabled
+    ghost thinning (V5_GHOST_RANGES) and a stronger ring/halo/body so it
+    reads as solid as its star siblings.
 
 * Compile safety: conservative GLSL 330 subset only -- const-bounded for
   loops (fbm <= 6 octaves, parallax <= 4 taps, voronoi 3x3/5x5), no while, no
@@ -367,6 +400,28 @@ FAMILY_TILE = {
 }
 assert set(FAMILY_TILE) == set(FAMILIES), "FAMILY_TILE must cover every family exactly"
 assert set(FAMILY_TILE.values()) == set(range(16)), "every atlas tile must be used by >= 1 family"
+
+# The near-black point-star atlas tile: its R/G/B detail and A emission mask
+# are almost empty between the stars, which starved the families that sample
+# it -- v7 remaps its texDetail range and boosts its emission mask.
+STARFIELD_TILE = 8
+
+# Families whose MID signature carries a >2 Hz strobe/gate multiplier
+# (LIGHTNING's hash gate + 6.4 Hz sin, HOLOGRID's 6..11 Hz hash flicker,
+# HOLOPARALLAX's 8..14 Hz hash flicker). Their composers also define a
+# STROBE-FREE `emitMid` copy of the signature, and the [layer:emit] drive
+# uses it instead of `pattern` -- the visible strobe stays in the color
+# pattern, but the emissive add must never oscillate above ~2 Hz
+# (photosensitivity). The bool records whether that family's emitMid rides
+# the wuv domain (then a flicker-anim id must fall back to texDetail, since
+# wuv itself jumps at 2..5 Hz there).
+STROBE_MID_FAMILIES = {"LIGHTNING": False, "HOLOGRID": False, "HOLOPARALLAX": True}
+
+# v7 per-family override of the v5 ghost-alpha floor range (draw index 68):
+# GRAVLENS is a sparse near-black starfield, so the luminance-weighted ghost
+# thinning collapsed it to a faint film -- its floor is raised until the
+# thinning is nearly disabled. Other v5 families keep the v6 default.
+V5_GHOST_RANGES = {"GRAVLENS": (0.84, 0.93)}
 
 MASK64 = (1 << 64) - 1
 
@@ -1277,6 +1332,9 @@ def mid_composer(family: str, c: dict):
     if family == "LIGHTNING":
         # 3D: bolts live on the rotating sphere direction with a quantized
         # sin sway (day-safe); the strobe gate reseeds at the wrap as before.
+        # v7: `emitMid` is the STROBE-FREE bolt mask -- the strobe stays in
+        # the color pattern, but the emissive add must not flash at 3-6 Hz
+        # (photosensitivity), so the [layer:emit] drive uses emitMid instead.
         return (["fbm3", "hash11"], [
             f"vec3 lw3 = mdir + vec3(0.0, {F(u(46, 0.30, 0.60))} * sin(time * {qs(47, 0.15, 0.35)}), 0.0);",
             "float n = fbm3(lw3);",
@@ -1284,6 +1342,7 @@ def mid_composer(family: str, c: dict):
             f"float gate = step({F(u(43, 0.35, 0.55))}, hash11(floor(time * {F(u(44, 3.0, 6.0))})));",
             f"float strobe = 0.35 + 0.65 * gate * (0.5 + 0.5 * sin(time * {qsc(40.0)}));",
             f"float mid = bolt * strobe + {F(u(45, 0.15, 0.30))} * bolt;",
+            f"float emitMid = bolt * {F(0.675 + u(45, 0.15, 0.30))};",
         ], [])
     if family == "THINFILM":
         mtw = F(u(46, 0.25, 0.40))
@@ -1558,6 +1617,9 @@ def mid_composer(family: str, c: dict):
         # (lower pow + higher weight so the grid never dissolves into dots)
         # with FEWER, DIMMER node glints (tighter hash gate, smaller lift),
         # plus the v-sweeping scan band under a hash flicker gate.
+        # v7: `emitMid` is the same graticule WITHOUT the 6..11 Hz flicker
+        # gate -- the flicker stays visible in the color pattern, but the
+        # emissive add must never strobe (photosensitivity).
         return (["invsmooth", "cellHash", "hash11"], [
             f"float lonLine = pow(abs(sin(baseUV.x * 3.1415927 * {F(float(lon_n))})), {F(u(42, 7.0, 12.0))});",
             f"float latLine = pow(abs(sin(baseUV.y * 3.1415927 * {F(float(lat_n))})), {F(u(43, 7.0, 12.0))});",
@@ -1565,7 +1627,9 @@ def mid_composer(family: str, c: dict):
             f"float scan = invsmooth(0.0, {F(u(45, 0.10, 0.20))}, abs(baseUV.y - scanPos));",
             f"float glint = step(0.82, cellHash(floor(vec2(baseUV.x * {F(float(lon_n))}, baseUV.y * {F(float(lat_n))})), {F(float(lon_n))})) * lonLine * latLine;",
             f"float holoFlicker = 0.90 + 0.10 * step(0.35, hash11(floor(time * {F(u(46, 6.0, 11.0))})));",
-            f"float mid = clamp((lonLine + latLine) * {F(u(47, 0.62, 0.85))} * holoFlicker + scan * {F(u(48, 0.35, 0.55))} + glint * 0.9, 0.0, 1.25);",
+            f"float holoSteady = (lonLine + latLine) * {F(u(47, 0.62, 0.85))};",
+            f"float mid = clamp(holoSteady * holoFlicker + scan * {F(u(48, 0.35, 0.55))} + glint * 0.9, 0.0, 1.25);",
+            f"float emitMid = clamp(holoSteady + scan * {F(u(48, 0.35, 0.55))} + glint * 0.9, 0.0, 1.25);",
         ], [])
     if family == "PORTALVOID":
         suck_n = 3 + int(u(42, 0.0, 2.999))  # integer streak symmetry
@@ -1795,6 +1859,9 @@ def mid_composer(family: str, c: dict):
             "// pole guard on the grid layers only; the sync band is latitude-only",
             "// (pole-safe) and keeps sweeping across the caps",
             f"float mid = clamp(mix({F(0.30)}, hpAcc * hpFlick, poleFade) + hpSync * {F(u(55, 0.35, 0.55))}, 0.0, 1.25);",
+            "// v7: strobe-free copy for the emissive drive -- the 8..14 Hz gate",
+            "// stays in the color pattern, never in the emissive add",
+            f"float emitMid = clamp(mix({F(0.30)}, hpAcc, poleFade) + hpSync * {F(u(55, 0.35, 0.55))}, 0.0, 1.25);",
         ], [])
     if family == "ORBITTRAP":
         # 3D-fed 2D fractal: a Julia iteration on the (rotated) sphere-
@@ -1990,13 +2057,18 @@ def mid_composer(family: str, c: dict):
             "    // (191..668 ~= the old 1.0..3.5 rad/s) and only offsets the phase",
             "    float glTurns = 191.0 + floor(sh * 478.0);",
             "    float tw = 0.6 + 0.4 * sin(time * glTurns * (6.2831853 / 1200.0) + sh * 44.0);",
-            f"    glStars += step({F(u(47, 0.78, 0.88))}, sh) * invsmooth(0.03, 0.16, length(sf - (vec2(cellHash(sc + 4.7, layerPx), cellHash(sc + 9.3, layerPx)) - 0.5) * 0.55)) * tw;",
+            f"    glStars += step({F(u(47, 0.68, 0.80))}, sh) * invsmooth(0.04, 0.20, length(sf - (vec2(cellHash(sc + 4.7, layerPx), cellHash(sc + 9.3, layerPx)) - 0.5) * 0.55)) * tw;",
             "}",
-            f"float glRing = invsmooth(0.0, {F(u(48, 0.030, 0.055))}, abs(glR - {F(u(49, 0.10, 0.18))}));",
-            f"float mid = clamp(glStars * (1.0 + glRing * {F(u(55, 1.2, 2.0))}) + glRing * {F(u(56, 0.35, 0.55))}, 0.0, 1.3);",
+            f"float glRing = invsmooth(0.0, {F(u(48, 0.040, 0.065))}, abs(glR - {F(u(49, 0.10, 0.18))}));",
+            "// v7 rescue: denser/bigger stars, a BRIGHTER Einstein ring, a soft",
+            "// 1/r lens-mass halo and a firm body floor -- the sparse starfield",
+            "// alone left the membrane reading faint/translucent",
+            f"float glHalo = clamp({F(u(58, 0.05, 0.09))} / glR, 0.0, 0.55) * {F(u(59, 0.35, 0.55))};",
+            f"float glBody = {F(u(57, 0.14, 0.22))};",
+            f"float mid = clamp(glStars * ({F(u(39, 1.05, 1.30))} + glRing * {F(u(55, 1.4, 2.2))}) + glRing * {F(u(56, 0.55, 0.80))} + glHalo + glBody, 0.0, 1.3);",
             "// pole guard: the warped star lattice varies with longitude at the",
-            "// apexes; fade to empty sky there (stars are sparse anyway)",
-            f"mid = mix({F(0.02)}, mid, poleFade);",
+            "// apexes; fade toward the firm body level (not to empty sky)",
+            f"mid = mix(glBody, mid, poleFade);",
         ], [])
     if family == "MYCELIA":
         # 2D: fungal threads -- a per-cell node network whose branches are
@@ -2249,7 +2321,12 @@ FAMILY_PRESENCE = {
     "AETHERSMOKE":  {"floor": (0.18, 0.28), "gain": (0.30, 0.44), "sat": (1.15, 1.40), "cover": (0.75, 1.00)},
     "STAINEDGLASS": {"floor": (0.30, 0.42), "gain": (0.34, 0.48), "amax": (0.84, 0.90), "sat": (1.20, 1.45)},
     "PHANTOMECHO":  {"floor": (0.08, 0.16), "gain": (0.46, 0.62), "amax": (0.74, 0.84)},
-    "GRAVLENS":     {"floor": (0.08, 0.14), "gain": (0.48, 0.62)},
+    # v7: GRAVLENS read faint/translucent -- its floor was the lowest of the
+    # star families while its signature (sparse warped stars + one ring) is
+    # also the emptiest, so the membrane never built up. Raised floor + gain
+    # (paired with the V5_GHOST_RANGES override and the composer's stronger
+    # ring/star contrast) so it reads as solid as its siblings.
+    "GRAVLENS":     {"floor": (0.20, 0.30), "gain": (0.50, 0.64), "sat": (1.15, 1.40)},
     "MYCELIA":      {"floor": (0.12, 0.20), "gain": (0.44, 0.60)},
     "SOLARFLARE":   {"floor": (0.12, 0.20), "gain": (0.46, 0.62), "sat": (1.15, 1.40)},
     "DEEPICE":      {"floor": (0.28, 0.40), "gain": (0.32, 0.46), "amax": (0.82, 0.90), "sat": (1.12, 1.35)},
@@ -2337,16 +2414,17 @@ def emit_shader(asg: dict) -> str:
       still drawn for stream stability), 84..95 gradient3/alpha knobs,
       96..127 v3 depth/3D-domain knobs (v4 adds 123..127 for the
       Beer-Lambert / soft-clip knobs and repurposes 85 for the hot-stop
-      saturation lift), 128..143 v6 atlas-texture/emission knobs (appended
-      to the stream, so extending 128 -> 144 shifted no older draw). The
-      draws are POSITIONAL lookups into a fixed 144-entry table, so a
+      saturation lift), 128..143 v6 atlas-texture/emission knobs, 144..151
+      v7 wash-guard/pole-fade/gating knobs (each extension appends to the
+      stream, so growing 128 -> 144 -> 160 shifted no older draw). The
+      draws are POSITIONAL lookups into a fixed 160-entry table, so a
       composer reusing a spare index only correlates two knobs -- it can
       never shift any other draw.
     """
     effect_id = asg["id"]
     family = asg["family"]
     rng = Rng(asg["seed"])
-    draws = [rng.unit() for _ in range(144)]
+    draws = [rng.unit() for _ in range(160)]
 
     def u(i, lo, hi):
         return lo + (hi - lo) * draws[i]
@@ -2467,10 +2545,16 @@ def emit_shader(asg: dict) -> str:
         ]
     else:  # flicker
         needs.add("hash11")
+        flick_dx = F6(quant_drift(u(36, -0.5, 0.5), float(sx)))
+        flick_dy = F6(quant_drift(u(37, -0.5, 0.5), float(syp)))
         anim_lines += [
             f"float jump = hash11(floor(time * {F(u(34, 2.0, 5.0))}));",
             f"float ft = time + {F(u(35, 0.15, 0.45))} * jump;",
-            f"vec2 auv = vec2(baseUV.x * {sx_lit}, baseUV.y * {sy_lit}) + vec2({F6(quant_drift(u(36, -0.5, 0.5), float(sx)))}, {F6(quant_drift(u(37, -0.5, 0.5), float(syp)))}) * ft;",
+            f"vec2 auv = vec2(baseUV.x * {sx_lit}, baseUV.y * {sy_lit}) + vec2({flick_dx}, {flick_dy}) * ft;",
+            "// v7: SMOOTH twin of auv (same drift, plain time) for the atlas",
+            "// sample -- the emission mask must never ride the flicker-jumped",
+            "// ft, whose 2-5 Hz domain jumps read as a strobe (photosensitivity)",
+            f"vec2 tuv = vec2(baseUV.x * {sx_lit}, baseUV.y * {sy_lit}) + vec2({flick_dx}, {flick_dy}) * time;",
         ]
 
     # Warp mode -> `vec2 wuv`. Warp offsets are seam-periodic fields, so the
@@ -2638,7 +2722,9 @@ def emit_shader(asg: dict) -> str:
         v5_sp_scale = u(67, 1.4, 2.4)       # slope-parallax domain scale
         # v6: the ghost floor is raised (was 0.38..0.55) -- dark areas still
         # thin out relative to bright features, but never back to see-through.
-        v5_ghost_lo = u(68, 0.62, 0.78)     # ghost-alpha floor at zero luminance
+        # v7: sparse near-black families can override the range per family
+        # (V5_GHOST_RANGES) -- GRAVLENS all but disables the thinning.
+        v5_ghost_lo = u(68, *V5_GHOST_RANGES.get(family, (0.62, 0.78)))  # ghost-alpha floor at zero luminance
         v5_knee = u(70, 0.62, 0.78)         # soft-knee highlight start
         v5_knee_k = F(u(71, 1.6, 2.6))      # soft-knee compression steepness
         v5_dither = F(u(75, 0.06, 0.14))    # blue-noise alpha dither amplitude
@@ -2657,15 +2743,36 @@ def emit_shader(asg: dict) -> str:
     tex_wb = F(u(131, 0.20, 0.45))     # fine grain weight (atlas.b)
     tex_mm0 = F(u(132, 0.60, 0.75))    # mid modulation floor
     tex_mm1 = F(u(133, 0.45, 0.75))    # mid modulation depth (x texDetail)
-    tex_ma = F(u(134, 0.18, 0.35))     # additive texture lift into mid
+    # v7: the additive lift into mid is smaller AND mostly gated through the
+    # family's own signature (see the [layer:tex] emission below) -- the v6
+    # unconditional lift buried sparse signatures (lightning bolts, embers)
+    # and kept dark palettes from ever reading dark.
+    tex_ma = F(u(134, 0.10, 0.20))     # additive texture lift into mid (gated)
     tex_body = u(135, 0.30, 0.48)      # body rgb modulation depth
-    emit_e0 = F(u(136, 0.55, 0.80))    # emission mask base weight
-    emit_e1 = F(u(137, 0.25, 0.50))    # emission lift on the family's own highlights
-    emit_gain = F(u(138, 0.65, 1.00))  # emissive add strength into rgb
-    emit_lift = F(u(139, 0.35, 0.55))  # palette -> bright tint push toward white (bounded)
+    # v7: the emission rebalances toward the family's own highlights -- the
+    # broad e0 term over a wide tile mask was the chrome/moire white wash.
+    emit_e0 = F(u(136, 0.30, 0.45))    # emission mask base weight
+    emit_e1 = F(u(137, 0.45, 0.75))    # emission lift on the family's own highlights
+    emit_gain = F(u(138, 0.65, 1.00))  # emissive add strength into rgb (luma-guarded below)
+    emit_lift = F(u(139, 0.26, 0.40))  # palette -> bright tint push toward white (bounded, luma-guarded)
     emit_breathe_speed = F6(quant_sin_speed(u(140, 0.10, 0.30)))  # slow, day-quantized
     emit_breathe_depth = F(u(141, 0.08, 0.18))
     emit_alpha = F(u(142, 0.12, 0.22))  # emission contribution to the presence alpha
+
+    # v7 wash-guard / pole-fade / signature-gating knobs (indices 143..151,
+    # appended to the stream -- no older draw shifts).
+    emit_luma_guard = F(u(143, 0.60, 0.80))   # emissive gain falloff vs palette luma
+    emit_white_guard = F(u(144, 0.45, 0.60))  # white-mix falloff vs palette luma
+    tex_mid_gate = u(145, 0.20, 0.35)         # ungated share of the mid texture lift
+    tex_body_gate = u(146, 0.40, 0.55)        # ungated share of the body texture grade
+    # The near-black starfield tile needs a remap to contribute anything
+    # between its sparse stars: texDetail gains a scale + floor, and the
+    # emission mask a scale (tile-8 families only; positional draws, so
+    # reading these conditionally shifts nothing).
+    if tile == STARFIELD_TILE:
+        star_detail_scale = F(u(147, 1.9, 2.6))
+        star_detail_bias = F(u(148, 0.16, 0.26))
+        star_emit_scale = F(u(149, 1.7, 2.4))
 
     sec_ang, sec_sat, sec_val = secondary_consts(
         asg["primary"], asg["secondary"] if asg.get("secondary") is not None else asg["primary"])
@@ -2825,16 +2932,30 @@ def emit_shader(asg: dict) -> str:
     lines.append(f"    // [layer:tex:{tile_name}]")
     lines.append(f"    // Real sampled detail from atlas tile {tile} ({tile_name}), matched to this")
     lines.append("    // family's technique. The INTEGER repeat multiplier keeps the lookup exact")
-    lines.append("    // across the u = 0/1 wrap (wuv spans an integer lattice period per wrap,")
-    lines.append("    // and its drifts shift integer periods per day -- so day-wrap-safe too);")
+    lines.append("    // across the u = 0/1 wrap (the domain spans an integer lattice period per")
+    lines.append("    // wrap, and its drifts shift integer periods per day -- day-wrap-safe);")
     lines.append("    // the inset clamp keeps the linear-filtered sample inside this tile.")
-    lines.append(f"    vec2 texUV = wuv * {F(float(tex_mul))};")
+    if anim == "flicker":
+        lines.append("    // (flicker anim: the atlas rides the SMOOTH tuv twin, never the")
+        lines.append("    // jumped ft domain -- see the [layer:mid] anim block.)")
+        lines.append(f"    vec2 texUV = tuv * {F(float(tex_mul))};")
+    else:
+        lines.append(f"    vec2 texUV = wuv * {F(float(tex_mul))};")
     lines.append(f"    vec2 tileUV = (vec2({F(float(tile % 4))}, {F(float(tile // 4))}) + clamp(fract(texUV), 0.004, 0.996)) * 0.25;")
     lines.append("    vec4 atlas = texture(Sampler0, tileUV);")
+    lines.append("    // v7 atlas pole fade: texUV is longitude-dependent, so at v = 0/1 the")
+    lines.append("    // tile would pinch into an apex rosette. Every atlas INFLUENCE (mid")
+    lines.append("    // lift, body grade, emission) fades to its no-atlas value at the caps.")
+    lines.append("    float atlasPoleW = smoothstep(0.02, 0.12, min(baseUV.y, 1.0 - baseUV.y));")
     lines.append(f"    float texDetail = clamp(atlas.r * {tex_wr} + atlas.g * {tex_wg} + atlas.b * {tex_wb}, 0.0, 1.0);")
-    lines.append("    // the multi-scale texture layers modulate AND lift the signature, so the")
-    lines.append("    // membrane carries real fine structure even between pattern features")
-    lines.append(f"    mid = clamp(mid * ({tex_mm0} + {tex_mm1} * texDetail) + {tex_ma} * texDetail, 0.0, 1.5);")
+    if tile == STARFIELD_TILE:
+        lines.append("    // near-black point-star tile: remap so the sparse stars actually")
+        lines.append("    // contribute detail instead of flattening the whole membrane")
+        lines.append(f"    texDetail = clamp(texDetail * {star_detail_scale} + {star_detail_bias}, 0.0, 1.0);")
+    lines.append("    // the multi-scale texture layers modulate the signature and add a lift")
+    lines.append("    // that is mostly GATED through the family's own pattern (v7) -- the")
+    lines.append("    // signature stays dominant and dark palettes keep their dark gaps")
+    lines.append(f"    mid = clamp(mid * mix(1.0, {tex_mm0} + {tex_mm1} * texDetail, atlasPoleW) + {tex_ma} * texDetail * ({F(tex_mid_gate)} + {F(1.0 - tex_mid_gate)} * clamp(mid, 0.0, 1.0)) * atlasPoleW, 0.0, 1.5);")
     lines.append("")
     lines.append(f"    // [layer:rim:{rim}]")
     lines.append("    // Silhouette / band lift so the membrane reads as a curved shell:")
@@ -2875,9 +2996,11 @@ def emit_shader(asg: dict) -> str:
     lines.append(f"    float midCover = clamp({mwc} * mid + {rwc} * rim, 0.0, 1.0);")
     lines.append("    rgb = mix(deepCol, rgb, midCover);")
     lines.append("    // [layer:tex:body] -- the sampled multi-scale detail also grades the")
-    lines.append("    // composited body (deep volume included), so the real texture reads")
-    lines.append("    // everywhere on the membrane, not only inside the mid signature.")
-    lines.append(f"    rgb *= {F(1.0 - 0.45 * tex_body)} + {F(1.10 * tex_body)} * texDetail;")
+    lines.append("    // composited body (deep volume included). v7: the grade is pole-faded")
+    lines.append("    // and partly gated through the pattern, so the family signature stays")
+    lines.append("    // dominant over the tile texture and the caps keep their clean body.")
+    lines.append(f"    float texBody = {F(1.0 - 0.45 * tex_body)} + {F(1.10 * tex_body)} * texDetail;")
+    lines.append(f"    rgb *= mix(1.0, texBody, atlasPoleW * ({F(tex_body_gate)} + {F(1.0 - tex_body_gate)} * clamp(pattern, 0.0, 1.0)));")
     lines.append(f"    rgb = satLift(rgb, {sat});")
     lines.append("    // Hue-preserving soft-clip on the hot crests: brightness saturates")
     lines.append("    // toward the palette's own bright tint (1 - exp(-k * hotStop * x)),")
@@ -2897,16 +3020,50 @@ def emit_shader(asg: dict) -> str:
     lines.append(f"    rgb = mix(rgb, rgb * (0.72 + 0.56 * rimDisp), clamp(rim, 0.0, 1.0) * {F(u(83, 0.10, 0.22))});")
     lines.append(f"    vec3 lineDisp = 0.5 + 0.5 * cos(vec3(0.6452, 0.8065, 1.0) * (rimLine * {line_disp_f} + baseUV.y * 0.31 + {line_disp_p}) * 6.2831853);")
     lines.append(f"    rgb = mix(rgb, hotStop * (0.62 + 0.50 * lineDisp), clamp(rimLine, 0.0, 1.0) * {line_disp_w});")
+    # v7 strobe-free emission drive: the emissive add must never oscillate
+    # faster than ~2 Hz (photosensitivity). Three sources could: (1) the
+    # strobe/gate multipliers baked into the LIGHTNING/HOLOGRID/HOLOPARALLAX
+    # signatures -- their composers define a strobe-free `emitMid` copy;
+    # (2) the flicker anim's 2-5 Hz domain jump, which rides `wuv` into mid
+    # AND flourish/grain -- those files drive the emission from smooth-domain
+    # terms only (texDetail stands in for a wuv-based mid); (3) the atlas
+    # domain itself (handled by the smooth `tuv` twin above).
+    mid_uses_wuv = any("wuv" in ln for ln in mid_lines)
+    jumped = anim == "flicker"
+    if family in STROBE_MID_FAMILIES and not (jumped and STROBE_MID_FAMILIES[family]):
+        emit_mid_term = "emitMid"
+    elif jumped:
+        emit_mid_term = "texDetail" if mid_uses_wuv else "mid"
+    else:
+        emit_mid_term = None  # pattern is already strobe-free: use it directly
     lines.append("    // [layer:emit:atlas_a]")
     lines.append("    // Emissive glow: atlas.a is an EMISSION mask (never transparency) --")
     lines.append("    // filament cores / cell edges / cracks / sparkles ADD a bright, hue-")
-    lines.append("    // preserving tint of the live palette (baseCol pushed toward white by a")
-    lines.append("    // bounded baked amount, so recolor-safe). Scaled by the family's own")
-    lines.append("    // pattern highlight and a slow day-quantized breath: the glow is spatial,")
-    lines.append("    // never a full-field strobe.")
-    lines.append(f"    vec3 emitCol = clamp(mix(baseCol, vec3(1.0), {emit_lift}), 0.0, 1.0);")
-    lines.append(f"    float emit = atlas.a * ({emit_e0} + {emit_e1} * clamp(pattern, 0.0, 1.0)) * (1.0 - {emit_breathe_depth} * (0.5 + 0.5 * sin(time * {emit_breathe_speed})));")
-    lines.append(f"    rgb += emit * {emit_gain} * emitCol;")
+    lines.append("    // preserving tint of the live palette. v7 wash guard: both the white-")
+    lines.append("    // mix and the emissive gain fall off with the palette's own luma, so")
+    lines.append("    // bright palettes (chrome/pastel) glow IN HUE instead of blowing to")
+    lines.append("    // white, while dark palettes keep their full glow. Scaled by the")
+    lines.append("    // family's own highlights and a slow day-quantized breath -- the glow")
+    lines.append("    // is spatial and strobe-free by construction.")
+    lines.append("    float baseLuma = dot(baseCol, vec3(0.299, 0.587, 0.114));")
+    lines.append(f"    vec3 emitCol = clamp(mix(baseCol, vec3(1.0), {emit_lift} * (1.0 - {emit_white_guard} * baseLuma)), 0.0, 1.0);")
+    if tile == STARFIELD_TILE:
+        lines.append("    // near-black point-star tile: boost the sparse emission mask so the")
+        lines.append("    // star families are not left flat")
+        lines.append(f"    float emitMask = clamp(atlas.a * {star_emit_scale}, 0.0, 1.0);")
+        emit_mask = "emitMask"
+    else:
+        emit_mask = "atlas.a"
+    if emit_mid_term is None:
+        emit_drive = "clamp(pattern, 0.0, 1.0)"
+    else:
+        v5_par_term = f" + {v5_sp_w} * v5Par" if is_v5 else ""
+        lines.append("    // strobe-free emission drive (see the v7 note above): only smooth,")
+        lines.append("    // non-gated terms may modulate the emissive add")
+        lines.append(f"    float emitDrive = clamp({dw} * deepPat + {mw} * {emit_mid_term} + {rw} * rim{v5_par_term}, 0.0, 1.0);")
+        emit_drive = "emitDrive"
+    lines.append(f"    float emit = {emit_mask} * ({emit_e0} + {emit_e1} * {emit_drive}) * (1.0 - {emit_breathe_depth} * (0.5 + 0.5 * sin(time * {emit_breathe_speed}))) * atlasPoleW;")
+    lines.append(f"    rgb += emit * {emit_gain} * (1.0 - {emit_luma_guard} * baseLuma) * emitCol;")
     if is_v5:
         lines.append("    // [layer:v5:softknee]")
         lines.append("    // v5 soft-knee highlight rolloff: channels over the knee compress")
@@ -2914,13 +3071,16 @@ def emit_shader(asg: dict) -> str:
         lines.append("    // exp(0) = 1), so hot crests keep hue separation right up to white.")
         lines.append(f"    vec3 v5Over = max(rgb - vec3({F(v5_knee)}), vec3(0.0));")
         lines.append(f"    rgb = min(rgb, vec3({F(v5_knee)})) + {F(1.0 - v5_knee)} * (1.0 - exp(-v5Over * {v5_knee_k}));")
-    lines.append("    // Presence alpha (family-tuned, v6 solidity lift): a firm membrane base")
-    lines.append("    // even between features, a solid floor wherever the pattern is present,")
-    lines.append("    // rising toward the ceiling on bright features, plus the deep volume's")
-    lines.append("    // Beer-Lambert opacity and the emissive glow (glowing parts read dense).")
-    lines.append("    // The vertexColor.a dissolve near whitelisted players still always wins.")
+    lines.append("    // Presence BODY alpha (family-tuned, v6 solidity lift): a firm membrane")
+    lines.append("    // base even between features, a solid floor wherever the pattern is")
+    lines.append("    // present, rising toward the ceiling on bright features, plus the deep")
+    lines.append("    // volume's Beer-Lambert opacity and the emissive glow. v7 dissolve")
+    lines.append("    // authority: EVERY alpha modifier (emission, back-face densify, ghost")
+    lines.append("    // thinning, dither) acts on this body value, which is clamped to the")
+    lines.append("    // family ceiling and only THEN multiplied by vertexColor.a -- the")
+    lines.append("    // whitelisted-player dissolve is always the final, outermost factor.")
     lines.append(f"    float presence = smoothstep(0.02, 0.30, pattern);")
-    lines.append(f"    float alpha = vertexColor.a * min({a_base} + {a_floor} * presence + {a_gain} * pattern + {a_vol} * (1.0 - deepTrans) + {emit_alpha} * emit, {a_max});")
+    lines.append(f"    float bodyAlpha = {a_base} + {a_floor} * presence + {a_gain} * pattern + {a_vol} * (1.0 - deepTrans) + {emit_alpha} * emit;")
     if is_v5:
         lines.append("    // [layer:v5:backface]")
         lines.append("    // v5 back-face densify/dim (gl_FrontFacing is a builtin, no uniform")
@@ -2928,19 +3088,24 @@ def emit_shader(asg: dict) -> str:
         lines.append("    // and gains alpha, so the bubble reads as a filled volume from within.")
         lines.append("    float v5Back = gl_FrontFacing ? 0.0 : 1.0;")
         lines.append(f"    rgb = mix(rgb, deepStop, v5Back * {v5_bf_dim});")
-        lines.append(f"    alpha = min(alpha * (1.0 + v5Back * {v5_bf_dens}), {a_max});")
+        lines.append(f"    bodyAlpha *= 1.0 + v5Back * {v5_bf_dens};")
         lines.append("    // [layer:v5:ghostalpha]")
         lines.append("    // v5 luminance-weighted ghost translucency: dark areas thin out while")
-        lines.append("    // bright features hold. Multiplicative on the existing alpha, so the")
-        lines.append("    // vertexColor.a dissolve near whitelisted players still always wins.")
+        lines.append("    // bright features hold. Multiplicative on the body alpha (pre-clamp,")
+        lines.append("    // pre-dissolve), so the vertexColor.a dissolve still always wins.")
         lines.append("    float v5Luma = dot(clamp(rgb, 0.0, 1.0), vec3(0.299, 0.587, 0.114));")
-        lines.append(f"    alpha *= {F(v5_ghost_lo)} + {F(1.0 - v5_ghost_lo)} * smoothstep(0.03, 0.42, v5Luma);")
+        lines.append(f"    bodyAlpha *= {F(v5_ghost_lo)} + {F(1.0 - v5_ghost_lo)} * smoothstep(0.03, 0.42, v5Luma);")
         lines.append("    // [layer:v5:dither]")
         lines.append("    // v5 blue-noise-style alpha dither (interleaved gradient noise on")
-        lines.append("    // gl_FragCoord) breaks translucency banding; multiplicative, so it is")
-        lines.append("    // scaled by the dissolve and alpha = 0 stays exactly 0.")
+        lines.append("    // gl_FragCoord) breaks translucency banding; multiplicative on the")
+        lines.append("    // body alpha, so bodyAlpha = 0 stays exactly 0 and the ceiling clamp")
+        lines.append("    // below still bounds it.")
         lines.append("    float v5Dither = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));")
-        lines.append(f"    alpha = clamp(alpha * (1.0 + (v5Dither - 0.5) * {v5_dither}), 0.0, 1.0);")
+        lines.append(f"    bodyAlpha *= 1.0 + (v5Dither - 0.5) * {v5_dither};")
+    lines.append("    // dissolve authority: clamp the body to the family ceiling FIRST, then")
+    lines.append("    // apply the whitelisted-player dissolve as the LAST alpha operation --")
+    lines.append("    // no path can push the final alpha above vertexColor.a * ceiling.")
+    lines.append(f"    float alpha = clamp(bodyAlpha, 0.0, {a_max}) * vertexColor.a;")
     lines.append("    vec4 color = vec4(clamp(rgb, 0.0, 1.0), alpha);")
     lines.append("    if (color.a < 0.01) {")
     lines.append("        discard;")
@@ -2951,11 +3116,11 @@ def emit_shader(asg: dict) -> str:
 
     source = "\n".join(lines) + "\n"
     n = source.count("\n")
-    # Upper bound raised 500 -> 540 for the v6 atlas layer: the header sampler
-    # declaration, the [layer:tex:*] sample/modulation block, the body grade
-    # and the [layer:emit:atlas_a] glow block add ~35 lines to EVERY file.
-    if not 110 <= n <= 540:
-        sys.exit(f"fx_{effect_id:03d}: emitted {n} lines, outside the 110..540 sanity bounds")
+    # Upper bound raised 540 -> 580 for the v7 quality pass: the atlas pole
+    # fade, wash-guard emission block, strobe-free emission drive and the
+    # body-alpha dissolve restructure add ~15-25 lines to EVERY file.
+    if not 110 <= n <= 580:
+        sys.exit(f"fx_{effect_id:03d}: emitted {n} lines, outside the 110..580 sanity bounds")
     return source
 
 
