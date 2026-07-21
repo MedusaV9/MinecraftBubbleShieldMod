@@ -3,8 +3,8 @@
 
 Running `python3 tools/gen_textures.py` (re)writes
 `src/main/resources/assets/bubbleshield/textures/effect/surface_atlas.png`
-(+ its `.png.mcmeta`). The atlas is a 4x4 grid of 16 SEAMLESS 512x512 tiles
-(2048x2048 total, RGBA). Every tile is tileable (wraps with no seam) so the
+(+ its `.png.mcmeta`). The atlas is an 8x4 grid of 32 SEAMLESS 512x512 tiles
+(4096x2048 total, RGBA). Every tile is tileable (wraps with no seam) so the
 bubble surface shaders can scroll/repeat it freely.
 
 Channel packing per texel (so one `texture()` fetch gives the shader multi-scale
@@ -21,9 +21,16 @@ mapping is documented in TILES below and mirrored by the surface shader
 generator (tools/gen_surface_shaders.py).
 
 Seamlessness: all noise is built in the Fourier domain (FFT of white noise,
-radially band-limited, inverse-FFT) which is periodic by construction, and all
-cellular/lattice fields use wrapped (toroidal) distances, so every tile tiles
-perfectly. Output is byte-stable (fixed seeds, fixed quantization).
+radially band-limited, inverse-FFT) which is periodic by construction, all
+cellular/lattice fields use wrapped (toroidal) distances, and every polar /
+medallion construction is fully contained inside cell-aligned sub-cells, so
+every tile tiles perfectly. Output is byte-stable (fixed seeds, fixed
+quantization).
+
+PNG size control: all channels are POSTERIZED (R to 128 levels, G to 64,
+B to 32, A to 24) before packing -- zlib then compresses the doubled tile
+count back into the same ballpark as the old 16-tile atlas. The steps stay
+invisible after shader tinting (multi-layer blends dither them out).
 """
 
 from __future__ import annotations
@@ -40,28 +47,50 @@ ATLAS_PATH = OUT_DIR / "surface_atlas.png"
 MCMETA_PATH = OUT_DIR / "surface_atlas.png.mcmeta"
 
 TILE = 512
-GRID = 4  # 4x4 = 16 tiles
-ATLAS = TILE * GRID
+GRID_W = 8  # columns
+GRID_H = 4  # rows -> 8x4 = 32 tiles
+ATLAS_W = TILE * GRID_W
+ATLAS_H = TILE * GRID_H
 
 # Tile index -> technique name (mirrored in gen_surface_shaders.py ATLAS_TILES).
+# Indices 0..15 keep the original 16 techniques (byte-compatible content, new
+# atlas POSITIONS); 16..31 are the expansion set, each a genuinely different
+# construction so no two SurfaceTemplate families need to share a look.
 TILES = [
-    "fbm_turbulence",   # 0
-    "worley_cells",     # 1
-    "cracked_glass",    # 2
-    "hex_lattice",      # 3
-    "caustic_web",      # 4
-    "filaments",        # 5
-    "scales",           # 6
-    "circuit",          # 7
-    "starfield",        # 8
-    "chrome",           # 9
-    "marble_ink",       # 10
-    "honeycomb",        # 11
-    "runes",            # 12
-    "ridged",           # 13
-    "foam",             # 14
-    "nebula",           # 15
+    "fbm_turbulence",     # 0
+    "worley_cells",       # 1
+    "cracked_glass",      # 2
+    "hex_lattice",        # 3
+    "caustic_web",        # 4
+    "filaments",          # 5
+    "scales",             # 6
+    "circuit",            # 7
+    "starfield",          # 8
+    "chrome",             # 9
+    "marble_ink",         # 10
+    "honeycomb",          # 11
+    "runes",              # 12
+    "ridged",             # 13
+    "foam",               # 14
+    "nebula",             # 15
+    "lightning_web",      # 16 jagged branching bolt web, hot cores
+    "plasma_globules",    # 17 big soft blobs with glowing nuclei
+    "feather_barbs",      # 18 diagonal barb strokes off vertical shafts
+    "coral",              # 19 reaction-diffusion labyrinth lobes
+    "basalt_columns",     # 20 large flat polygonal columns, dark seams
+    "knit_weave",         # 21 over-under woven yarn rows
+    "damascus_folds",     # 22 folded-metal flowing bands
+    "mandala",            # 23 radial petal medallions (2x2 per tile)
+    "glyph_ring",         # 24 annular tick-glyph rings (4x4 per tile)
+    "solar_granulation",  # 25 convection granules + bright faculae specks
+    "ice_dendrites",      # 26 thin sharp branching frost spines
+    "smoke_wisps",        # 27 soft curling wisp strands
+    "riveted_plates",     # 28 brick-offset metal plates + rivet dots
+    "iris_eye",           # 29 radial-fiber iris rings (2x2 per tile)
+    "topo_contours",      # 30 nested thin contour lines of a height field
+    "dune_ripples",       # 31 long parallel wavy sand crests
 ]
+assert len(TILES) == GRID_W * GRID_H
 
 
 def _rng(seed: int) -> np.random.Generator:
@@ -95,6 +124,22 @@ def fft_noise(size: int, freq: float, seed: int) -> np.ndarray:
     band[0, 0] = 0.0
     filtered = np.fft.ifft2(f * band).real
     return _norm(filtered)
+
+
+def fft_noise_aniso(size: int, fx_count: float, fy_count: float, seed: int) -> np.ndarray:
+    """Anisotropic periodic noise: an elliptical Fourier band with ~fx_count
+    features across x and ~fy_count across y. Seamless by construction."""
+    rng = _rng(seed)
+    white = rng.standard_normal((size, size))
+    f = np.fft.fft2(white)
+    fy = np.fft.fftfreq(size) * size
+    fx = np.fft.fftfreq(size) * size
+    ry = fy[:, None] / max(fy_count, 1e-6)
+    rx = fx[None, :] / max(fx_count, 1e-6)
+    radius = np.sqrt(rx * rx + ry * ry)
+    band = np.exp(-((radius - 1.0) ** 2) / (2.0 * 0.35 * 0.35))
+    band[0, 0] = 0.0
+    return _norm(np.fft.ifft2(f * band).real)
 
 
 def fbm(size: int, base_freq: float, octaves: int, seed: int, ridged: bool = False) -> np.ndarray:
@@ -149,13 +194,19 @@ def worley(size: int, count: int, seed: int, which: str = "f1"):
     return _norm(f1)
 
 
+def _posterize(a: np.ndarray, levels: int) -> np.ndarray:
+    """Quantizes a [0,1] field to `levels` values -- big zlib wins on the fine
+    grain and emission channels with no visible banding after shader tinting."""
+    return np.round(np.clip(a, 0.0, 1.0) * (levels - 1)) / (levels - 1)
+
+
 def _pack(coarse, mid, fine, emis) -> np.ndarray:
-    """Stack 4 [0,1] fields into an HxWx4 uint8 tile."""
+    """Stack 4 [0,1] fields into an HxWx4 uint8 tile (G/B/A posterized)."""
     out = np.zeros((TILE, TILE, 4), dtype=np.float64)
-    out[..., 0] = coarse
-    out[..., 1] = mid
-    out[..., 2] = fine
-    out[..., 3] = emis
+    out[..., 0] = _posterize(coarse, 128)
+    out[..., 1] = _posterize(mid, 64)
+    out[..., 2] = _posterize(fine, 32)
+    out[..., 3] = _posterize(emis, 24)
     return np.clip(out * 255.0 + 0.5, 0, 255).astype(np.uint8)
 
 
@@ -266,12 +317,157 @@ def build_tile(name: str, seed: int) -> np.ndarray:
         mid = b
         fine = fbm(s, 16, 4, seed + 27)
         emis = np.clip((a * b - 0.35) * 3.0, 0, 1) ** 1.2
+    # --- expansion tiles (16..31) ---
+    elif name == "lightning_web":
+        r = fbm(s, 7, 4, seed, ridged=True)
+        jag = fbm(s, 42, 2, seed + 30)
+        web = np.clip(((r + 0.18 * (jag - 0.5)) - 0.78) * 9.0, 0, 1)
+        r2 = fbm(s, 14, 3, seed + 31, ridged=True)
+        web2 = np.clip((r2 - 0.80) * 8.0, 0, 1)
+        coarse = _norm(r * 0.75 + 0.25 * fbm(s, 3, 3, seed + 32))
+        mid = np.clip(web + web2 * 0.6, 0, 1)
+        fine = web2
+        emis = np.clip(web ** 0.7 + 0.5 * web2, 0, 1)
+    elif name == "plasma_globules":
+        f1 = worley(s, 14, seed, "f1")
+        blobs = (1.0 - f1) ** 2.2
+        small = (1.0 - worley(s, 34, seed + 33, "f1")) ** 2.6
+        cores = _blob_cores(s, 14, 16.0, seed)
+        coarse = _norm(blobs)
+        mid = _norm(small)
+        fine = fbm(s, 12, 3, seed + 34) * 0.6
+        emis = np.clip(cores + 0.35 * np.clip(blobs - 0.55, 0, 1) * 2.0, 0, 1)
+    elif name == "feather_barbs":
+        ys, xs = np.mgrid[0:s, 0:s].astype(np.float64)
+        u = xs / s
+        v = ys / s
+        wob = fbm(s, 4, 3, seed + 35)
+        shaft = np.abs(np.sin(np.pi * (u * 6 + 0.15 * (wob - 0.5)))) ** 14
+        barb1 = np.abs(np.sin(2 * np.pi * (u * 10 + v * 24) + 4.0 * wob))
+        barb2 = np.abs(np.sin(2 * np.pi * (u * 10 - v * 24) + 4.0 * wob + 1.7))
+        barbs = _norm(np.maximum(barb1, barb2) ** 3)
+        coarse = _norm(0.6 * wob + 0.4 * barbs)
+        mid = barbs
+        fine = fbm(s, 26, 2, seed + 36) * 0.4
+        emis = np.clip(shaft + np.clip(barbs - 0.85, 0, 1) * 2.0, 0, 1) * 0.8
+    elif name == "coral":
+        n = fft_noise(s, 22, seed)
+        lab = _smooth01((n - 0.5) / 0.06)
+        lobes = fbm(s, 5, 3, seed + 37)
+        edge = 4.0 * lab * (1.0 - lab)
+        coarse = _norm(lobes)
+        mid = lab
+        fine = fbm(s, 30, 2, seed + 38) * 0.4
+        emis = _norm(edge) ** 1.4 * 0.85
+    elif name == "basalt_columns":
+        fill = worley(s, 18, seed, "id")
+        edge = worley(s, 18, seed, "f2mf1")
+        seam = _thin(edge, 0.05)
+        coarse = _norm(fill)
+        mid = 1.0 - _thin(edge, 0.20)
+        fine = fbm(s, 20, 3, seed + 39) * 0.35
+        emis = seam * 0.75
+    elif name == "knit_weave":
+        ys, xs = np.mgrid[0:s, 0:s].astype(np.float64)
+        u = xs / s
+        v = ys / s
+        row = 0.5 + 0.5 * np.sin(2 * np.pi * (v * 14 + 0.30 * np.sin(2 * np.pi * u * 14)))
+        col = 0.5 + 0.5 * np.sin(2 * np.pi * (u * 14 + 0.30 * np.sin(2 * np.pi * v * 14)))
+        checker = 0.5 + 0.5 * np.sin(2 * np.pi * u * 7) * np.sin(2 * np.pi * v * 7)
+        weave = np.where(checker > 0.5, row, col)
+        coarse = _norm(weave)
+        mid = _norm(row * 0.5 + col * 0.5)
+        fine = fbm(s, 32, 2, seed + 40) * 0.5
+        emis = np.clip(weave - 0.82, 0, 1) * 4.0 * 0.7
+    elif name == "damascus_folds":
+        base = fbm(s, 3, 4, seed)
+        ys = np.mgrid[0:s, 0:s][0].astype(np.float64) / s
+        folds = np.abs(np.sin(2 * np.pi * (ys * 7 + 3.5 * base)))
+        folds2 = np.abs(np.sin(2 * np.pi * (ys * 15 + 5.0 * base) + 1.3))
+        coarse = _norm(folds)
+        mid = _norm(folds2)
+        fine = fft_noise_aniso(s, 60, 8, seed + 41) * 0.5
+        emis = np.clip(folds - 0.86, 0, 1) * 6.0 * 0.8
+    elif name == "mandala":
+        med, rings, glow = _medallions(s, 2, seed, petals=True)
+        coarse = med
+        mid = rings
+        fine = fbm(s, 24, 2, seed + 42) * 0.3
+        emis = glow
+    elif name == "glyph_ring":
+        med, rings, glow = _glyph_rings(s, 4, seed)
+        coarse = fbm(s, 5, 3, seed + 43) * 0.35
+        mid = med
+        fine = rings
+        emis = glow
+    elif name == "solar_granulation":
+        f1 = worley(s, 380, seed, "f1")
+        lanes = worley(s, 380, seed, "f2mf1")
+        gran = (1.0 - f1) ** 1.6
+        fac = np.clip(gran - 0.90, 0, 1) * 10.0
+        coarse = _norm((1.0 - worley(s, 60, seed + 44, "f1")) ** 1.4)
+        mid = _norm(gran)
+        fine = _thin(lanes, 0.25)
+        emis = np.clip(fac + 0.25 * np.clip(gran - 0.75, 0, 1), 0, 1)
+    elif name == "ice_dendrites":
+        r = fbm(s, 8, 5, seed, ridged=True)
+        den = np.clip((r - 0.74) * 8.0, 0, 1)
+        r2 = fbm(s, 16, 4, seed + 45, ridged=True).T  # transpose: crossing set
+        den2 = np.clip((r2 - 0.78) * 8.0, 0, 1)
+        coarse = _norm(fbm(s, 4, 4, seed + 46) * 0.5 + 0.3 * r)
+        mid = np.clip(den + 0.7 * den2, 0, 1)
+        fine = den2
+        emis = np.clip(den ** 0.8 + 0.5 * den2, 0, 1) * 0.9
+    elif name == "smoke_wisps":
+        base = fbm(s, 3, 5, seed)
+        ys = np.mgrid[0:s, 0:s][0].astype(np.float64) / s
+        wisp = 0.5 + 0.5 * np.sin(2 * np.pi * (ys * 3 + 3.2 * base))
+        strand = _norm(wisp * fft_noise_aniso(s, 5, 26, seed + 47))
+        coarse = _norm(base)
+        mid = _norm(wisp) * 0.85
+        fine = strand
+        emis = np.clip(strand - 0.72, 0, 1) * 2.2 * 0.5
+    elif name == "riveted_plates":
+        plates, bevel, rivets = _plates(s, seed)
+        coarse = plates
+        mid = bevel
+        fine = fft_noise_aniso(s, 70, 6, seed + 48) * 0.5
+        emis = np.clip(rivets + 0.3 * np.clip(bevel - 0.8, 0, 1) * 3.0, 0, 1)
+    elif name == "iris_eye":
+        fib, rings, glow = _medallions(s, 2, seed + 49, petals=False)
+        coarse = rings
+        mid = fib
+        fine = fbm(s, 30, 2, seed + 50) * 0.4
+        emis = glow
+    elif name == "topo_contours":
+        h = fbm(s, 4, 4, seed)
+        c1 = 1.0 - np.clip(np.abs(np.mod(h * 12.0, 1.0) - 0.5) / 0.07, 0, 1)
+        c2 = 1.0 - np.clip(np.abs(np.mod(h * 36.0, 1.0) - 0.5) / 0.10, 0, 1)
+        coarse = h
+        mid = _norm(c1)
+        fine = _norm(c2) * 0.7
+        emis = _norm(c1) ** 1.3 * 0.85
+    elif name == "dune_ripples":
+        base = fbm(s, 3, 3, seed)
+        ys = np.mgrid[0:s, 0:s][0].astype(np.float64) / s
+        d = 0.5 + 0.5 * np.sin(2 * np.pi * (ys * 12 + 2.0 * base))
+        crest = d ** 3.5
+        coarse = _norm(fft_noise_aniso(s, 3, 9, seed + 51))
+        mid = _norm(crest)
+        fine = fbm(s, 40, 2, seed + 52) * 0.5
+        emis = np.clip(crest - 0.72, 0, 1) * 2.5 * 0.6
     else:
         raise ValueError(name)
     return _pack(_norm(coarse), _norm(mid), _norm(fine), np.clip(emis, 0, 1))
 
 
 # --- structured helpers (all toroidal / seamless) ---
+
+def _smooth01(x: np.ndarray) -> np.ndarray:
+    """smoothstep(-1, 1, x) style soft threshold; input any range."""
+    t = np.clip(0.5 + 0.5 * x, 0.0, 1.0)
+    return t * t * (3.0 - 2.0 * t)
+
 
 def _hex(size: int, cells: float):
     """Hex lattice: returns (cell-fill, edge-distance). Seamless via integer freq."""
@@ -377,6 +573,117 @@ def _runes(size: int, seed: int):
     return np.clip(field, 0, 1)
 
 
+def _blob_cores(size: int, count: int, sigma: float, seed: int) -> np.ndarray:
+    """Sparse toroidal Gaussian glow cores (bigger, softer than star points)."""
+    rng = _rng(seed + 71)
+    cores = np.zeros((size, size))
+    ys, xs = np.mgrid[0:size, 0:size].astype(np.float64)
+    for _ in range(count):
+        py = rng.integers(0, size)
+        px = rng.integers(0, size)
+        b = 0.55 + 0.45 * rng.random()
+        dy = np.abs(ys - py); dy = np.minimum(dy, size - dy)
+        dx = np.abs(xs - px); dx = np.minimum(dx, size - dx)
+        cores += b * np.exp(-(dx * dx + dy * dy) / (2.0 * sigma * sigma))
+    return np.clip(cores, 0, 1)
+
+
+def _medallions(size: int, per_axis: int, seed: int, petals: bool):
+    """Cell-aligned radial medallions (seamless because each is fully contained
+    in its sub-cell). petals=True: mandala petal wheels; False: iris fibers."""
+    rng = _rng(seed + 81)
+    cell = size // per_axis
+    med = np.zeros((size, size))
+    rings = np.zeros((size, size))
+    glow = np.zeros((size, size))
+    yy, xx = np.mgrid[0:cell, 0:cell].astype(np.float64)
+    cy = cx = (cell - 1) / 2.0
+    dy = (yy - cy) / (cell * 0.5)
+    dx = (xx - cx) / (cell * 0.5)
+    r = np.sqrt(dx * dx + dy * dy)
+    theta = np.arctan2(dy, dx)
+    for gy in range(per_axis):
+        for gx in range(per_axis):
+            k = int(rng.integers(6, 13))
+            ring_n = float(rng.integers(5, 9))
+            ph = rng.random() * 2 * np.pi
+            envelope = np.clip(1.0 - r, 0, 1) ** 0.5
+            if petals:
+                pet = np.abs(np.cos(theta * k + ph)) ** 3
+                ring = np.abs(np.sin(r * np.pi * ring_n)) ** 5
+                m = _norm(pet * envelope)
+                rg = _norm(ring * envelope)
+                gl = np.clip(pet * ring * envelope * 2.0 - 0.35, 0, 1)
+            else:
+                fib = np.abs(np.sin(theta * k * 2 + ph + 2.5 * r)) ** 2
+                band = _smooth01((r - 0.18) / 0.05) * _smooth01((0.85 - r) / 0.05)
+                limbus = np.exp(-((r - 0.82) ** 2) / (2 * 0.03 ** 2))
+                m = _norm(fib * band)
+                rg = _norm(band * (0.4 + 0.6 * np.abs(np.sin(r * np.pi * ring_n))))
+                gl = np.clip(fib * band - 0.45, 0, 1) * 1.6 + limbus * 0.5
+            med[gy * cell:(gy + 1) * cell, gx * cell:(gx + 1) * cell] = m
+            rings[gy * cell:(gy + 1) * cell, gx * cell:(gx + 1) * cell] = rg
+            glow[gy * cell:(gy + 1) * cell, gx * cell:(gx + 1) * cell] = np.clip(gl, 0, 1)
+    return med, rings, glow
+
+
+def _glyph_rings(size: int, per_axis: int, seed: int):
+    """Cell-aligned annular tick-glyph rings (runic clock faces)."""
+    rng = _rng(seed + 91)
+    cell = size // per_axis
+    med = np.zeros((size, size))
+    rings = np.zeros((size, size))
+    glow = np.zeros((size, size))
+    yy, xx = np.mgrid[0:cell, 0:cell].astype(np.float64)
+    cy = cx = (cell - 1) / 2.0
+    dy = (yy - cy) / (cell * 0.5)
+    dx = (xx - cx) / (cell * 0.5)
+    r = np.sqrt(dx * dx + dy * dy)
+    theta = np.arctan2(dy, dx)
+    for gy in range(per_axis):
+        for gx in range(per_axis):
+            n_ticks = int(rng.integers(8, 17))
+            r0 = 0.55 + 0.15 * rng.random()
+            ph = rng.random() * 2 * np.pi
+            ring = np.exp(-((r - r0) ** 2) / (2 * 0.035 ** 2))
+            ring_in = np.exp(-((r - r0 * 0.55) ** 2) / (2 * 0.025 ** 2))
+            ticks = (np.abs(np.sin(theta * n_ticks * 0.5 + ph)) ** 12) \
+                * _smooth01((r - (r0 - 0.14)) / 0.04) * _smooth01(((r0 + 0.14) - r) / 0.04)
+            m = np.clip(ring + 0.7 * ring_in + ticks, 0, 1)
+            med[gy * cell:(gy + 1) * cell, gx * cell:(gx + 1) * cell] = m
+            rings[gy * cell:(gy + 1) * cell, gx * cell:(gx + 1) * cell] = _norm(ring + ring_in)
+            glow[gy * cell:(gy + 1) * cell, gx * cell:(gx + 1) * cell] = np.clip(ring + ticks, 0, 1) * 0.9
+    return med, rings, glow
+
+
+def _plates(size: int, seed: int):
+    """Brick-offset rectangular plates: (per-plate fill, bevel, rivet dots)."""
+    rng = _rng(seed + 61)
+    ph = size // 4   # plate height (4 rows)
+    pw = size // 2   # plate width (2 cols, brick offset)
+    plates = np.zeros((size, size))
+    bevel = np.zeros((size, size))
+    rivets = np.zeros((size, size))
+    ys, xs = np.mgrid[0:size, 0:size].astype(np.float64)
+    row = np.floor(ys / ph)
+    off = np.mod(row, 2) * (pw // 2)
+    lx = np.mod(xs + off, pw)
+    ly = np.mod(ys, ph)
+    # per-plate hash fill (wrapped ids)
+    idx = (np.floor((xs + off) / pw).astype(np.int64) % 2) + 2 * (row.astype(np.int64) % 4)
+    vals = rng.random(8)
+    plates = vals[idx]
+    edge = np.minimum(np.minimum(lx, pw - lx), np.minimum(ly, ph - ly))
+    bevel = np.clip(edge / 10.0, 0, 1)
+    # rivet dots along plate borders every 64 px
+    rd = 3.2
+    for c, along, across in ((lx, ly, ph), (ly, lx, pw)):
+        near = np.minimum(c, (pw if c is lx else ph) - c)
+        dot_phase = np.abs(np.mod(along + 32, 64) - 32)
+        rivets += np.exp(-((near - 8.0) ** 2 + dot_phase ** 2) / (2 * rd * rd))
+    return _norm(plates), bevel, np.clip(rivets, 0, 1)
+
+
 def _write_png(path: Path, rgba: np.ndarray) -> None:
     h, w, _ = rgba.shape
     raw = bytearray()
@@ -396,16 +703,17 @@ def _write_png(path: Path, rgba: np.ndarray) -> None:
 
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    atlas = np.zeros((ATLAS, ATLAS, 4), dtype=np.uint8)
+    atlas = np.zeros((ATLAS_H, ATLAS_W, 4), dtype=np.uint8)
     for i, name in enumerate(TILES):
-        gy = (i // GRID) * TILE
-        gx = (i % GRID) * TILE
+        gy = (i // GRID_W) * TILE
+        gx = (i % GRID_W) * TILE
         tile = build_tile(name, seed=1000 + i * 17)
         atlas[gy:gy + TILE, gx:gx + TILE] = tile
     _write_png(ATLAS_PATH, atlas)
     MCMETA_PATH.write_text('{\n  "texture": {\n    "blur": true,\n    "clamp": false\n  }\n}\n', encoding="utf-8")
     size_mb = ATLAS_PATH.stat().st_size / (1024 * 1024)
-    print(f"wrote {ATLAS_PATH} ({ATLAS}x{ATLAS} RGBA, {size_mb:.1f} MB), {len(TILES)} tiles")
+    print(f"wrote {ATLAS_PATH} ({ATLAS_W}x{ATLAS_H} RGBA, {size_mb:.1f} MB), {len(TILES)} tiles "
+          f"({GRID_W}x{GRID_H} grid of {TILE}px)")
     print(f"wrote {MCMETA_PATH}")
 
 

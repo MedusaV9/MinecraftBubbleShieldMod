@@ -114,7 +114,7 @@ GPU-less CI VM cannot run):
 * the atlas itself must ship at
   src/main/resources/assets/bubbleshield/textures/effect/surface_atlas.png as
   a valid PNG (8-byte signature, 13-byte IHDR) with the expected geometry
-  (2048x2048, 8-bit, color-type 6 = truecolor+alpha RGBA), and its
+  (4096x2048, 8-bit, color-type 6 = truecolor+alpha RGBA), and its
   .png.mcmeta sibling must be valid JSON.
 
 The full scan at COUNT=840 is 841 files under bubble/ (840 fx_*.fsh +
@@ -173,8 +173,12 @@ MOJ_IMPORT = re.compile(r"^#moj_import <minecraft:([a-z_]+)\.glsl>\s*$")
 COUNT_RE = re.compile(r"^\s*public static final int COUNT = (\d+);", re.MULTILINE)
 FX_NAME = re.compile(r"^fx_(\d{3})\.fsh$")
 SFX_NAME = re.compile(r"^sfx_(\d{3})\.fsh$")
-LAYER_MARKERS = ("// [layer:deep:", "// [layer:mid:", "// [layer:rim:")
-STACK_KEYS = ("family", "warp", "deep", "rim", "anim")
+LAYER_MARKERS = ("// [layer:deep:", "// [layer:mid:", "// [layer:rim:", "// [layer:motif:")
+STACK_KEYS = ("family", "warp", "deep", "rim", "anim", "motif", "motifN", "env")
+# v9 per-EFFECT motif fingerprint: within one family, no two ids may share
+# the same (motif class, element count, envelope) triple -- the structural
+# per-id distinctness guarantee beyond the palette.
+MOTIF_KEYS = ("motif", "motifN", "env")
 SCREEN_MARKER = re.compile(r"^// \[screen:([a-z0-9]+):([a-z0-9]+):([a-z0-9]+):([a-z0-9]+)\]$", re.MULTILINE)
 SCREEN_STACK_KEYS = ("family", "variant", "motion", "overlay")
 # The one std140 config block every generated sfx shader must declare, with this
@@ -197,7 +201,7 @@ SURFACE_ATLAS_PNG = REPO_ROOT / "src/main/resources/assets/bubbleshield/textures
 SURFACE_ATLAS_MCMETA = SURFACE_ATLAS_PNG.with_name(SURFACE_ATLAS_PNG.name + ".mcmeta")
 # The Identifier path ShieldPipelines must bind via withTexture("Sampler0", ...).
 SURFACE_ATLAS_ID_PATH = "textures/effect/surface_atlas.png"
-SURFACE_ATLAS_SIZE = (2048, 2048)  # 4x4 grid of 512px tiles
+SURFACE_ATLAS_SIZE = (4096, 2048)  # 8x4 grid of 512px tiles (32 tiles)
 SURFACE_ATLAS_BIT_DEPTH = 8
 SURFACE_ATLAS_COLOR_TYPE = 6  # truecolor + alpha (RGBA); A is the emission mask
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
@@ -461,8 +465,28 @@ def check_generated_invariants(shaders: list[Path], count: int, skip_fx: bool) -
         else:
             stacks[stack] = effect_id
 
+    # v9 per-EFFECT motif fingerprint distinctness: the (motif, motifN, env)
+    # triple must be present on every entry and pairwise distinct WITHIN each
+    # family -- two effects of one family must differ in structure AND
+    # motion, not just hue.
+    family_motifs: dict[tuple, str] = {}
+    for effect_id, entry in sorted(manifest.items()):
+        triple = tuple(entry.get(key) for key in MOTIF_KEYS)
+        if any(value is None for value in triple):
+            errors.append(f"manifest id {effect_id} is missing a motif fingerprint key "
+                          f"(expected all of {list(MOTIF_KEYS)})")
+            continue
+        fam_key = (entry.get("family"),) + triple
+        if fam_key in family_motifs:
+            errors.append(f"manifest ids {family_motifs[fam_key]} and {effect_id} (family "
+                          f"{entry.get('family')}) share the same motif fingerprint "
+                          f"{dict(zip(MOTIF_KEYS, triple))}")
+        else:
+            family_motifs[fam_key] = effect_id
+
     print(f"OK    generated-shader invariants ({len(fx_files)} fx files, "
-          f"{len(manifest)} manifest entries, {len(stacks)} distinct stacks)")
+          f"{len(manifest)} manifest entries, {len(stacks)} distinct stacks, "
+          f"{len(family_motifs)} per-family-distinct motif fingerprints)")
     return errors
 
 
@@ -750,7 +774,7 @@ def check_texture_binding(shaders: list[Path], beam_names: tuple[str, ...]) -> l
                               f"SceneCopy.{constant}, ...)' binding")
 
     # 3. The shipped atlas: a structurally valid PNG with the exact geometry
-    # the shaders' 4x4 tile math assumes, plus a valid-JSON .mcmeta sibling.
+    # the shaders' 8x4 tile math assumes, plus a valid-JSON .mcmeta sibling.
     atlas_geometry = None
     if not SURFACE_ATLAS_PNG.is_file():
         errors.append(f"surface atlas is missing: {SURFACE_ATLAS_PNG.relative_to(REPO_ROOT)} "
@@ -765,7 +789,7 @@ def check_texture_binding(shaders: list[Path], beam_names: tuple[str, ...]) -> l
             if (width, height) != SURFACE_ATLAS_SIZE:
                 errors.append(f"{SURFACE_ATLAS_PNG.name}: {width}x{height}, expected "
                               f"{SURFACE_ATLAS_SIZE[0]}x{SURFACE_ATLAS_SIZE[1]} "
-                              "(the shaders' 4x4 tile UV math assumes this geometry)")
+                              "(the shaders' 8x4 tile UV math assumes this geometry)")
             if bit_depth != SURFACE_ATLAS_BIT_DEPTH or color_type != SURFACE_ATLAS_COLOR_TYPE:
                 errors.append(f"{SURFACE_ATLAS_PNG.name}: bit depth {bit_depth} / color type {color_type}, "
                               f"expected {SURFACE_ATLAS_BIT_DEPTH} / {SURFACE_ATLAS_COLOR_TYPE} "

@@ -165,14 +165,14 @@ Design (see /tmp/shader_plan.md sections 1, 2, 4.1 and AGENTS.md):
 * v6 sampled-texture layer (EVERY file; byte-stability of older rounds is
   deliberately given up this round): each shader samples ONE tile of the
   shipped surface atlas (assets/bubbleshield/textures/effect/surface_atlas.png,
-  2048x2048 RGBA, a 4x4 grid of 16 SEAMLESS 512px tiles; identifier
+  4096x2048 RGBA, an 8x4 grid of 32 SEAMLESS 512px tiles; identifier
   bubbleshield:textures/effect/surface_atlas.png, LINEAR + REPEAT via its
   .mcmeta) through `uniform sampler2D Sampler0`, declared right after the
   moj_imports and bound by ShieldPipelines' SAMPLER0 bind group. Channel
   contract per texel: R = coarse structural layer, G = mid-scale detail,
   B = fine grain, A = EMISSION MASK (glow, NOT transparency). All channels
   are neutral grayscale -- every hue still comes from vertexColor (recolor-
-  safe). The tile is picked per FAMILY (FAMILY_TILE, thematic; all 16 tiles
+  safe). The tile is picked per FAMILY (FAMILY_TILE, thematic; all 32 tiles
   are used) and sampled from the family's animated/warped `wuv` domain with
   an integer tile-repeat multiplier (u-wrap- and day-wrap-safe: wuv's drift
   is already quantized to integer lattice periods per day and texMul is an
@@ -259,7 +259,7 @@ Design (see /tmp/shader_plan.md sections 1, 2, 4.1 and AGENTS.md):
     partly pattern-gated -- dark palettes read dark, sparse signatures
     (lightning bolts, embers) stay dominant over the tile texture.
   - STARFIELD TILE REMAP: the near-black point-star tile (index 8) gains a
-    texDetail scale+bias and an emission-mask boost for its four families;
+    texDetail scale+bias and an emission-mask boost for its families;
     GRAVLENS additionally gets a raised presence floor, a near-disabled
     ghost thinning (V5_GHOST_RANGES) and a stronger ring/halo/body so it
     reads as solid as its star siblings.
@@ -305,6 +305,36 @@ Design (see /tmp/shader_plan.md sections 1, 2, 4.1 and AGENTS.md):
   - Photosensitivity: the flow crossfade and all lighting terms move on
     slow smooth domains; the emission drive is unchanged (slow breath, no
     >2 Hz full-field oscillation anywhere).
+
+* v9 UNIQUENESS + refraction-consistency pass (EVERY file):
+  - EXPANDED ATLAS: the atlas doubles to 32 tiles (8x4 grid of 512px tiles,
+    4096x2048; tools/gen_textures.py) and FAMILY_TILE is remapped so no two
+    families of the same VISUAL CATEGORY share a tile any more (max two
+    families per tile, always cross-category -- FAMILY_CATEGORY, asserted).
+    Every family also gets its OWN baked texture-drift vector (direction
+    golden-angle-spread by family index, day-quantized speed) so the tile
+    detail of two co-tiled families moves differently.
+  - PER-EFFECT MOTIF FINGERPRINT ([layer:motif:<class>:<envelope>]): every
+    id carries one identifiable moving bright element -- Lissajous tracer
+    dots (coprime integer day-frequencies + per-id phase), an N-fold
+    rotating sigil ring on a latitude band, longitude/latitude scan bars
+    (per-id count + direction), circulating orbit nodes on bobbing
+    latitudes, or a pulsing forward-point core with an expanding ping ring
+    -- modulated by a per-id emissive envelope (breath / double-pulse /
+    heartbeat / sparkle-gate, ALL <= 2 Hz and day-quantized). The (motif
+    class, element count, envelope) triple is probed UNIQUE per family
+    (build_assignments), recorded in the manifest and re-asserted by
+    tools/validate_shaders.py -- two effects of one family now differ in
+    structure AND motion, not just hue. Seam-safe (chordal longitude
+    distances / integer-N longitude terms), pole-safe (latitude envelopes),
+    recolor-safe (motif color = hotStop/secCol mix).
+  - CONSISTENT REFRACTION: the per-family refraction minima are raised
+    across the board (default 0.45 -> 0.90 base; glassy 1.25+; GRAVLENS
+    still highest) AND the screen-space offset gains an atlas-slope term
+    (refrOff = (viewN.xy + atlasSlope * slopeK) * amp): at the sphere
+    center the view-space normal's xy vanishes, which is exactly why flat
+    families (holoparallax) never visibly refracted -- the texture-slope
+    term keeps the backdrop wobbling there like real relief glass.
 
 * Compile safety: conservative GLSL 330 subset only -- const-bounded for
   loops (fbm <= 6 octaves, parallax <= 4 taps, voronoi 3x3/5x5), no while, no
@@ -369,6 +399,40 @@ ANIMS = ["scroll", "rotate", "pulse", "flicker"]
 FBM_MODES = ["standard", "ridged", "turb"]
 FLOURISHES = ["swirl", "glint", "echo", "shimmer"]
 
+# v9 per-EFFECT motif fingerprint: one identifiable moving bright element per
+# id, so two effects in the same family differ in STRUCTURE and MOTION, not
+# just hue. Classes (all seam-safe via chordal longitude distances or
+# integer-N longitude terms, pole-safe via latitude envelopes, day-wrap-safe
+# via quantized speeds):
+#   lissajous -- 1..3 tracer dots on coprime-frequency Lissajous paths
+#   sigil     -- an N-fold glyph ring rotating around a latitude band
+#   scan      -- N scan bars sweeping in longitude OR latitude (per-id dir)
+#   orbit     -- N energy nodes circulating the sphere on bobbing latitudes
+#   core      -- a pulsing forward-point core with an expanding ping ring
+MOTIFS = ["lissajous", "sigil", "scan", "orbit", "core"]
+# Emissive envelope of the motif (<= 2 Hz by construction, day-quantized):
+ENVELOPES = ["breath", "doublepulse", "heartbeat", "sparklegate"]
+# Family-compatible motif sets: structured/geometric families favor the
+# geometric motifs, organic/soft families the free-moving ones. Every set has
+# >= 4 classes so the per-family (motif, count, envelope) triples stay
+# comfortably distinct across ~14 ids per family.
+MOTIF_SETS = {
+    "geometric": ["sigil", "scan", "orbit", "core"],
+    "organic": ["lissajous", "orbit", "core", "sigil"],
+    "energetic": ["lissajous", "scan", "orbit", "core", "sigil"],
+}
+MOTIF_FAMILY_SET = {}
+for _fam in ("HEX", "CIRCUIT", "TRUCHET", "TRIWEAVE", "MOIRE", "HOLOGRID",
+             "SACREDGEO", "HOLOPARALLAX", "RUNECIRCUIT", "STAINEDGLASS",
+             "SHARDTESS", "CRYSTALREFRACT", "CRYSTALSDF", "KALEIDO",
+             "INTERFERENCE", "SCALES", "VORONOI", "DEEPICE", "GRAVLENS"):
+    MOTIF_FAMILY_SET[_fam] = "geometric"
+for _fam in ("CURLSMOKE", "VOLUMECLOUD", "RAYMARCHFOG", "AETHERSMOKE",
+             "ECTOPLASM", "PHANTOMECHO", "SPECTRALVEIL", "NEBULA", "MYCELIA",
+             "BIOLUME", "PETALS", "FROSTFERN", "FLUIDINK", "OILSLICK",
+             "AURORA", "RIBBONAURORA", "WAVES", "CAUSTIC"):
+    MOTIF_FAMILY_SET[_fam] = "organic"
+
 # Families whose MID signature is unstructured noise: their primary field is
 # sampled on the 3D sphere direction (fbm3), which kills both the longitude
 # seam (for non-periodic fields) and the pole pinch, and lets the pattern
@@ -398,59 +462,136 @@ FAMILIES_3D_MID = frozenset({
 FAMILIES_V5 = frozenset(FAMILIES[40:])
 assert len(FAMILIES_V5) == 20 and "CRYSTALREFRACT" not in FAMILIES_V5
 
-# The 16 shipped surface-atlas tiles (surface_atlas.png: 4x4 grid, row-major
-# index 0..15; each 512px tile is individually seamless). Names document the
+# The 32 shipped surface-atlas tiles (surface_atlas.png: 8x4 grid, row-major
+# index 0..31; each 512px tile is individually seamless). Names document the
 # baked structure only -- all channels are neutral grayscale (R coarse,
 # G mid, B fine, A emission mask), so the shader tints them at runtime.
+# MUST mirror tools/gen_textures.py TILES exactly.
 ATLAS_TILES = [
     "fbm_turbulence", "worley_cells", "cracked_glass", "hex_lattice",
     "caustic_web", "filaments", "scales", "circuit",
     "starfield", "chrome", "marble_ink", "honeycomb",
     "runes", "ridged", "foam", "nebula",
+    "lightning_web", "plasma_globules", "feather_barbs", "coral",
+    "basalt_columns", "knit_weave", "damascus_folds", "mandala",
+    "glyph_ring", "solar_granulation", "ice_dendrites", "smoke_wisps",
+    "riveted_plates", "iris_eye", "topo_contours", "dune_ripples",
 ]
+ATLAS_GRID_W = 8
+ATLAS_GRID_H = 4
+assert len(ATLAS_TILES) == ATLAS_GRID_W * ATLAS_GRID_H
 
-# family -> atlas tile index, matched by technique (v6). Every family samples
-# exactly one tile; every tile is used by at least one family (asserted below).
+# Coarse VISUAL category per family (v9): two families may only share an
+# atlas tile when their categories differ -- the "same shader recolored"
+# review finding traced back to same-category families 4-sharing one tile
+# (SPARKLE/STARFIELD/GALAXYSWIRL/GRAVLENS all on starfield, WAVES/
+# INTERFERENCE/CAUSTIC all on caustic_web, ...). Asserted below.
+FAMILY_CATEGORY = {
+    "PLASMA": "electric", "HEX": "lattice", "WAVES": "water",
+    "AURORA": "curtain", "SPARKLE": "glint", "RINGS": "rings",
+    "VORONOI": "cells", "ARCS": "electric", "SCALES": "plates",
+    "STARFIELD": "stars", "VORTEX": "swirl", "INTERFERENCE": "fringe",
+    "KALEIDO": "mirror", "CIRCUIT": "grid", "PETALS": "flora",
+    "LIGHTNING": "electric", "THINFILM": "film", "CAUSTIC": "water",
+    "CURLSMOKE": "smoke", "TRUCHET": "maze", "RIDGED": "ridges",
+    "MOIRE": "fringe", "TRIWEAVE": "weave", "NEBULA": "gas",
+    "KALISET": "fractal", "VOLUMECLOUD": "cloud", "CHROME": "metal",
+    "LAVAFLOW": "fire", "TENDRILNET": "tendril", "GALAXYSWIRL": "galaxy",
+    "RIBBONAURORA": "curtain", "FROSTFERN": "ice", "BIOLUME": "organic",
+    "HOLOGRID": "grid", "PORTALVOID": "void", "EMBERSTORM": "fire",
+    "SHARDTESS": "shards", "SACREDGEO": "mandala", "VOIDTENDRIL": "void",
+    "CRYSTALREFRACT": "glass", "SPECTRALVEIL": "ghost",
+    "RAYMARCHFOG": "fog", "PRISMDISPERSE": "glass", "HOLOPARALLAX": "holo",
+    "ORBITTRAP": "fractal", "CRYSTALSDF": "glass", "FLUIDINK": "ink",
+    "IRISFILM": "film", "AETHERSMOKE": "smoke", "STAINEDGLASS": "glass",
+    "PHANTOMECHO": "ghost", "GRAVLENS": "lens", "MYCELIA": "organic",
+    "SOLARFLARE": "fire", "DEEPICE": "ice", "RUNECIRCUIT": "glyph",
+    "OILSLICK": "film", "PLASMAGLOBE": "electric", "ECTOPLASM": "ghost",
+    "VOIDRIFT": "void",
+}
+
+# family -> atlas tile index, matched by technique (v9 remap over the 32-tile
+# atlas). Every family samples exactly one PRIMARY tile, every tile is used,
+# no tile carries more than TWO families, and co-tiled families always come
+# from DIFFERENT visual categories (all asserted below) -- so no two families
+# in the same category can read as "the same shader recolored" anymore.
 FAMILY_TILE = {
-    # cloudy / turbulent field techniques -> fbm_turbulence
-    "VOLUMECLOUD": 0, "EMBERSTORM": 0, "SPECTRALVEIL": 0, "RAYMARCHFOG": 0,
-    "AETHERSMOKE": 0,
-    # cellular / faceted-pane techniques -> worley_cells
-    "VORONOI": 1, "CRYSTALREFRACT": 1, "STAINEDGLASS": 1, "SOLARFLARE": 1,
-    # shard / fracture / ice techniques -> cracked_glass
-    "KALEIDO": 2, "LAVAFLOW": 2, "FROSTFERN": 2, "SHARDTESS": 2,
-    "CRYSTALSDF": 2, "DEEPICE": 2, "VOIDRIFT": 2,
-    # hex / tri lattice techniques -> hex_lattice
-    "HEX": 3, "TRIWEAVE": 3,
-    # water-light / wave-grating techniques -> caustic_web
-    "WAVES": 4, "INTERFERENCE": 4, "CAUSTIC": 4,
-    # bolt / tendril / curtain-ray techniques -> filaments
-    "AURORA": 5, "ARCS": 5, "LIGHTNING": 5, "TENDRILNET": 5,
-    "RIBBONAURORA": 5, "MYCELIA": 5, "PLASMAGLOBE": 5,
-    # imbricated plate techniques -> scales
-    "SCALES": 6, "PETALS": 6,
-    # trace / grid-glyph board techniques -> circuit
-    "CIRCUIT": 7, "HOLOGRID": 7, "HOLOPARALLAX": 7,
-    # point-star / twinkle techniques -> starfield
-    "SPARKLE": 8, "STARFIELD": 8, "GALAXYSWIRL": 8, "GRAVLENS": 8,
-    # smooth reflective / iridescent-band techniques -> chrome
-    "THINFILM": 9, "MOIRE": 9, "CHROME": 9, "PRISMDISPERSE": 9,
-    "IRISFILM": 9, "OILSLICK": 9,
-    # swirled fluid / fold techniques -> marble_ink
-    "VORTEX": 10, "CURLSMOKE": 10, "ORBITTRAP": 10, "FLUIDINK": 10,
-    # rounded glowing-cell technique -> honeycomb
+    # 0 fbm_turbulence: billowing cumulus vs collapsing dark maw
+    "VOLUMECLOUD": 0, "PORTALVOID": 0,
+    # 1 worley_cells: crisp glass panes vs wobbling ghost blobs
+    "VORONOI": 1, "ECTOPLASM": 1,
+    # 2 cracked_glass: mirrored tessellation vs torn void seams
+    "SHARDTESS": 2, "VOIDRIFT": 2,
+    # 3 hex_lattice: glowing hex grid vs refractive hex facets
+    "HEX": 3, "CRYSTALREFRACT": 3,
+    # 4 caustic_web: refracted pool light vs folded fractal web
+    "CAUSTIC": 4, "KALISET": 4,
+    # 5 filaments: draped curtain rays vs crawling electric arcs
+    "AURORA": 5, "ARCS": 5,
+    # 6 scales: imbricated dragon plates vs drifting ghost veil
+    "SCALES": 6, "SPECTRALVEIL": 6,
+    # 7 circuit: etched trace board vs radial discharge filaments
+    "CIRCUIT": 7, "PLASMAGLOBE": 7,
+    # 8 starfield: drifting star points vs expanding ring pulses
+    "STARFIELD": 8, "RINGS": 8,
+    # 9 chrome: liquid-metal bands vs rainbow dispersion streaks
+    "CHROME": 9, "PRISMDISPERSE": 9,
+    # 10 marble_ink: hard spiral suction vs layered fog banks
+    "VORTEX": 10, "RAYMARCHFOG": 10,
+    # 11 honeycomb: rounded glowing cells (single occupant)
     "BIOLUME": 11,
-    # tiled glyph / arc-maze / mandala techniques -> runes
-    "TRUCHET": 12, "SACREDGEO": 12, "RUNECIRCUIT": 12,
-    # crest / anisotropic-ridge / band techniques -> ridged
-    "RINGS": 13, "RIDGED": 13, "VOIDTENDRIL": 13,
-    # blobby froth / ghost-membrane techniques -> foam
-    "PHANTOMECHO": 14, "ECTOPLASM": 14,
-    # deep gas / fractal-glow techniques -> nebula
-    "PLASMA": 15, "NEBULA": 15, "KALISET": 15, "PORTALVOID": 15,
+    # 12 runes: glowing glyph traces (single occupant)
+    "RUNECIRCUIT": 12,
+    # 13 ridged: flowing crest noise vs marching crystal spikes
+    "RIDGED": 13, "CRYSTALSDF": 13,
+    # 14 foam: echoing ghost froth vs marbled soap film
+    "PHANTOMECHO": 14, "OILSLICK": 14,
+    # 15 nebula: billowing gas clouds vs nested orbit-trap swirls
+    "NEBULA": 15, "ORBITTRAP": 15,
+    # 16 lightning_web: strobing bolt web vs slow organic thread net
+    "LIGHTNING": 16, "MYCELIA": 16,
+    # 17 plasma_globules: hot plasma blobs vs swarming embers
+    "PLASMA": 17, "EMBERSTORM": 17,
+    # 18 feather_barbs: shifting crossed gratings vs petal strokes
+    "MOIRE": 18, "PETALS": 18,
+    # 19 coral: quarter-arc maze vs glowing tendril labyrinth
+    "TRUCHET": 19, "TENDRILNET": 19,
+    # 20 basalt_columns: leaded jewel panes vs glowing crust seams
+    "STAINEDGLASS": 20, "LAVAFLOW": 20,
+    # 21 knit_weave: triangle weave (single occupant)
+    "TRIWEAVE": 21,
+    # 22 damascus_folds: soap-film bands vs flowing ribbon curtains
+    "THINFILM": 22, "RIBBONAURORA": 22,
+    # 23 mandala: mirrored petal wheels vs drifting incense smoke
+    "KALEIDO": 23, "AETHERSMOKE": 23,
+    # 24 glyph_ring: geometric ring sigils vs layered holo HUD rings
+    "SACREDGEO": 24, "HOLOPARALLAX": 24,
+    # 25 solar_granulation: boiling faculae vs twinkling glints
+    "SOLARFLARE": 25, "SPARKLE": 25,
+    # 26 ice_dendrites: white frost ferns vs black void tendrils
+    "FROSTFERN": 26, "VOIDTENDRIL": 26,
+    # 27 smoke_wisps: curling grey smoke vs starry spiral arms
+    "CURLSMOKE": 27, "GALAXYSWIRL": 27,
+    # 28 riveted_plates: tech panel grid (single occupant)
+    "HOLOGRID": 28,
+    # 29 iris_eye: oily iris film vs Einstein-ring lensing
+    "IRISFILM": 29, "GRAVLENS": 29,
+    # 30 topo_contours: deep ice layer lines vs rainbow fringes
+    "DEEPICE": 30, "INTERFERENCE": 30,
+    # 31 dune_ripples: rolling wave crests vs streaming ink strands
+    "WAVES": 31, "FLUIDINK": 31,
 }
 assert set(FAMILY_TILE) == set(FAMILIES), "FAMILY_TILE must cover every family exactly"
-assert set(FAMILY_TILE.values()) == set(range(16)), "every atlas tile must be used by >= 1 family"
+assert set(FAMILY_TILE.values()) == set(range(len(ATLAS_TILES))), \
+    "every atlas tile must be used by >= 1 family"
+_tile_occupants: dict = {}
+for _fam, _tile in FAMILY_TILE.items():
+    _tile_occupants.setdefault(_tile, []).append(_fam)
+for _tile, _fams in _tile_occupants.items():
+    assert len(_fams) <= 2, f"tile {_tile} carries {len(_fams)} families (max 2): {_fams}"
+    _cats = [FAMILY_CATEGORY[f] for f in _fams]
+    assert len(set(_cats)) == len(_cats), \
+        f"tile {_tile} shared by same-category families {_fams} ({_cats})"
 
 # The near-black point-star atlas tile: its R/G/B detail and A emission mask
 # are almost empty between the stars, which starved the families that sample
@@ -581,6 +722,7 @@ def build_assignments() -> list:
     registry = parse_registry()
     rows = []
     used = set()
+    used_motifs: dict = {}  # family -> set of (motif, motifN, env) fingerprints
     for effect_id in range(COUNT):
         # Family AND palette come straight from the registry row: the surface
         # column is authored there (ground truth for every id), and the baked
@@ -610,6 +752,29 @@ def build_assignments() -> list:
         if chosen is None:
             sys.exit(f"assignment probing exhausted for id {effect_id} (family {family})")
         used.add(chosen)
+        # v9 motif fingerprint axes, probed to be UNIQUE within the family:
+        # no two ids of one family may share the same (motif class, element
+        # count, envelope) triple -- that is the per-effect distinctness
+        # guarantee beyond the palette (asserted again by the validator).
+        motif_pool = MOTIF_SETS[MOTIF_FAMILY_SET.get(family, "energetic")]
+        fam_used = used_motifs.setdefault(family, set())
+        mrng = Rng(mix_seed(effect_id, 3))
+        m0 = mrng.randint(0, len(motif_pool) - 1)
+        n0 = mrng.randint(0, 3)
+        e0 = mrng.randint(0, 3)
+        fingerprint = None
+        for k in range(len(motif_pool) * 4 * 4):
+            motif = motif_pool[(m0 + k // 16) % len(motif_pool)]
+            motif_n = 1 + (n0 + (k // 4) % 4) % 4
+            env = ENVELOPES[(e0 + k) % 4]
+            trio = (motif, motif_n, env)
+            if trio not in fam_used:
+                fingerprint = trio
+                break
+        if fingerprint is None:
+            sys.exit(f"motif probing exhausted for id {effect_id} (family {family}: "
+                     f"{len(fam_used)} fingerprints used)")
+        fam_used.add(fingerprint)
         rows.append({
             "id": effect_id,
             "family": chosen[0],
@@ -617,6 +782,9 @@ def build_assignments() -> list:
             "deep": chosen[2],
             "rim": chosen[3],
             "anim": chosen[4],
+            "motif": fingerprint[0],
+            "motifN": fingerprint[1],
+            "env": fingerprint[2],
             "primary": prim,
             "secondary": sec,
             "seed": mix_seed(effect_id, 2),
@@ -1188,8 +1356,9 @@ def helper_source(name: str, c: dict) -> str:
             "// one inset-clamped tap of this file's surface-atlas tile: fract()\n"
             "// wraps the (seam-periodic) repeat domain, and the inset keeps the\n"
             "// linear-filtered lookup inside the tile for ANY flow/gradient offset\n"
+            "// (8x4 tile grid -> per-axis scale vec2(0.125, 0.25))\n"
             "vec4 atlasTile(vec2 p) {\n"
-            f"    return texture(Sampler0, (vec2({c['tileX']}, {c['tileY']}) + clamp(fract(p), 0.004, 0.996)) * 0.25);\n"
+            f"    return texture(Sampler0, (vec2({c['tileX']}, {c['tileY']}) + clamp(fract(p), 0.004, 0.996)) * vec2(0.125, 0.25));\n"
             "}")
     if name == "viewDist":
         return (
@@ -2434,7 +2603,11 @@ DEEP_WEIGHT = {
 # world blocks, "floor" is the refraction body-alpha floor.
 # ---------------------------------------------------------------------------
 REALISM_DEFAULT = {
-    "refr": (0.45, 0.75),       # base scene-copy bend
+    # v9: the refraction floor is raised EVERYWHERE (0.45 -> 0.90 base) --
+    # video review found whole families (holoparallax) reading as flat
+    # decals because their bend never cleared visibility. Every family must
+    # now clearly distort the backdrop; glassy families still bend most.
+    "refr": (0.90, 1.30),       # base scene-copy bend
     "refrFres": (0.8, 1.5),     # extra bend factor at grazing fresnel (x refr)
     "disp": (0.045, 0.090),     # chromatic split half-spread of the 3 taps
     "glass": (0.18, 0.32),      # refracted-scene tint toward the live palette
@@ -2460,15 +2633,15 @@ REALISM_DEFAULT = {
 # diffuse the light, flow widest and melt deepest into terrain. Every family
 # not listed below keeps the default ("energetic" plasma/bolt/lattice) feel.
 REALISM_CATEGORIES = {
-    "glassy": {"refr": (0.70, 1.05), "refrFres": (1.0, 1.8), "disp": (0.08, 0.14),
+    "glassy": {"refr": (1.25, 1.70), "refrFres": (1.0, 1.8), "disp": (0.08, 0.14),
                "glass": (0.10, 0.22), "energy": (0.18, 0.28), "energyGain": (0.34, 0.48),
                "specPow": (24.0, 44.0), "specW": (0.45, 0.70), "bump": (1.3, 2.4),
                "fresGlow": (0.45, 0.70), "floor": (0.90, 0.94)},
-    "dark":   {"refr": (0.24, 0.42), "disp": (0.030, 0.060), "glass": (0.38, 0.58),
+    "dark":   {"refr": (0.75, 1.10), "disp": (0.050, 0.090), "glass": (0.38, 0.58),
                "energy": (0.42, 0.56), "energyGain": (0.34, 0.48), "fresGlow": (0.50, 0.80),
                "specW": (0.18, 0.34), "diffFloor": (0.62, 0.74), "diffGain": (0.36, 0.52),
                "floor": (0.86, 0.90)},
-    "soft":   {"refr": (0.30, 0.50), "disp": (0.035, 0.070), "bump": (0.6, 1.2),
+    "soft":   {"refr": (0.80, 1.15), "disp": (0.045, 0.085), "bump": (0.9, 1.6),
                "soft": (1.0, 1.8), "energy": (0.34, 0.46), "specPow": (8.0, 16.0),
                "specW": (0.16, 0.30), "flowAmp": (0.045, 0.095), "floor": (0.87, 0.91)},
 }
@@ -2491,7 +2664,7 @@ FAMILY_REALISM = {fam: {**REALISM_DEFAULT,
 # The gravitational lens bends the scene hardest of all (that IS the
 # technique) with the widest chromatic split.
 FAMILY_REALISM["GRAVLENS"] = {**FAMILY_REALISM["GRAVLENS"],
-                              "refr": (1.15, 1.55), "refrFres": (1.2, 2.0),
+                              "refr": (1.60, 2.05), "refrFres": (1.2, 2.0),
                               "disp": (0.10, 0.16)}
 assert set(FAMILY_REALISM) == set(FAMILIES), "FAMILY_REALISM must cover every family"
 
@@ -2560,16 +2733,17 @@ def emit_shader(asg: dict) -> str:
       Beer-Lambert / soft-clip knobs and repurposes 85 for the hot-stop
       saturation lift), 128..143 v6 atlas-texture/emission knobs, 144..151
       v7 wash-guard/pole-fade/gating knobs, 152..183 v8 realism knobs
-      (refraction/fresnel/key-light/flow/depth-soft; each extension appends
-      to the stream, so growing 128 -> 144 -> 160 -> 192 shifted no older
-      draw). The draws are POSITIONAL lookups into a fixed 192-entry table,
-      so a composer reusing a spare index only correlates two knobs -- it
-      can never shift any other draw.
+      (refraction/fresnel/key-light/flow/depth-soft), 184..191 v9
+      refraction-slope + texture-drift knobs, 192..223 v9 motif knobs (each
+      extension appends to the stream, so growing 128 -> 144 -> 160 -> 192
+      -> 256 shifted no older draw). The draws are POSITIONAL lookups into
+      a fixed 256-entry table, so a composer reusing a spare index only
+      correlates two knobs -- it can never shift any other draw.
     """
     effect_id = asg["id"]
     family = asg["family"]
     rng = Rng(asg["seed"])
-    draws = [rng.unit() for _ in range(192)]
+    draws = [rng.unit() for _ in range(256)]
 
     def u(i, lo, hi):
         return lo + (hi - lo) * draws[i]
@@ -2766,6 +2940,123 @@ def emit_shader(asg: dict) -> str:
         flourish_lines = [
             f"float flourish = {F(u(60, 0.08, 0.20))} * caustic(wuv + vec2(3.1, 8.7), vec2({F6(quant_drift(u(61, 0.10, 0.20), float(sx)))}, {F6(-quant_drift(0.12, float(syp)))}) * time, midPer);"]
 
+    # ------------------------------------------------------------------
+    # v9 per-EFFECT motif fingerprint (draw indices 192..223): ONE
+    # identifiable moving bright element whose class, element count and
+    # emissive envelope are the per-family-unique (motif, motifN, env)
+    # triple probed in build_assignments. Seam-safe: longitude only enters
+    # through sin(pi * du) chordal distances or cos(2*pi * (N*u + phase))
+    # integer-N terms. Pole-safe: every class carries a latitude envelope.
+    # Day-wrap-safe: every speed is quantized to integer cycles (or integer
+    # ring/bar periods) per day. Photosensitivity: envelopes <= 2 Hz.
+    # ------------------------------------------------------------------
+    motif = asg["motif"]
+    motif_n = asg["motifN"]
+    env = asg["env"]
+    motif_lines = [f"// [layer:motif:{motif}:{env}]",
+                   "// v9 per-id motif fingerprint: this effect's unique moving bright",
+                   f"// element ({motif} x{motif_n}) under its {env} emissive envelope."]
+    # -- envelope (<= 2 Hz, day-quantized) --
+    if env == "breath":
+        motif_lines.append(
+            f"float motifEnv = 0.55 + 0.45 * sin(time * {qs(192, 0.25, 0.90)} + {F(u(193, 0.0, 6.2832))});")
+    elif env == "doublepulse":
+        motif_lines += [
+            f"float motifP = fract(time * {F6(quant_fract_speed(u(192, 0.22, 0.45)))} + {F(u(193, 0.0, 1.0))});",
+            "float motifEnv = 0.12 + exp(-140.0 * (motifP - 0.16) * (motifP - 0.16))"
+            " + 0.8 * exp(-140.0 * (motifP - 0.38) * (motifP - 0.38));",
+        ]
+    elif env == "heartbeat":
+        motif_lines += [
+            f"float motifP = fract(time * {F6(quant_fract_speed(u(192, 0.25, 0.50)))} + {F(u(193, 0.0, 1.0))});",
+            "float motifEnv = 0.10 + pow(max(sin(motifP * 6.2831853), 0.0), 6.0)"
+            " + 0.65 * pow(max(sin((motifP - 0.14) * 6.2831853), 0.0), 10.0);",
+        ]
+    else:  # sparklegate
+        motif_lines.append(
+            f"float motifEnv = 0.15 + 0.85 * smoothstep(0.30, 0.72, (0.5 + 0.5 * sin(time * {qs(192, 0.35, 0.80)}))"
+            f" * (0.5 + 0.5 * sin(time * {qs(193, 0.45, 0.95)} + 1.7)));")
+    # -- moving bright element (motifM mask) --
+    motif_dir = "1.0" if u(206, 0.0, 1.0) < 0.5 else "-1.0"
+    inv2sig = F(1.0 / (2.0 * u(197, 0.032, 0.060) ** 2))
+    if motif == "lissajous":
+        # coprime integer cycles/day on the two axes: the tracer path never
+        # visibly repeats within a day and the daily wrap lands on whole
+        # cycles of both axes.
+        mu_c = 30 + int(u(202, 0.0, 69.999))
+        mv_c = 30 + int(u(203, 0.0, 69.999))
+        while math.gcd(mu_c, mv_c) != 1:
+            mv_c += 1
+        s_u = F6(mu_c * TWO_PI / DAY_SECONDS)
+        s_v = F6(mv_c * TWO_PI / DAY_SECONDS)
+        v_amp = F(u(198, 0.16, 0.28))
+        k_dots = 1 + (motif_n - 1) % 3
+        motif_lines.append("float motifM = 0.0;")
+        for i in range(k_dots):
+            fi = float(i)
+            motif_lines += [
+                f"float motifU{i} = 0.5 + 0.34 * sin(time * {s_u} + {F(u(204, 0.0, 6.2832) + fi * 2.3999)});",
+                f"float motifV{i} = 0.5 + {v_amp} * sin(time * {s_v} + {F(u(205, 0.0, 6.2832) + fi * 1.5708)});",
+                f"vec2 motifD{i} = vec2(sin((baseUV.x - motifU{i}) * 3.1415927) * 0.6366, baseUV.y - motifV{i});",
+                f"motifM += exp(-dot(motifD{i}, motifD{i}) * {inv2sig});",
+            ]
+    elif motif == "sigil":
+        n_fold = 2 * motif_n + 1  # 3/5/7/9-fold glyph ring
+        motif_lines += [
+            f"float motifA = baseUV.x * {F(float(n_fold))} + {motif_dir} * time * {F6(quant_fract_speed(u(200, 0.040, 0.120)))} + {F(u(204, 0.0, 1.0))};",
+            f"float motifSig = pow(0.5 + 0.5 * cos(6.2831853 * motifA), {F(u(199, 8.0, 26.0))});",
+            # exp(-x*x) instead of exp(-pow(x, 2.0)): pow is undefined for
+            # x < 0 in GLSL, and the band offset goes negative below the ring
+            f"float motifDy = (baseUV.y - {F(u(198, 0.38, 0.62))}) * {F(1.0 / u(207, 0.050, 0.100))};",
+            "float motifBand = exp(-motifDy * motifDy);",
+            "float motifM = motifSig * motifBand;",
+        ]
+    elif motif == "scan":
+        axis = "x" if motif_n % 2 == 1 else "y"
+        bars = 1 + (motif_n - 1) // 2 + int(u(202, 0.0, 1.999))  # 1..4 bars
+        motif_lines += [
+            "float motifBand = smoothstep(0.06, 0.22, baseUV.y) * smoothstep(0.06, 0.22, 1.0 - baseUV.y);",
+            f"float motifM = pow(0.5 + 0.5 * cos(6.2831853 * (baseUV.{axis} * {F(float(bars))} - {motif_dir} * time * {F6(quant_fract_speed(u(200, 0.050, 0.160)))} + {F(u(204, 0.0, 1.0))})), {F(u(199, 10.0, 30.0))}) * motifBand;",
+        ]
+    elif motif == "orbit":
+        k_nodes = motif_n  # 1..4 circulating nodes
+        orb_spd = F6(quant_fract_speed(u(200, 0.020, 0.070)))
+        lat_c = u(198, 0.42, 0.58)
+        lat_a = F(u(207, 0.06, 0.14))
+        bob = qs(201, 0.20, 0.60)
+        motif_lines.append("float motifM = 0.0;")
+        for i in range(k_nodes):
+            fi = float(i)
+            motif_lines += [
+                f"float motifO{i} = fract({F(u(204, 0.0, 1.0) + fi / k_nodes)} + {motif_dir} * time * {orb_spd});",
+                f"float motifL{i} = {F(lat_c)} + {lat_a} * sin(time * {bob} + {F(fi * 2.4)});",
+                f"vec2 motifD{i} = vec2(sin((baseUV.x - motifO{i}) * 3.1415927) * 0.6366, baseUV.y - motifL{i});",
+                f"motifM += exp(-dot(motifD{i}, motifD{i}) * {inv2sig});",
+            ]
+    else:  # core
+        core_inv = F(1.0 / (2.0 * u(197, 0.10, 0.18) ** 2))
+        motif_lines += [
+            "vec2 motifC = vec2(sin((baseUV.x - 0.5) * 3.1415927) * 0.6366, baseUV.y - 0.5);",
+            "float motifR = length(motifC);",
+            f"float motifM = exp(-motifR * motifR * {core_inv}) * (0.75 + 0.25 * sin(time * {qs(201, 0.30, 0.80)} + {F(u(204, 0.0, 6.2832))}));",
+        ]
+        if motif_n in (3, 4):  # twin antipodal cores
+            motif_lines += [
+                "vec2 motifC2 = vec2(sin(baseUV.x * 3.1415927) * 0.6366, baseUV.y - 0.5);",
+                f"motifM += 0.8 * exp(-dot(motifC2, motifC2) * {core_inv});",
+            ]
+        if motif_n in (2, 4):  # expanding ping ring
+            motif_lines += [
+                f"float motifPing = fract(time * {F6(quant_fract_speed(u(200, 0.10, 0.24)))} + {F(u(205, 0.0, 1.0))});",
+                # x*x, not pow(x, 2.0): the signed ring offset goes negative
+                f"float motifPd = (motifR - motifPing * {F(u(208, 0.42, 0.60))}) * {F(1.0 / u(207, 0.030, 0.055))};",
+                f"motifM += {F(u(209, 0.45, 0.75))} * exp(-motifPd * motifPd) * (1.0 - motifPing);",
+            ]
+    motif_lines.append("float motifGlow = clamp(motifM, 0.0, 1.2) * motifEnv;")
+    motif_gain = F(u(194, 0.55, 0.95))
+    motif_col_w = F(u(195, 0.15, 0.45))
+    motif_alpha = F(u(196, 0.10, 0.20))
+
     # Resolve helper closure over deps (deepField's deps depend on the recipe).
     closed = set()
     stack = sorted(needs)
@@ -2887,9 +3178,9 @@ def emit_shader(asg: dict) -> str:
     tile = FAMILY_TILE[family]
     tile_name = ATLAS_TILES[tile]
     # baked tile origin for the atlasTile helper (all v8 atlas taps run
-    # through it, so every tap gets the same inset clamp)
-    c["tileX"] = F(float(tile % 4))
-    c["tileY"] = F(float(tile // 4))
+    # through it, so every tap gets the same inset clamp); 8x4 grid.
+    c["tileX"] = F(float(tile % ATLAS_GRID_W))
+    c["tileY"] = F(float(tile // ATLAS_GRID_W))
     tex_mul = max(1, round(u(128, 8.0, 16.0) / sx))  # target ~8..16 tile repeats per u wrap
     tex_wr_raw = u(129, 0.35, 0.60)    # coarse structural layer weight (atlas.r)
     tex_wg_raw = u(130, 0.30, 0.55)    # mid-scale detail weight (atlas.g)
@@ -2964,9 +3255,22 @@ def emit_shader(asg: dict) -> str:
     flow_sign = 1.0 if u(178, 0.0, 1.0) < 0.5 else -1.0
     depth_soft = F(u(173, *real["soft"]))
     refr_floor = u(174, *real["floor"])
-    refr_cap = F(u(176, 0.10, 0.16))       # max screen-UV offset (near-camera sanity)
+    refr_cap = F(u(176, 0.14, 0.20))       # max screen-UV offset (near-camera sanity)
     energy_max = F(u(177, 0.80, 0.90))     # energy overlay ceiling
     a_max_refr = F(min(0.965, max(a_max_raw, refr_floor + 0.025)))
+    # v9 refraction-slope + per-family texture-drift knobs (indices 184..191,
+    # appended to the stream). The slope term keeps refraction visible at the
+    # sphere center where viewN.xy vanishes (the holoparallax "flat decal"
+    # fix); the drift gives every FAMILY its own texture-motion signature:
+    # the direction is golden-angle-spread by the family's index (so two
+    # co-tiled families move their shared tile differently) and the speed is
+    # day-quantized against the tile repeat period 1.0.
+    refr_slope_k = F(u(184, 2.2, 4.2))
+    fam_idx = FAMILIES.index(family)
+    drift_ang = fam_idx * 2.3999632 + u(185, -0.25, 0.25)  # golden angle + jitter
+    drift_speed = 0.020 + 0.055 * ((fam_idx * 7) % 12) / 11.0 + u(186, 0.0, 0.012)
+    tex_drift = (F6(quant_drift(drift_speed * math.cos(drift_ang), 1.0)),
+                 F6(quant_drift(drift_speed * math.sin(drift_ang), 1.0)))
     # unit-sum HEIGHT weights: the same R/G/B structural mix as texDetail,
     # normalized so the height field spans a stable range for the gradient
     _hw_sum = tex_wr_raw + tex_wg_raw + tex_wb_raw
@@ -3032,7 +3336,7 @@ def emit_shader(asg: dict) -> str:
     lines.append("")
     lines.append("// The shipped surface atlas (bubbleshield:textures/effect/surface_atlas.png,")
     lines.append("// bound by ShieldPipelines through the SAMPLER0_SAMPLER1_SAMPLER2 bind")
-    lines.append("// group): a 4x4 grid of 16 seamless grayscale tiles. Per texel: R = coarse")
+    lines.append("// group): an 8x4 grid of 32 seamless grayscale tiles. Per texel: R = coarse")
     lines.append("// structure, G = mid detail, B = fine grain, A = EMISSION mask (glow, NOT")
     lines.append("// transparency). All hue comes from vertexColor at runtime (recolor-safe).")
     lines.append("uniform sampler2D Sampler0;")
@@ -3044,7 +3348,7 @@ def emit_shader(asg: dict) -> str:
     lines.append("uniform sampler2D Sampler2;")
     lines.append("")
     lines.append(f"// Bubble surface shader fx_{effect_id:03d} -- family {family}")
-    lines.append(f"// stack: deep={asg['deep']} x{taps} taps | mid={family.lower()}+{warp}+{anim} | rim={rim} | flourish={flourish} | tex={tile_name}")
+    lines.append(f"// stack: deep={asg['deep']} x{taps} taps | mid={family.lower()}+{warp}+{anim} | rim={rim} | flourish={flourish} | tex={tile_name} | motif={motif}x{motif_n}+{env}")
     lines.append(f"// fbm: {c['fbmMode']} x{c['octaves']} octaves | seed {asg['seed']:016x}")
     lines.append(f"// v8 realism: refr {F(refr_base)}+{F(refr_fres)}*fres/dist (cap {refr_cap}) | energy {energy_base}+{energy_gain}*p | flow {flow_speed} c/s | soft {depth_soft}m")
     lines.append("// GENERATED by tools/gen_surface_shaders.py -- do not hand-edit; edit the")
@@ -3145,12 +3449,15 @@ def emit_shader(asg: dict) -> str:
     lines.append("    // across the u = 0/1 wrap (the domain spans an integer lattice period per")
     lines.append("    // wrap, and its drifts shift integer periods per day -- day-wrap-safe);")
     lines.append("    // the inset clamp keeps the linear-filtered sample inside this tile.")
+    lines.append("    // v9 family texture-drift: a baked per-FAMILY drift vector (direction")
+    lines.append("    // golden-angle-spread by family index, speed day-quantized against the")
+    lines.append("    // tile period) -- two families sharing a tile move it differently.")
     if anim == "flicker":
         lines.append("    // (flicker anim: the atlas rides the SMOOTH tuv twin, never the")
         lines.append("    // jumped ft domain -- see the [layer:mid] anim block.)")
-        lines.append(f"    vec2 texUV = tuv * {F(float(tex_mul))};")
+        lines.append(f"    vec2 texUV = tuv * {F(float(tex_mul))} + vec2({tex_drift[0]}, {tex_drift[1]}) * time;")
     else:
-        lines.append(f"    vec2 texUV = wuv * {F(float(tex_mul))};")
+        lines.append(f"    vec2 texUV = wuv * {F(float(tex_mul))} + vec2({tex_drift[0]}, {tex_drift[1]}) * time;")
     lines.append("    // v8 height taps: the atlas R/G/B structural mix doubles as a HEIGHT")
     lines.append("    // field. Its 2-tap gradient (a) tilts the shading normal (bump) and")
     lines.append("    // (b) builds the divergence-free flow vector the energy crawls along.")
@@ -3216,6 +3523,9 @@ def emit_shader(asg: dict) -> str:
     for ln in flourish_lines:
         lines.append("    " + ln)
     lines.append(f"    float grain = {gk} * (cellHash(floor(wuv * {F(float(grain_scale))}) + vec2(floor(time * 6.0), 0.0), {F(float(sx * grain_scale))}) - 0.5);")
+    lines.append("")
+    for ln in motif_lines:
+        lines.append("    " + ln)
     lines.append("")
     lines.append("    // Recolor-safe composite v4: the whole pattern is graded through the")
     lines.append("    // vertexColor-derived 3-stop ramp (low pattern falls to the DARK stop")
@@ -3288,7 +3598,12 @@ def emit_shader(asg: dict) -> str:
     lines.append("    vec2 screenUV = gl_FragCoord.xy / ScreenSize;")
     lines.append("    vec3 viewN = mat3(ModelViewMat) * bumpN;")
     lines.append(f"    float refrAmp = min(({F(refr_base)} + {F(refr_fres)} * fresnel) / max(length(worldPos), 1.0), {refr_cap});")
-    lines.append("    vec2 refrOff = viewN.xy * refrAmp;")
+    lines.append("    // v9: the atlas height slope joins the offset directly -- at the")
+    lines.append("    // sphere center viewN.xy vanishes (which left flat families reading")
+    lines.append("    // as decals), but the texture relief keeps bending the scene there")
+    lines.append("    // like real patterned glass. Seam/day-safe: atlasSlope is a function")
+    lines.append("    // of the periodic texUV domain only.")
+    lines.append(f"    vec2 refrOff = (viewN.xy + atlasSlope * {refr_slope_k}) * refrAmp;")
     lines.append("    vec2 refrTap = clamp(screenUV + refrOff, vec2(0.001), vec2(0.999));")
     lines.append("    if (texture(Sampler2, refrTap).r > gl_FragCoord.z) {")
     lines.append("        refrOff = vec2(0.0);")
@@ -3307,6 +3622,11 @@ def emit_shader(asg: dict) -> str:
     lines.append(f"    float energyW = clamp({energy_base} + {energy_gain} * clamp(pattern, 0.0, 1.0) + {energy_fres} * fresnel, 0.0, {energy_max});")
     lines.append("    rgb = mix(refracted, rgb, energyW);")
     lines.append(f"    rgb += fresnel * hotStop * {fres_glow};")
+    lines.append("    // v9 motif add: the per-id moving bright element rides ON TOP of the")
+    lines.append("    // energy-glass composite so the fingerprint stays identifiable.")
+    lines.append("    // Recolor-safe: its color is a hotStop/secCol mix, both live-derived")
+    lines.append("    // from vertexColor; its envelope is <= 2 Hz and day-quantized.")
+    lines.append(f"    rgb += motifGlow * mix(hotStop, secCol, {motif_col_w}) * {motif_gain};")
     # v7 strobe-free emission drive: the emissive add must never oscillate
     # faster than ~2 Hz (photosensitivity). Three sources could: (1) the
     # strobe/gate multipliers baked into the LIGHTNING/HOLOGRID/HOLOPARALLAX
@@ -3368,6 +3688,9 @@ def emit_shader(asg: dict) -> str:
     lines.append("    // whitelisted-player dissolve is always the final, outermost factor.")
     lines.append(f"    float presence = smoothstep(0.02, 0.30, pattern);")
     lines.append(f"    float bodyAlpha = {a_base} + {a_floor} * presence + {a_gain} * pattern + {a_vol} * (1.0 - deepTrans) + {emit_alpha} * emit;")
+    lines.append("    // v9: the motif also firms the membrane locally (pre-clamp, pre-")
+    lines.append("    // dissolve -- vertexColor.a still always wins).")
+    lines.append(f"    bodyAlpha += motifGlow * {motif_alpha};")
     if is_v5:
         lines.append("    // [layer:v5:backface]")
         lines.append("    // v5 back-face densify/dim (gl_FrontFacing is a builtin, no uniform")
@@ -3414,11 +3737,10 @@ def emit_shader(asg: dict) -> str:
 
     source = "\n".join(lines) + "\n"
     n = source.count("\n")
-    # Upper bound raised 580 -> 660 for the v8 realism pass: the flow-map
-    # advection, bump/fresnel, key-light, scene-copy refraction and depth-soft
-    # blocks add ~55-70 lines to EVERY file.
-    if not 130 <= n <= 660:
-        sys.exit(f"fx_{effect_id:03d}: emitted {n} lines, outside the 130..660 sanity bounds")
+    # Upper bound raised 660 -> 700 for the v9 motif fingerprint block
+    # (envelope + moving-element mask add ~10-25 lines to EVERY file).
+    if not 130 <= n <= 700:
+        sys.exit(f"fx_{effect_id:03d}: emitted {n} lines, outside the 130..700 sanity bounds")
     return source
 
 
@@ -3443,6 +3765,9 @@ def manifest_entry(asg: dict, source: str) -> dict:
         "paletteMode": "gradient3",
         "mid3d": asg["family"] in FAMILIES_3D_MID,
         "tile": ATLAS_TILES[FAMILY_TILE[asg["family"]]],
+        "motif": asg["motif"],
+        "motifN": asg["motifN"],
+        "env": asg["env"],
         "seed": f"{asg['seed']:016x}",
         "lines": source.count("\n"),
     }
