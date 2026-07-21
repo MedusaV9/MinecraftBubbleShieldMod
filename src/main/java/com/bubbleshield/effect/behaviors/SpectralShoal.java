@@ -71,7 +71,7 @@ public final class SpectralShoal implements InsideEffectBehavior {
 				Vec3 tgt = BehaviorSupport.containPoint(shape, center, radius, target);
 				Vec3 spawn = BehaviorSupport.containPoint(shape, center, radius,
 						arcPoint(center, radius, along - 0.35, i, variant, spread));
-				level.sendParticles(ParticleTypes.NAUTILUS, true, false, tgt.x, tgt.y, tgt.z, 0,
+				BehaviorSupport.sendContained(level, ParticleTypes.NAUTILUS, shape, center, radius, tgt.x, tgt.y, tgt.z, 0,
 						spawn.x - tgt.x, spawn.y - tgt.y, spawn.z - tgt.z, 1.0);
 			}
 

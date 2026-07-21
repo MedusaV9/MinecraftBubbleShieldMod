@@ -37,16 +37,16 @@ public final class SporeDrift implements InsideEffectBehavior {
 		if (variant == 4) {
 			// Ash duotone: 64 + 64 = 128 particles/pulse max.
 			int count = ctx.scaleCount(Mth.clamp((int) (radius * 1.0F * def.behaviorStrength()), 8, 64), 64);
-			level.sendParticles(ParticleTypes.ASH, true, false, center.x, center.y + radius * 0.35, center.z, count, radius * 0.6, radius * 0.3, radius * 0.6, 0.0);
-			level.sendParticles(ParticleTypes.WHITE_ASH, true, false, center.x, center.y + radius * 0.4, center.z, count, radius * 0.6, radius * 0.3, radius * 0.6, 0.0);
+			BehaviorSupport.sendContained(level, ParticleTypes.ASH, shape, center, radius, center.x, center.y + radius * 0.35, center.z, count, radius * 0.6, radius * 0.3, radius * 0.6, 0.0);
+			BehaviorSupport.sendContained(level, ParticleTypes.WHITE_ASH, shape, center, radius, center.x, center.y + radius * 0.4, center.z, count, radius * 0.6, radius * 0.3, radius * 0.6, 0.0);
 			return;
 		}
 
 		if (variant == 5) {
 			// Both nether spores at once: 64 + 64 = 128 particles/pulse max.
 			int count = ctx.scaleCount(Mth.clamp((int) (radius * 1.0F * def.behaviorStrength()), 8, 64), 64);
-			level.sendParticles(ParticleTypes.WARPED_SPORE, true, false, center.x, center.y + radius * 0.4, center.z, count, radius * 0.6, radius * 0.3, radius * 0.6, 0.0);
-			level.sendParticles(ParticleTypes.CRIMSON_SPORE, true, false, center.x, center.y + radius * 0.3, center.z, count, radius * 0.6, radius * 0.3, radius * 0.6, 0.0);
+			BehaviorSupport.sendContained(level, ParticleTypes.WARPED_SPORE, shape, center, radius, center.x, center.y + radius * 0.4, center.z, count, radius * 0.6, radius * 0.3, radius * 0.6, 0.0);
+			BehaviorSupport.sendContained(level, ParticleTypes.CRIMSON_SPORE, shape, center, radius, center.x, center.y + radius * 0.3, center.z, count, radius * 0.6, radius * 0.3, radius * 0.6, 0.0);
 			return;
 		}
 
@@ -58,9 +58,9 @@ public final class SporeDrift implements InsideEffectBehavior {
 			default -> ParticleTypes.MYCELIUM;
 		};
 		int count = ctx.scaleCount(Mth.clamp((int) (radius * 2.0F * def.behaviorStrength()), 16, 128), 128);
-		level.sendParticles(
+		BehaviorSupport.sendContained(level,
 				particle,
-				true, false,
+				shape, center, radius,
 				center.x, center.y + radius * 0.35, center.z,
 				count,
 				radius * 0.6, radius * 0.3, radius * 0.6,

@@ -59,7 +59,7 @@ public final class GeyserVents implements InsideEffectBehavior {
 				default -> ParticleTypes.CLOUD;
 			};
 			double simmerRise = variant == 2 ? 0.08 : 0.02;
-			level.sendParticles(simmer, true, false, x, center.y + 0.2, z, ctx.scaleCount(3, 8), 0.15, 0.1, 0.15, simmerRise);
+			BehaviorSupport.sendContained(level, simmer, shape, center, radius, x, center.y + 0.2, z, ctx.scaleCount(3, 8), 0.15, 0.1, 0.15, simmerRise);
 			if (variant == 2) {
 				continue;
 			}

@@ -38,10 +38,10 @@ public final class Snowfall implements InsideEffectBehavior {
 			// size and override the 32-block send limiter so players deep inside a large
 			// bubble (radius up to 100) still see them.
 			int count = ctx.scaleCount(Mth.clamp((int) (radius * 3.0F), 24, 128), 128);
-			level.sendParticles(
+			BehaviorSupport.sendContained(level,
 					ParticleTypes.SNOWFLAKE,
-					true, false,
-					center.x, center.y + radius * 0.6, center.z,
+					shape, center, radius,
+				center.x, center.y + radius * 0.6, center.z,
 					count,
 					radius * 0.6, radius * 0.3, radius * 0.6,
 					0.01
@@ -52,32 +52,32 @@ public final class Snowfall implements InsideEffectBehavior {
 		if (variant == 1) {
 			// Blizzard: 96 flakes + 32 ash = 128 particles/pulse max.
 			int flakes = ctx.scaleCount(Mth.clamp((int) (radius * 4.0F * def.behaviorStrength()), 32, 96), 96);
-			level.sendParticles(ParticleTypes.SNOWFLAKE, true, false, center.x, center.y + radius * 0.6, center.z, flakes, radius * 0.6, radius * 0.3, radius * 0.6, 0.04);
-			level.sendParticles(ParticleTypes.WHITE_ASH, true, false, center.x, center.y + radius * 0.4, center.z, Math.min(32, flakes / 3), radius * 0.6, radius * 0.3, radius * 0.6, 0.02);
+			BehaviorSupport.sendContained(level, ParticleTypes.SNOWFLAKE, shape, center, radius, center.x, center.y + radius * 0.6, center.z, flakes, radius * 0.6, radius * 0.3, radius * 0.6, 0.04);
+			BehaviorSupport.sendContained(level, ParticleTypes.WHITE_ASH, shape, center, radius, center.x, center.y + radius * 0.4, center.z, Math.min(32, flakes / 3), radius * 0.6, radius * 0.3, radius * 0.6, 0.02);
 			return;
 		}
 
 		if (variant == 2) {
 			int count = ctx.scaleCount(Mth.clamp((int) (radius * 1.5F * def.behaviorStrength()), 12, 96), 96);
-			level.sendParticles(ParticleTypes.SNOWFLAKE, true, false, center.x, center.y + radius * 0.6, center.z, count, radius * 0.6, radius * 0.3, radius * 0.6, 0.005);
+			BehaviorSupport.sendContained(level, ParticleTypes.SNOWFLAKE, shape, center, radius, center.x, center.y + radius * 0.6, center.z, count, radius * 0.6, radius * 0.3, radius * 0.6, 0.005);
 			// Occasional soft snowball puffs near the ground.
-			level.sendParticles(ParticleTypes.ITEM_SNOWBALL, true, false, center.x, center.y + 0.8, center.z, 4, radius * 0.4, 0.3, radius * 0.4, 0.02);
+			BehaviorSupport.sendContained(level, ParticleTypes.ITEM_SNOWBALL, shape, center, radius, center.x, center.y + 0.8, center.z, 4, radius * 0.4, 0.3, radius * 0.4, 0.02);
 			return;
 		}
 
 		if (variant == 3) {
 			// Sleet: 84 flakes + 28 dripstone drips = 112 particles/pulse max.
 			int flakes = ctx.scaleCount(Mth.clamp((int) (radius * 2.5F * def.behaviorStrength()), 20, 84), 84);
-			level.sendParticles(ParticleTypes.SNOWFLAKE, true, false, center.x, center.y + radius * 0.6, center.z, flakes, radius * 0.6, radius * 0.3, radius * 0.6, 0.01);
-			level.sendParticles(ParticleTypes.FALLING_DRIPSTONE_WATER, true, false, center.x, center.y + radius * 0.55, center.z, Math.min(28, flakes / 3), radius * 0.55, radius * 0.25, radius * 0.55, 0.0);
+			BehaviorSupport.sendContained(level, ParticleTypes.SNOWFLAKE, shape, center, radius, center.x, center.y + radius * 0.6, center.z, flakes, radius * 0.6, radius * 0.3, radius * 0.6, 0.01);
+			BehaviorSupport.sendContained(level, ParticleTypes.FALLING_DRIPSTONE_WATER, shape, center, radius, center.x, center.y + radius * 0.55, center.z, Math.min(28, flakes / 3), radius * 0.55, radius * 0.25, radius * 0.55, 0.0);
 			return;
 		}
 
 		if (variant == 4) {
 			// Diamond dust: 84 flakes + 28 glints = 112 particles/pulse max.
 			int flakes = ctx.scaleCount(Mth.clamp((int) (radius * 1.2F * def.behaviorStrength()), 10, 84), 84);
-			level.sendParticles(ParticleTypes.SNOWFLAKE, true, false, center.x, center.y + radius * 0.5, center.z, flakes, radius * 0.6, radius * 0.35, radius * 0.6, 0.002);
-			level.sendParticles(ParticleTypes.END_ROD, true, false, center.x, center.y + radius * 0.4, center.z, Math.min(28, flakes / 3), radius * 0.55, radius * 0.3, radius * 0.55, 0.002);
+			BehaviorSupport.sendContained(level, ParticleTypes.SNOWFLAKE, shape, center, radius, center.x, center.y + radius * 0.5, center.z, flakes, radius * 0.6, radius * 0.35, radius * 0.6, 0.002);
+			BehaviorSupport.sendContained(level, ParticleTypes.END_ROD, shape, center, radius, center.x, center.y + radius * 0.4, center.z, Math.min(28, flakes / 3), radius * 0.55, radius * 0.3, radius * 0.55, 0.002);
 			return;
 		}
 
@@ -90,14 +90,14 @@ public final class Snowfall implements InsideEffectBehavior {
 				double angle = phase + Math.PI * 2.0 * i / points;
 				double x = center.x + Math.cos(angle) * ringRadius;
 				double z = center.z + Math.sin(angle) * ringRadius;
-				level.sendParticles(ParticleTypes.SNOWFLAKE, true, false, x, center.y + radius * 0.45, z, 1, 0.1, 0.2, 0.1, 0.01);
+				BehaviorSupport.sendContained(level, ParticleTypes.SNOWFLAKE, shape, center, radius, x, center.y + radius * 0.45, z, 1, 0.1, 0.2, 0.1, 0.01);
 			}
 			return;
 		}
 
 		// v6: hail; 96 pellets + 16 floor poofs = 112 particles/pulse max.
 		int pellets = ctx.scaleCount(Mth.clamp((int) (radius * 3.0F * def.behaviorStrength()), 24, 96), 96);
-		level.sendParticles(ParticleTypes.ITEM_SNOWBALL, true, false, center.x, center.y + radius * 0.6, center.z, pellets, radius * 0.55, radius * 0.3, radius * 0.55, 0.05);
-		level.sendParticles(ParticleTypes.POOF, true, false, center.x, center.y + 0.3, center.z, Math.min(16, pellets / 6), radius * 0.4, 0.1, radius * 0.4, 0.0);
+		BehaviorSupport.sendContained(level, ParticleTypes.ITEM_SNOWBALL, shape, center, radius, center.x, center.y + radius * 0.6, center.z, pellets, radius * 0.55, radius * 0.3, radius * 0.55, 0.05);
+		BehaviorSupport.sendContained(level, ParticleTypes.POOF, shape, center, radius, center.x, center.y + 0.3, center.z, Math.min(16, pellets / 6), radius * 0.4, 0.1, radius * 0.4, 0.0);
 	}
 }

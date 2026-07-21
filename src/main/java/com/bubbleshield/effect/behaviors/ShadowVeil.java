@@ -67,9 +67,9 @@ public final class ShadowVeil implements InsideEffectBehavior {
 		}
 
 		if (variant == 1) {
-			level.sendParticles(ParticleTypes.LARGE_SMOKE, true, false, center.x, center.y + 0.5, center.z, ctx.scaleCount(4, 8), 0.2, 0.6, 0.2, 0.01);
+			BehaviorSupport.sendContained(level, ParticleTypes.LARGE_SMOKE, shape, center, radius, center.x, center.y + 0.5, center.z, ctx.scaleCount(4, 8), 0.2, 0.6, 0.2, 0.01);
 		} else if (variant == 5) {
-			level.sendParticles(ParticleTypes.WARPED_SPORE, true, false, center.x, center.y + 1.0, center.z, ctx.scaleCount(6, 12), radius * 0.3, 0.8, radius * 0.3, 0.0);
+			BehaviorSupport.sendContained(level, ParticleTypes.WARPED_SPORE, shape, center, radius, center.x, center.y + 1.0, center.z, ctx.scaleCount(6, 12), radius * 0.3, 0.8, radius * 0.3, 0.0);
 		} else if (variant == 2 || variant == 6) {
 			AABB box = AABB.ofSize(center, radius * 2.0, radius * 2.0, radius * 2.0);
 			for (Player player : level.getEntitiesOfClass(Player.class, box)) {

@@ -71,14 +71,79 @@ public final class ShieldGeometry {
 	}
 
 	/**
+	 * Subsample step (blocks) for the anti-tunneling sweep in {@link #crossedInto}:
+	 * fine enough that no fast projectile can skip across a thin feature (the RING
+	 * tube is >= {@code 2 * 0.3 * 4 = 2.4} blocks thick at the minimum shield
+	 * radius) while staying cheap (a couple of extra {@link #isInside} calls for
+	 * the fastest vanilla projectiles at ~3-5 blocks/tick).
+	 */
+	private static final double CROSSING_SAMPLE_STEP = 1.0;
+
+	/**
 	 * @return true when a movement from {@code prev} to {@code cur} crossed the shield
-	 * boundary inward (outside before, inside now). Outward or fully-inside movement
+	 * boundary inward (outside before, inside now — or passed clean THROUGH the
+	 * volume within one tick, see below). Outward or fully-inside movement
 	 * never triggers, which is what keeps deflected projectiles from being re-intercepted.
 	 * Shape-generic: it only consults {@link #isInside}, so it works unchanged for
 	 * every shape — including the RING, whose central hole counts as "outside" on
 	 * both ends (a projectile falling straight down the axis never crosses in).
+	 *
+	 * <p><b>Anti-tunneling:</b> the endpoint pair alone misses a fast projectile
+	 * whose single-tick segment enters AND exits a thin feature (the RING tube is
+	 * only {@code 0.6 r} thick — 2.4 blocks at the minimum radius — and the
+	 * DIAMOND tips taper to nothing; a crossbow bolt moves ~3.15 blocks/tick).
+	 * When both endpoints are outside a shape with a thin minimum feature and the
+	 * segment is long enough to have tunneled ({@code length > minFeature}), the
+	 * segment interior is subsampled at ~{@value #CROSSING_SAMPLE_STEP}-block
+	 * steps and any inside sample counts as an inward crossing. Slow projectiles
+	 * (segment {@code <= minFeature}) keep the cheap two-endpoint test. The fat
+	 * shapes' minimum feature (see {@link #minFeatureThickness}) exceeds every
+	 * vanilla projectile's per-tick travel at the minimum shield radius 4, so
+	 * their fast path is unchanged in practice.
 	 */
 	public static boolean crossedInto(ShieldShape shape, Vec3 center, double radius, Vec3 prev, Vec3 cur) {
-		return !isInside(shape, center, radius, prev) && isInside(shape, center, radius, cur);
+		if (isInside(shape, center, radius, prev)) {
+			return false;
+		}
+
+		if (isInside(shape, center, radius, cur)) {
+			return true;
+		}
+
+		// Both endpoints outside: only a segment longer than the shape's thinnest
+		// feature can have passed clean through it in one tick.
+		double length = cur.distanceTo(prev);
+		if (length <= minFeatureThickness(shape, radius)) {
+			return false;
+		}
+
+		int steps = (int) Math.ceil(length / CROSSING_SAMPLE_STEP);
+		for (int i = 1; i < steps; i++) {
+			if (isInside(shape, center, radius, prev.lerp(cur, (double) i / steps))) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * The thinnest feature of the shape's volume (blocks): the smallest thickness a
+	 * straight segment must span to pass clean through the volume somewhere. This
+	 * gates the anti-tunneling subsampling in {@link #crossedInto} — segments no
+	 * longer than this cannot have tunneled. RING: the tube diameter
+	 * {@code 2 * 0.3 r}. DIAMOND: the tips taper to zero thickness, so every
+	 * fast-moving segment near a tip is a candidate (conservative 0). The convex
+	 * fat shapes use their smallest full-width chord through the deep interior;
+	 * grazing chords shorter than that only clip the outermost
+	 * {@code CROSSING_SAMPLE_STEP}-deep sliver, which the subsampling would not
+	 * reliably see anyway and which never protects the inhabitants.
+	 */
+	private static double minFeatureThickness(ShieldShape shape, double radius) {
+		return switch (shape) {
+			case SPHERE, DOME, CUBE, CYLINDER -> radius; // conservative: < the true min width (2r, 2r/sqrt(3), 1.2r)
+			case DIAMOND -> 0.0;
+			case RING -> 2.0 * RING_MINOR_FRAC * radius;
+		};
 	}
 }

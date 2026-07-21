@@ -69,7 +69,7 @@ public final class EmberSpiral implements InsideEffectBehavior {
 		}
 
 		if (variant == 3 && gameTime % 40L == 0L) {
-			level.sendParticles(ParticleTypes.LAVA, true, false, center.x, center.y + 0.3, center.z, ctx.scaleCount(3, 6), 0.4, 0.1, 0.4, 0.0);
+			BehaviorSupport.sendContained(level, ParticleTypes.LAVA, shape, center, radius, center.x, center.y + 0.3, center.z, ctx.scaleCount(3, 6), 0.4, 0.1, 0.4, 0.0);
 		}
 	}
 }

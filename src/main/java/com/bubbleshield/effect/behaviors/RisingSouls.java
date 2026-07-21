@@ -50,15 +50,15 @@ public final class RisingSouls implements InsideEffectBehavior {
 			double x = center.x + Math.cos(angle) * dist;
 			double z = center.z + Math.sin(angle) * dist;
 			// Both soul particle types drift upward on their own once spawned near the floor.
-			level.sendParticles(particle, true, false, x, center.y + 0.3, z, perColumn, 0.15, 0.5, 0.15, 0.02);
+			BehaviorSupport.sendContained(level, particle, shape, center, radius, x, center.y + 0.3, z, perColumn, 0.15, 0.5, 0.15, 0.02);
 			if (variant == 4) {
 				// Interleave a reverse-portal mote with every soul column.
-				level.sendParticles(ParticleTypes.REVERSE_PORTAL, true, false, x, center.y + 0.6, z, 1, 0.1, 0.3, 0.1, 0.01);
+				BehaviorSupport.sendContained(level, ParticleTypes.REVERSE_PORTAL, shape, center, radius, x, center.y + 0.6, z, 1, 0.1, 0.3, 0.1, 0.01);
 			} else if (variant == 5) {
 				// A glow crown floats where the column fades out (0.8r out, 0.5r up = 0.94r).
-				level.sendParticles(ParticleTypes.GLOW, true, false, x, center.y + radius * 0.5, z, 1, 0.1, 0.1, 0.1, 0.0);
+				BehaviorSupport.sendContained(level, ParticleTypes.GLOW, shape, center, radius, x, center.y + radius * 0.5, z, 1, 0.1, 0.1, 0.1, 0.0);
 			} else if (variant == 6) {
-				level.sendParticles(ParticleTypes.SOUL_FIRE_FLAME, true, false, x, center.y + 0.15, z, 1, 0.1, 0.05, 0.1, 0.0);
+				BehaviorSupport.sendContained(level, ParticleTypes.SOUL_FIRE_FLAME, shape, center, radius, x, center.y + 0.15, z, 1, 0.1, 0.05, 0.1, 0.0);
 			}
 
 			if (variant == 1) {

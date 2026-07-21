@@ -760,7 +760,10 @@ def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     for effect_id in range(EFFECT_COUNT):
         path = OUT_DIR / f"effect_{effect_id:02d}.json"
-        path.write_text(json.dumps(build_effect(effect_id), indent=4) + "\n")
+        # UTF-8 + LF explicitly: byte-stable output across platforms (Windows'
+        # default newline translation would flip every generated file to CRLF).
+        path.write_text(json.dumps(build_effect(effect_id), indent=4) + "\n",
+                        encoding="utf-8", newline="\n")
     print(f"Wrote {EFFECT_COUNT} post effect JSONs to {OUT_DIR}")
 
 

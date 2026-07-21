@@ -6,9 +6,11 @@ import com.bubbleshield.effect.InsideEffectBehavior;
 import com.bubbleshield.shield.ShieldShape;
 
 import net.minecraft.core.particles.DustParticleOptions;
+import net.minecraft.core.particles.ItemParticleOption;
 import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -75,8 +77,12 @@ public final class WanderingSpirits implements InsideEffectBehavior {
 			BehaviorSupport.sendContained(level, footprint, shape, center, radius,
 					pos.x, pos.y + 0.1, pos.z, 1, 0.1, 0.02, 0.1, 0.0);
 			if (variant == 2) {
-				// Poltergeist: cobweb puffs flung sideways off the body.
-				BehaviorSupport.sendContained(level, ParticleTypes.ITEM_COBWEB, shape, center, radius,
+				// Poltergeist: cobweb puffs flung sideways off the body. ITEM_COBWEB's
+				// client provider (BreakingItemParticle.CobwebProvider) drops the
+				// velocity args, so the fling would read as a static hover; the
+				// ITEM form (BreakingItemParticle.Provider) forwards them (verified
+				// in the 26.2 client sources), making the sideways speed visible.
+				BehaviorSupport.sendContained(level, new ItemParticleOption(ParticleTypes.ITEM, Items.COBWEB), shape, center, radius,
 						pos.x, pos.y + height * 0.6, pos.z, 2, 0.6, 0.1, 0.6, 0.15);
 			}
 		}

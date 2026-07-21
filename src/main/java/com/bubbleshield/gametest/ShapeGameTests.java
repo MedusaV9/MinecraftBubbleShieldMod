@@ -17,7 +17,9 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.util.Mth;
 import net.minecraft.util.ProblemReporter;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.projectile.arrow.Arrow;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.TagValueOutput;
@@ -122,6 +124,18 @@ public class ShapeGameTests {
 				"falling down the RING's axis must never count as crossing in");
 		helper.assertTrue(ShieldGeometry.crossedInto(ShieldShape.RING, c, r, c.add(7.0, 10.0, 0.0), c.add(7.0, 0.0, 0.0)),
 				"falling onto the RING's tube must count as crossing in");
+
+		// Anti-tunneling: a single-tick segment that passes CLEAN THROUGH the tube
+		// (both endpoints outside — tube top 3, bottom -3 at rho = 7) must still
+		// count as an inward crossing (the subsampled sweep), while the axis drop
+		// above stays false (every subsample is in the hole) and a fast segment
+		// that never touches the tube stays false too.
+		helper.assertTrue(ShieldGeometry.crossedInto(ShieldShape.RING, c, r, c.add(7.0, 4.0, 0.0), c.add(7.0, -4.0, 0.0)),
+				"a fast projectile tunneling straight through the RING tube in one tick must count as crossing in");
+		helper.assertTrue(!ShieldGeometry.crossedInto(ShieldShape.RING, c, r, c.add(0.0, 14.0, 0.0), c.add(0.0, -14.0, 0.0)),
+				"a fast fall down the RING's axis must STILL never count as crossing in (hole identity)");
+		helper.assertTrue(!ShieldGeometry.crossedInto(ShieldShape.RING, c, r, c.add(20.0, 4.0, 0.0), c.add(20.0, -4.0, 0.0)),
+				"a fast segment far outside the tube must not count as crossing in");
 
 		// The subset-of-the-ball property, sampled: isInside(shape) implies the
 		// point is within the shield radius of the center, for every shape.
@@ -339,6 +353,35 @@ public class ShapeGameTests {
 				"a player below the CYLINDER's bottom cap must not be pushed");
 		helper.assertTrue(stranger.position().equals(belowCap), "the below-cap player should not have moved");
 		helper.succeed();
+	}
+
+	/**
+	 * (f) End-to-end anti-tunneling: a FAST arrow (~4 blocks/tick, faster than the
+	 * small RING's 2.4-block tube diameter at radius 4) dropped straight onto the
+	 * tube crosses it entirely within one tick — endpoint sampling alone would
+	 * never see it inside. The subsampled {@link ShieldGeometry#crossedInto} must
+	 * intercept it anyway: the arrow is absorbed (discarded) and the shield takes
+	 * damage.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 200, padding = 16)
+	public void fastArrowCannotTunnelThroughRing(GameTestHelper helper) {
+		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
+		be.addFuelSeconds(PLENTY_OF_FUEL);
+		be.getShieldState().shape = ShieldShape.RING;
+		helper.assertTrue(be.tryActivate(), "shield should activate");
+
+		// Center (relative) is (4.5, 2.5, 4.5); the radius-4 RING's tube circle is
+		// at rho = 2.8, so the tube spans y 1.3..3.7 at (7.3, _, 4.5). Spawn just
+		// above the tube and fall at ~4 blocks/tick: one move tick goes from above
+		// the tube (outside) to below it (outside), straddling the whole tube.
+		Arrow arrow = helper.spawn(EntityTypes.ARROW, new Vec3(7.3, 4.7, 4.5));
+		arrow.setDeltaMovement(0.0, -4.0, 0.0);
+
+		ShieldState state = be.getShieldState();
+		helper.succeedWhen(() -> {
+			helper.assertTrue(arrow.isRemoved(), "the tunneling arrow should have been absorbed (discarded)");
+			helper.assertTrue(state.health < state.maxHealth, "the shield should take damage from the intercepted fast arrow");
+		});
 	}
 
 	/**

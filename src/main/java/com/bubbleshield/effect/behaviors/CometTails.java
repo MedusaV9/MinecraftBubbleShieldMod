@@ -76,11 +76,11 @@ public final class CometTails implements InsideEffectBehavior {
 				// i=0 is the head; the tail trails backwards along the orbit.
 				Vec3 p = orbitPoint(center, orbitRadius, head - i * 0.07, yaw, sinTilt, cosTilt);
 				if (i == 0) {
-					level.sendParticles(headParticle, true, false, p.x, p.y, p.z, 2, 0.05, 0.05, 0.05, 0.01);
+					BehaviorSupport.sendContained(level, headParticle, shape, center, radius, p.x, p.y, p.z, 2, 0.05, 0.05, 0.05, 0.01);
 				} else {
-					level.sendParticles(tailParticle, true, false, p.x, p.y, p.z, 1, 0.03, 0.03, 0.03, 0.0);
+					BehaviorSupport.sendContained(level, tailParticle, shape, center, radius, p.x, p.y, p.z, 1, 0.03, 0.03, 0.03, 0.0);
 					if (variant == 4 && i % 3 == 0) {
-						level.sendParticles(ParticleTypes.ENCHANTED_HIT, true, false, p.x, p.y, p.z, 1, 0.05, 0.05, 0.05, 0.0);
+						BehaviorSupport.sendContained(level, ParticleTypes.ENCHANTED_HIT, shape, center, radius, p.x, p.y, p.z, 1, 0.05, 0.05, 0.05, 0.0);
 					}
 				}
 			}
@@ -90,7 +90,7 @@ public final class CometTails implements InsideEffectBehavior {
 				ParticleOptions inner = new DustParticleOptions(ctx.pickColor(def.argbPrimary(), def.argbSecondary()) & 0xFFFFFF, 1.3F);
 				for (int i = 1; i <= tailSteps / 2; i++) {
 					Vec3 p = orbitPoint(center, orbitRadius, head - i * 0.05, yaw, sinTilt, cosTilt);
-					level.sendParticles(inner, true, false, p.x, p.y, p.z, 1, 0.02, 0.02, 0.02, 0.0);
+					BehaviorSupport.sendContained(level, inner, shape, center, radius, p.x, p.y, p.z, 1, 0.02, 0.02, 0.02, 0.0);
 				}
 			}
 		}

@@ -69,7 +69,7 @@ public final class EmberGuard implements InsideEffectBehavior {
 				double angle = phase + Math.PI * 2.0 * i / points;
 				double x = center.x + Math.cos(angle) * ringRadius;
 				double z = center.z + Math.sin(angle) * ringRadius;
-				level.sendParticles(flame, true, false, x, center.y + 0.5, z, 1, 0.05, 0.05, 0.05, 0.0);
+				BehaviorSupport.sendContained(level, flame, shape, center, radius, x, center.y + 0.5, z, 1, 0.05, 0.05, 0.05, 0.0);
 			}
 		} else if (variant == 5) {
 			// Sputtering floor jets: a few random lava pops erupting at ground level.
@@ -78,13 +78,12 @@ public final class EmberGuard implements InsideEffectBehavior {
 			for (int i = 0; i < jets; i++) {
 				double angle = random.nextDouble() * Math.PI * 2.0;
 				double dist = Math.sqrt(random.nextDouble()) * radius * 0.7;
-				level.sendParticles(ParticleTypes.LAVA, true, false,
-						center.x + Math.cos(angle) * dist, center.y + 0.2, center.z + Math.sin(angle) * dist, 4, 0.15, 0.1, 0.15, 0.0);
+				BehaviorSupport.sendContained(level, ParticleTypes.LAVA, shape, center, radius, center.x + Math.cos(angle) * dist, center.y + 0.2, center.z + Math.sin(angle) * dist, 4, 0.15, 0.1, 0.15, 0.0);
 			}
 		} else if (variant == 6) {
 			// A cosy smoke column above the projector, capped inside the shell.
 			int puffs = ctx.scaleCount(Mth.clamp((int) (radius * 0.8F * def.behaviorStrength()), 4, 24), 24);
-			level.sendParticles(ParticleTypes.CAMPFIRE_COSY_SMOKE, true, false, center.x, center.y + 1.0, center.z, puffs, 0.4, radius * 0.3, 0.4, 0.004);
+			BehaviorSupport.sendContained(level, ParticleTypes.CAMPFIRE_COSY_SMOKE, shape, center, radius, center.x, center.y + 1.0, center.z, puffs, 0.4, radius * 0.3, 0.4, 0.004);
 		} else if (variant == 2) {
 			// Sparse lava droplets drifting down from mid-bubble height. The gaussian
 			// spread of a single count>0 sendParticles call is unbounded (offsets are

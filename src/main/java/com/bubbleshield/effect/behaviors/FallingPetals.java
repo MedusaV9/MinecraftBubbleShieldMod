@@ -38,8 +38,8 @@ public final class FallingPetals implements InsideEffectBehavior {
 		if (variant == 4) {
 			// Confetti: 64 cherry + 64 pale oak = 128 particles/pulse max.
 			int count = ctx.scaleCount(Mth.clamp((int) (radius * 1.5F * def.behaviorStrength()), 8, 64), 64);
-			level.sendParticles(ParticleTypes.CHERRY_LEAVES, true, false, center.x, center.y + radius * 0.55, center.z, count, radius * 0.6, radius * 0.25, radius * 0.6, 0.0);
-			level.sendParticles(ParticleTypes.PALE_OAK_LEAVES, true, false, center.x, center.y + radius * 0.5, center.z, count, radius * 0.6, radius * 0.25, radius * 0.6, 0.0);
+			BehaviorSupport.sendContained(level, ParticleTypes.CHERRY_LEAVES, shape, center, radius, center.x, center.y + radius * 0.55, center.z, count, radius * 0.6, radius * 0.25, radius * 0.6, 0.0);
+			BehaviorSupport.sendContained(level, ParticleTypes.PALE_OAK_LEAVES, shape, center, radius, center.x, center.y + radius * 0.5, center.z, count, radius * 0.6, radius * 0.25, radius * 0.6, 0.0);
 			return;
 		}
 
@@ -47,8 +47,8 @@ public final class FallingPetals implements InsideEffectBehavior {
 			// Tinted leaves in the secondary color with a spore sprinkle: 96 + 24 = 120 max.
 			ColorParticleOption tinted = ColorParticleOption.create(ParticleTypes.TINTED_LEAVES, ctx.secondaryColor(def.argbSecondary()));
 			int count = ctx.scaleCount(Mth.clamp((int) (radius * 2.0F * def.behaviorStrength()), 12, 96), 96);
-			level.sendParticles(tinted, true, false, center.x, center.y + radius * 0.55, center.z, count, radius * 0.6, radius * 0.25, radius * 0.6, 0.0);
-			level.sendParticles(ParticleTypes.FALLING_SPORE_BLOSSOM, true, false, center.x, center.y + radius * 0.5, center.z, Math.min(24, count / 4), radius * 0.55, radius * 0.2, radius * 0.55, 0.0);
+			BehaviorSupport.sendContained(level, tinted, shape, center, radius, center.x, center.y + radius * 0.55, center.z, count, radius * 0.6, radius * 0.25, radius * 0.6, 0.0);
+			BehaviorSupport.sendContained(level, ParticleTypes.FALLING_SPORE_BLOSSOM, shape, center, radius, center.x, center.y + radius * 0.5, center.z, Math.min(24, count / 4), radius * 0.55, radius * 0.2, radius * 0.55, 0.0);
 			return;
 		}
 
@@ -60,9 +60,9 @@ public final class FallingPetals implements InsideEffectBehavior {
 			default -> ParticleTypes.PALE_OAK_LEAVES;
 		};
 		int count = ctx.scaleCount(Mth.clamp((int) (radius * 2.5F * def.behaviorStrength()), 16, 128), 128);
-		level.sendParticles(
+		BehaviorSupport.sendContained(level,
 				particle,
-				true, false,
+				shape, center, radius,
 				center.x, center.y + radius * 0.55, center.z,
 				count,
 				radius * 0.6, radius * 0.25, radius * 0.6,

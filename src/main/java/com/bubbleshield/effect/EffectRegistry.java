@@ -626,6 +626,14 @@ public final class EffectRegistry {
 			throw new IllegalStateException("Expected " + COUNT + " effect definitions, found " + ALL.size());
 		}
 
+		// PARAM_CYCLE is FROZEN at the V1 catalogue size: any retune silently
+		// changes the derived paramB/behaviorStrength of ids 0..74 AND desyncs the
+		// generated post-effect JSON uniforms (tools/gen_post_effects.py mirrors
+		// the same modulus). Enforced at mod init, not just in gametests.
+		if (PARAM_CYCLE != 75) {
+			throw new IllegalStateException("PARAM_CYCLE must stay frozen at 75, found " + PARAM_CYCLE);
+		}
+
 		Set<Long> palettes = new HashSet<>();
 		Map<String, Set<Integer>> behaviorVariants = new HashMap<>();
 		Set<String> soundTriples = new HashSet<>();

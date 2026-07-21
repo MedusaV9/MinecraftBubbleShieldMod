@@ -96,10 +96,10 @@ public final class SeanceCircle implements InsideEffectBehavior {
 					center.x + Math.cos(angle) * radius * 0.6, y + 0.2, center.z + Math.sin(angle) * radius * 0.6));
 			if (variant == 3) {
 				// Inverted: glyphs fly from the middle out to the rim.
-				level.sendParticles(ParticleTypes.ENCHANT, true, false, rim.x, rim.y, rim.z, 0,
+				BehaviorSupport.sendContained(level, ParticleTypes.ENCHANT, shape, center, radius, rim.x, rim.y, rim.z, 0,
 						middle.x - rim.x, middle.y - rim.y, middle.z - rim.z, 1.0);
 			} else {
-				level.sendParticles(ParticleTypes.ENCHANT, true, false, middle.x, middle.y, middle.z, 0,
+				BehaviorSupport.sendContained(level, ParticleTypes.ENCHANT, shape, center, radius, middle.x, middle.y, middle.z, 0,
 						rim.x - middle.x, rim.y - middle.y, rim.z - middle.z, 1.0);
 			}
 		}

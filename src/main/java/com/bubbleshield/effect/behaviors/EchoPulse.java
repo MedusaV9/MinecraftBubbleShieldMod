@@ -71,11 +71,11 @@ public final class EchoPulse implements InsideEffectBehavior {
 			sendRing(level, center, radius, shape, def, ctx, (phase + 2L) % 4L);
 		} else if (variant == 2 && gameTime % 40L == 0L) {
 			// One boom per full sweep, right as the new ring leaves the center.
-			level.sendParticles(ParticleTypes.SONIC_BOOM, true, false, center.x, center.y + 1.0, center.z, 1, 0.0, 0.0, 0.0, 0.0);
+			BehaviorSupport.sendContained(level, ParticleTypes.SONIC_BOOM, shape, center, radius, center.x, center.y + 1.0, center.z, 1, 0.0, 0.0, 0.0, 0.0);
 		} else if (variant == 4) {
 			sendRing(level, center, radius, shape, def, ctx, (phase + 1L) % 4L);
 			if (gameTime % 40L == 0L) {
-				level.sendParticles(ParticleTypes.SONIC_BOOM, true, false, center.x, center.y + 1.0, center.z, 1, 0.0, 0.0, 0.0, 0.0);
+				BehaviorSupport.sendContained(level, ParticleTypes.SONIC_BOOM, shape, center, radius, center.x, center.y + 1.0, center.z, 1, 0.0, 0.0, 0.0, 0.0);
 			}
 		}
 	}

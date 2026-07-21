@@ -63,8 +63,7 @@ public final class TidePools implements InsideEffectBehavior {
 			int points = ctx.scaleCount(Mth.clamp((int) (ringRadius * 8.0), 5, budget / pools), budget / pools);
 			for (int i = 0; i < points; i++) {
 				double a = Math.PI * 2.0 * i / points;
-				level.sendParticles(ripple, true, false,
-						x + Math.cos(a) * ringRadius, center.y + 0.12, z + Math.sin(a) * ringRadius, 1, 0.03, 0.02, 0.03, 0.0);
+				BehaviorSupport.sendContained(level, ripple, shape, center, radius, x + Math.cos(a) * ringRadius, center.y + 0.12, z + Math.sin(a) * ringRadius, 1, 0.03, 0.02, 0.03, 0.0);
 			}
 
 			if (!active) {
@@ -73,12 +72,12 @@ public final class TidePools implements InsideEffectBehavior {
 
 			if (variant == 2) {
 				// Nautilus glints spiral in over the active pool (count=0 fly-towards form).
-				level.sendParticles(ParticleTypes.NAUTILUS, true, false, x, center.y + 0.6, z, 0,
+				BehaviorSupport.sendContained(level, ParticleTypes.NAUTILUS, shape, center, radius, x, center.y + 0.6, z, 0,
 						Math.cos(pulse) * 0.8, 0.4, Math.sin(pulse) * 0.8, 1.0);
 			} else if (variant == 5) {
-				level.sendParticles(ParticleTypes.END_ROD, true, false, x, center.y + 0.3, z, 1, 0.05, 0.05, 0.05, 0.01);
+				BehaviorSupport.sendContained(level, ParticleTypes.END_ROD, shape, center, radius, x, center.y + 0.3, z, 1, 0.05, 0.05, 0.05, 0.01);
 			} else if (variant == 6) {
-				level.sendParticles(ParticleTypes.GLOW_SQUID_INK, true, false, x, center.y + 0.2, z, ctx.scaleCount(3, 6), 0.2, 0.05, 0.2, 0.0);
+				BehaviorSupport.sendContained(level, ParticleTypes.GLOW_SQUID_INK, shape, center, radius, x, center.y + 0.2, z, ctx.scaleCount(3, 6), 0.2, 0.05, 0.2, 0.0);
 			}
 		}
 
@@ -91,8 +90,7 @@ public final class TidePools implements InsideEffectBehavior {
 				double t = (double) i / steps;
 				double angle = Mth.lerp(t, from, to);
 				double arcY = center.y + 0.3 + Math.sin(t * Math.PI) * 1.5;
-				level.sendParticles(ParticleTypes.DOLPHIN, true, false,
-						center.x + Math.cos(angle) * poolDist, arcY, center.z + Math.sin(angle) * poolDist, 1, 0.05, 0.05, 0.05, 0.0);
+				BehaviorSupport.sendContained(level, ParticleTypes.DOLPHIN, shape, center, radius, center.x + Math.cos(angle) * poolDist, arcY, center.z + Math.sin(angle) * poolDist, 1, 0.05, 0.05, 0.05, 0.0);
 			}
 		}
 	}

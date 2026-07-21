@@ -87,19 +87,18 @@ public final class MusicPulse implements InsideEffectBehavior {
 		int notes = ctx.scaleCount(Mth.clamp((int) (radius * def.behaviorStrength()), 4, 24), 24);
 		if (variant == 4) {
 			// Bass notes rumble along the floor instead of floating overhead.
-			level.sendParticles(ParticleTypes.NOTE, true, false, center.x, center.y + 0.4, center.z, notes, radius * 0.45, 0.2, radius * 0.45, 0.0);
+			BehaviorSupport.sendContained(level, ParticleTypes.NOTE, shape, center, radius, center.x, center.y + 0.4, center.z, notes, radius * 0.45, 0.2, radius * 0.45, 0.0);
 			return;
 		}
 
-		level.sendParticles(ParticleTypes.NOTE, true, false, center.x, center.y + 2.0, center.z, notes, radius * 0.3, 1.0, radius * 0.3, 0.0);
+		BehaviorSupport.sendContained(level, ParticleTypes.NOTE, shape, center, radius, center.x, center.y + 2.0, center.z, notes, radius * 0.3, 1.0, radius * 0.3, 0.0);
 		if (variant == 5) {
 			// A wide note ring flares out with every xylophone strike.
 			double ringRadius = radius * 0.6;
 			int ringNotes = ctx.scaleCount(8, 16);
 			for (int i = 0; i < ringNotes; i++) {
 				double angle = Math.PI * 2.0 * i / ringNotes;
-				level.sendParticles(ParticleTypes.NOTE, true, false,
-						center.x + Math.cos(angle) * ringRadius, center.y + 1.5, center.z + Math.sin(angle) * ringRadius, 1, 0.05, 0.05, 0.05, 0.0);
+				BehaviorSupport.sendContained(level, ParticleTypes.NOTE, shape, center, radius, center.x + Math.cos(angle) * ringRadius, center.y + 1.5, center.z + Math.sin(angle) * ringRadius, 1, 0.05, 0.05, 0.05, 0.0);
 			}
 		}
 	}

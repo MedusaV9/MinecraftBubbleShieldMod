@@ -86,8 +86,7 @@ public final class EnderWatchers implements InsideEffectBehavior {
 				// The re-materialize streak: a trail flies from the OLD slot to the new one.
 				Vec3 from = BehaviorSupport.containPoint(shape, center, radius, slotPoint(center, radius, i, slotCycle - 1L));
 				Vec3 target = BehaviorSupport.containPoint(shape, center, radius, pos);
-				level.sendParticles(new TrailParticleOption(target, dustRgb, 8), true, false,
-						from.x, from.y, from.z, 2, 0.05, 0.05, 0.05, 0.0);
+				BehaviorSupport.sendContained(level, new TrailParticleOption(target, dustRgb, 8), shape, center, radius, from.x, from.y, from.z, 2, 0.05, 0.05, 0.05, 0.0);
 			} else if (variant == 3) {
 				BehaviorSupport.sendContained(level, ParticleTypes.REVERSE_PORTAL, shape, center, radius,
 						pos.x, pos.y - 0.5, pos.z, 2, 0.1, 0.2, 0.1, 0.02);
@@ -127,7 +126,7 @@ public final class EnderWatchers implements InsideEffectBehavior {
 			Vec3 spawn = BehaviorSupport.containPoint(shape, center, radius, new Vec3(
 					pos.x + Math.cos(angle) * 1.4, pos.y + 0.5 * Math.sin(angle * 2.0), pos.z + Math.sin(angle) * 1.4));
 			Vec3 target = BehaviorSupport.containPoint(shape, center, radius, pos);
-			level.sendParticles(ParticleTypes.ENCHANT, true, false, target.x, target.y, target.z, 0,
+			BehaviorSupport.sendContained(level, ParticleTypes.ENCHANT, shape, center, radius, target.x, target.y, target.z, 0,
 					spawn.x - target.x, spawn.y - target.y, spawn.z - target.z, 1.0);
 		}
 	}

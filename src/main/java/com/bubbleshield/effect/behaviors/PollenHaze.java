@@ -44,7 +44,7 @@ public final class PollenHaze implements InsideEffectBehavior {
 		double bandY = center.y + radius * (variant == 5 ? 0.7 : 0.3);
 		double bandSpread = radius * 0.6 * Mth.clamp(def.behaviorStrength(), 0.8F, 1.1F);
 		int hazeCount = ctx.scaleCount(variant == 1 ? 24 : variant == 5 ? 8 : 14, MAX_HAZE);
-		level.sendParticles(haze, true, false, center.x, bandY, center.z, hazeCount, bandSpread, radius * 0.12, bandSpread, 0.0);
+		BehaviorSupport.sendContained(level, haze, shape, center, radius, center.x, bandY, center.z, hazeCount, bandSpread, radius * 0.12, bandSpread, 0.0);
 
 		if (variant == 2) {
 			return;
@@ -57,8 +57,7 @@ public final class PollenHaze implements InsideEffectBehavior {
 			if (gameTime % 40L == 0L) {
 				// Sneezes pop just above the floor, one spot per cycle.
 				double angle = gameTime / 40.0;
-				level.sendParticles(ParticleTypes.SNEEZE, true, false,
-						center.x + Math.cos(angle) * radius * 0.4, center.y + 0.4, center.z + Math.sin(angle) * radius * 0.4,
+				BehaviorSupport.sendContained(level, ParticleTypes.SNEEZE, shape, center, radius, center.x + Math.cos(angle) * radius * 0.4, center.y + 0.4, center.z + Math.sin(angle) * radius * 0.4,
 						ctx.scaleCount(4, 8), 0.2, 0.1, 0.2, 0.02);
 			}
 
@@ -76,7 +75,7 @@ public final class PollenHaze implements InsideEffectBehavior {
 			double angle = Math.PI * 2.0 * bloom / blooms + 0.5;
 			double x = center.x + Math.cos(angle) * radius * 0.45;
 			double z = center.z + Math.sin(angle) * radius * 0.45;
-			level.sendParticles(sift, true, false, x, bandY + radius * 0.1, z, ctx.scaleCount(3, 6), 0.3, 0.1, 0.3, 0.0);
+			BehaviorSupport.sendContained(level, sift, shape, center, radius, x, bandY + radius * 0.1, z, ctx.scaleCount(3, 6), 0.3, 0.1, 0.3, 0.0);
 		}
 	}
 }

@@ -83,8 +83,7 @@ public final class SandDevils implements InsideEffectBehavior {
 			int haze = ctx.scaleCount(8, 16);
 			for (int i = 0; i < haze; i++) {
 				double angle = wander * 0.7 + Math.PI * 2.0 * i / haze;
-				level.sendParticles(ParticleTypes.ASH, true, false,
-						center.x + Math.cos(angle) * radius * 0.3, center.y + 0.6, center.z + Math.sin(angle) * radius * 0.3,
+				BehaviorSupport.sendContained(level, ParticleTypes.ASH, shape, center, radius, center.x + Math.cos(angle) * radius * 0.3, center.y + 0.6, center.z + Math.sin(angle) * radius * 0.3,
 						1, 0.3, 0.2, 0.3, 0.0);
 			}
 		}

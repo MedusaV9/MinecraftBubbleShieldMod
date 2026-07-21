@@ -50,9 +50,9 @@ public final class MeteorBurst implements InsideEffectBehavior {
 			double y = center.y + radius * 0.7;
 			double z = center.z + Math.sin(azimuth) * radius * 0.3;
 			int flames = ctx.scaleCount(Mth.clamp((int) (radius * 6.0F * def.behaviorStrength()), 24, 96), 96);
-			level.sendParticles(ParticleTypes.EXPLOSION, true, false, x, y, z, 1, 0.0, 0.0, 0.0, 0.0);
-			level.sendParticles(ParticleTypes.FLAME, true, false, x, y, z, flames, 0.7, 0.7, 0.7, 0.2);
-			level.sendParticles(ParticleTypes.LARGE_SMOKE, true, false, x, y - 0.5, z, Math.min(24, flames / 4), 0.8, 0.8, 0.8, 0.03);
+			BehaviorSupport.sendContained(level, ParticleTypes.EXPLOSION, shape, center, radius, x, y, z, 1, 0.0, 0.0, 0.0, 0.0);
+			BehaviorSupport.sendContained(level, ParticleTypes.FLAME, shape, center, radius, x, y, z, flames, 0.7, 0.7, 0.7, 0.2);
+			BehaviorSupport.sendContained(level, ParticleTypes.LARGE_SMOKE, shape, center, radius, x, y - 0.5, z, Math.min(24, flames / 4), 0.8, 0.8, 0.8, 0.03);
 			return;
 		}
 
@@ -65,8 +65,8 @@ public final class MeteorBurst implements InsideEffectBehavior {
 				double x = center.x + Math.cos(azimuth) * radius * 0.45;
 				double y = center.y + radius * (0.55 + 0.15 * b / 2.0);
 				double z = center.z + Math.sin(azimuth) * radius * 0.45;
-				level.sendParticles(ParticleTypes.FLAME, true, false, x, y, z, flames, 0.3, 0.3, 0.3, 0.1);
-				level.sendParticles(ParticleTypes.SMOKE, true, false, x, y, z, flames / 4, 0.4, 0.4, 0.4, 0.03);
+				BehaviorSupport.sendContained(level, ParticleTypes.FLAME, shape, center, radius, x, y, z, flames, 0.3, 0.3, 0.3, 0.1);
+				BehaviorSupport.sendContained(level, ParticleTypes.SMOKE, shape, center, radius, x, y, z, flames / 4, 0.4, 0.4, 0.4, 0.03);
 			}
 			return;
 		}
@@ -77,7 +77,7 @@ public final class MeteorBurst implements InsideEffectBehavior {
 			double y = center.y + radius * 0.7;
 			double z = center.z + Math.sin(azimuth) * radius * 0.35;
 			int sparks = ctx.scaleCount(Mth.clamp((int) (radius * 5.0F * def.behaviorStrength()), 20, 112), 112);
-			level.sendParticles(ParticleTypes.FIREWORK, true, false, x, y, z, sparks, 0.3, 0.3, 0.3, 0.18);
+			BehaviorSupport.sendContained(level, ParticleTypes.FIREWORK, shape, center, radius, x, y, z, sparks, 0.3, 0.3, 0.3, 0.18);
 			return;
 		}
 
@@ -88,8 +88,8 @@ public final class MeteorBurst implements InsideEffectBehavior {
 			double y = center.y + radius * 0.6;
 			double z = center.z + Math.sin(azimuth) * radius * 0.35;
 			int motes = ctx.scaleCount(Mth.clamp((int) (radius * 4.0F * def.behaviorStrength()), 16, 96), 96);
-			level.sendParticles(ParticleTypes.GUST, true, false, x, y, z, 2, 0.2, 0.2, 0.2, 0.0);
-			level.sendParticles(ParticleTypes.END_ROD, true, false, x, y, z, motes, 0.2, 0.2, 0.2, 0.25);
+			BehaviorSupport.sendContained(level, ParticleTypes.GUST, shape, center, radius, x, y, z, 2, 0.2, 0.2, 0.2, 0.0);
+			BehaviorSupport.sendContained(level, ParticleTypes.END_ROD, shape, center, radius, x, y, z, motes, 0.2, 0.2, 0.2, 0.25);
 			return;
 		}
 
@@ -104,10 +104,10 @@ public final class MeteorBurst implements InsideEffectBehavior {
 			double x = center.x + Math.cos(azimuth) * radius * 0.35;
 			double y = center.y + radius * 0.75;
 			double z = center.z + Math.sin(azimuth) * radius * 0.35;
-			level.sendParticles(ParticleTypes.FLAME, true, false, x, y, z, flames, 0.4, 0.4, 0.4, 0.15);
-			level.sendParticles(ParticleTypes.SMOKE, true, false, x, y, z, flames / 2, 0.6, 0.6, 0.6, 0.05);
+			BehaviorSupport.sendContained(level, ParticleTypes.FLAME, shape, center, radius, x, y, z, flames, 0.4, 0.4, 0.4, 0.15);
+			BehaviorSupport.sendContained(level, ParticleTypes.SMOKE, shape, center, radius, x, y, z, flames / 2, 0.6, 0.6, 0.6, 0.05);
 			if (variant == 2 && b == 1) {
-				level.sendParticles(ParticleTypes.POOF, true, false, x, y, z, 12, 0.3, 0.3, 0.3, 0.1);
+				BehaviorSupport.sendContained(level, ParticleTypes.POOF, shape, center, radius, x, y, z, 12, 0.3, 0.3, 0.3, 0.1);
 			}
 		}
 	}

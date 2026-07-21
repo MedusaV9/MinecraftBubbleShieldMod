@@ -1400,20 +1400,23 @@ def main() -> None:
     # then failed validation and the screenTemplateMatchesJson gametest.)
     manifest = {}
     written = 0
+    # All writes are UTF-8 + LF explicitly: byte-stable output across platforms
+    # (Windows' default newline translation would flip every file to CRLF and
+    # break the byte-identical classpath-manifest check).
     for asg in assignments:
         source = emit_shader(asg)
         manifest[str(asg["id"])] = manifest_entry(asg, source)
         if asg["id"] in ids:
-            (out_dir / f"sfx_{asg['id']:03d}.fsh").write_text(source)
+            (out_dir / f"sfx_{asg['id']:03d}.fsh").write_text(source, encoding="utf-8", newline="\n")
             written += 1
 
     manifest_text = json.dumps(manifest, indent=2, sort_keys=True) + "\n"
     if args.out:
-        (out_dir / "screen_manifest.json").write_text(manifest_text)
+        (out_dir / "screen_manifest.json").write_text(manifest_text, encoding="utf-8", newline="\n")
         manifest_paths = [out_dir / "screen_manifest.json"]
     else:
-        DEFAULT_MANIFEST.write_text(manifest_text)
-        CLASSPATH_MANIFEST.write_text(manifest_text)
+        DEFAULT_MANIFEST.write_text(manifest_text, encoding="utf-8", newline="\n")
+        CLASSPATH_MANIFEST.write_text(manifest_text, encoding="utf-8", newline="\n")
         manifest_paths = [DEFAULT_MANIFEST, CLASSPATH_MANIFEST]
 
     line_counts = [e["lines"] for e in manifest.values()]

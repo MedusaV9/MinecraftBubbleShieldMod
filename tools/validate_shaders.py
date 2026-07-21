@@ -26,10 +26,13 @@ COUNT-derived inventory (fail-closed):
 
 * the bubble dir must contain EXACTLY fx_000..fx_{COUNT-1}.fsh + surface.vsh
   (contiguous, no gaps, no extras);
-* the beam dir must contain EXACTLY the four hand-written projector-beam
-  shaders (beam_storm/beam_pulse/beam_helix/beam_prism.fsh) -- a small NAMED
-  set, one per BeamStyle, NOT per-effect, so it is deliberately excluded from
-  the fx_/sfx_ COUNT contiguity cross-check but still fully compile- and
+* the beam dir must contain EXACTLY one hand-written beam_<style>.fsh per
+  rendered BeamStyle -- the name set is DERIVED from BeamStyle.java's RENDERED
+  array (single source of truth) and cross-checked against
+  ShieldPipelines.java's BEAM_STYLE_NAMES registration list, so the enum, the
+  pipeline registration and the shader files can never drift apart. A small
+  NAMED set, one per style, NOT per-effect, so it is deliberately excluded
+  from the fx_/sfx_ COUNT contiguity cross-check but still fully compile- and
   link-validated (against bubble/surface.vsh, whose varyings they share);
 * the screenfx dir must contain EXACTLY sfx_000..sfx_{COUNT-1}.fsh;
 * the post_effect dir must contain EXACTLY effect_00..effect_{COUNT-1}.json;
@@ -117,8 +120,14 @@ SURFACE_VSH = BUBBLE_DIR / "surface.vsh"
 # The projector-beam shaders: a fixed NAMED set (one per rendered BeamStyle in
 # com.bubbleshield.shield.BeamStyle), hand-written rather than generated, so
 # they sit outside the fx_/sfx_ COUNT contiguity contract but are still
-# compile-validated and link-validated against bubble/surface.vsh.
-BEAM_NAMES = ("beam_storm.fsh", "beam_pulse.fsh", "beam_helix.fsh", "beam_prism.fsh")
+# compile-validated and link-validated against bubble/surface.vsh. The name set
+# is DERIVED from BeamStyle.java's RENDERED array (single source of truth, see
+# parse_beam_names) and cross-checked against ShieldPipelines.java's
+# BEAM_STYLE_NAMES pipeline registration list.
+BEAM_STYLE_JAVA = REPO_ROOT / "src/main/java/com/bubbleshield/shield/BeamStyle.java"
+SHIELD_PIPELINES_JAVA = REPO_ROOT / "src/client/java/com/bubbleshield/client/render/ShieldPipelines.java"
+BEAM_RENDERED_RE = re.compile(r"BeamStyle\[\]\s+RENDERED\s*=\s*\{([^}]*)\}\s*;")
+BEAM_PIPELINE_NAMES_RE = re.compile(r"String\[\]\s+BEAM_STYLE_NAMES\s*=\s*\{([^}]*)\}\s*;")
 MANIFEST_PATH = REPO_ROOT / "tools/surface_manifest.json"
 SCREEN_MANIFEST_PATH = REPO_ROOT / "tools/screen_manifest.json"
 CLASSPATH_SCREEN_MANIFEST = REPO_ROOT / "src/main/resources/assets/bubbleshield/screen_manifest.json"
@@ -155,6 +164,34 @@ def parse_registry_count() -> int:
 
 def strip_comments(text: str) -> str:
     return LINE_COMMENT.sub("", BLOCK_COMMENT.sub("", text))
+
+
+def parse_beam_names() -> tuple[str, ...]:
+    """The expected beam shader file names, derived from BeamStyle.java's
+    RENDERED array (the single source of truth) and cross-checked against
+    ShieldPipelines.java's BEAM_STYLE_NAMES pipeline registration list. Exits
+    when either cannot be parsed or when they disagree, so the enum, the
+    pipeline registration and the shader file set can never silently drift."""
+    if not BEAM_STYLE_JAVA.is_file():
+        sys.exit(f"BeamStyle.java not found: {BEAM_STYLE_JAVA}")
+    match = BEAM_RENDERED_RE.search(strip_comments(BEAM_STYLE_JAVA.read_text(encoding="utf-8")))
+    if not match:
+        sys.exit(f"could not parse 'BeamStyle[] RENDERED = {{...}}' from {BEAM_STYLE_JAVA}")
+    styles = [entry.strip().lower() for entry in match.group(1).split(",") if entry.strip()]
+    if not styles:
+        sys.exit(f"BeamStyle.RENDERED parsed empty from {BEAM_STYLE_JAVA}")
+
+    if not SHIELD_PIPELINES_JAVA.is_file():
+        sys.exit(f"ShieldPipelines.java not found: {SHIELD_PIPELINES_JAVA}")
+    pipelines_match = BEAM_PIPELINE_NAMES_RE.search(
+        strip_comments(SHIELD_PIPELINES_JAVA.read_text(encoding="utf-8")))
+    if not pipelines_match:
+        sys.exit(f"could not parse 'String[] BEAM_STYLE_NAMES = {{...}}' from {SHIELD_PIPELINES_JAVA}")
+    pipeline_names = [entry.strip().strip('"') for entry in pipelines_match.group(1).split(",") if entry.strip()]
+    if pipeline_names != styles:
+        sys.exit(f"BeamStyle.RENDERED {styles} != ShieldPipelines.BEAM_STYLE_NAMES {pipeline_names} "
+                 "(the enum and the pipeline registration drifted apart)")
+    return tuple(f"beam_{name}.fsh" for name in styles)
 
 
 def extract_vanilla() -> tuple[dict[str, str], str]:
@@ -220,7 +257,7 @@ def interface_errors(vert_source: str, frag_source: str, label: str) -> list[str
     return errors
 
 
-def check_inventory(count: int, skip_fx: bool, skip_sfx: bool, skip_post: bool) -> list[str]:
+def check_inventory(count: int, beam_names: tuple[str, ...], skip_fx: bool, skip_sfx: bool, skip_post: bool) -> list[str]:
     """COUNT-derived exact file sets + recursive sweep for misplaced shaders."""
     errors: list[str] = []
 
@@ -239,11 +276,12 @@ def check_inventory(count: int, skip_fx: bool, skip_sfx: bool, skip_post: bool) 
         expected_bubble |= {f"fx_{i:03d}.fsh" for i in range(count)}
     diff_exact(BUBBLE_DIR, expected_bubble, f"bubble shader set (COUNT={count})")
 
-    # The beam set is COUNT-independent (one shader per rendered BeamStyle),
-    # but still exact: a missing style crashes the client's pipeline
-    # registration at resource load, an extra file is a stray.
-    expected_beam = set(BEAM_NAMES)
-    diff_exact(BEAM_DIR, expected_beam, "beam shader set (fixed named set)")
+    # The beam set is COUNT-independent (one shader per rendered BeamStyle,
+    # derived from BeamStyle.java), but still exact: a missing style crashes
+    # the client's pipeline registration at resource load, an extra file is a
+    # stray.
+    expected_beam = set(beam_names)
+    diff_exact(BEAM_DIR, expected_beam, f"beam shader set (BeamStyle.RENDERED, {len(beam_names)} styles)")
 
     expected_screen = set() if skip_sfx else {f"sfx_{i:03d}.fsh" for i in range(count)}
     diff_exact(SCREENFX_DIR, expected_screen, f"screenfx shader set (COUNT={count})")
@@ -515,6 +553,7 @@ def main() -> None:
     args = parser.parse_args()
 
     count = parse_registry_count()
+    beam_names = parse_beam_names()
     includes, screenquad_source = extract_vanilla()
 
     fx_never_generated = not any(BUBBLE_DIR.glob("fx_*.fsh")) and not MANIFEST_PATH.is_file()
@@ -524,7 +563,7 @@ def main() -> None:
     skip_sfx = args.allow_empty and sfx_never_generated
     skip_post = args.allow_empty and post_never_generated
 
-    inventory_errors = check_inventory(count, skip_fx, skip_sfx, skip_post)
+    inventory_errors = check_inventory(count, beam_names, skip_fx, skip_sfx, skip_post)
 
     shaders: list[Path] = []
     for shader_root in (CLIENT_SHADER_ROOT, MAIN_SHADER_ROOT):
@@ -554,7 +593,7 @@ def main() -> None:
         link_jobs: list[tuple[str, list[str]]] = []
         interface_issues: list[str] = []
         for shader in shaders:
-            if (FX_NAME.match(shader.name) or shader.name in BEAM_NAMES) and SURFACE_VSH in stitched_paths:
+            if (FX_NAME.match(shader.name) or shader.name in beam_names) and SURFACE_VSH in stitched_paths:
                 # The beam shaders pair with the same bubble/surface.vsh
                 # passthrough as the per-effect fx_* set (BEAM_SNIPPET reuses it).
                 label = f"link surface.vsh <-> {shader.name}"

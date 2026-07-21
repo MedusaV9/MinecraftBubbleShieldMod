@@ -3,6 +3,8 @@ package com.bubbleshield.gametest;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Locale;
@@ -110,6 +112,71 @@ public class EffectCatalogGameTests {
 		helper.succeed();
 	}
 
+	/**
+	 * The frozen id range 0..349 (V1/V2 catalogue 0..104 + the 350-milestone rows
+	 * 105..349): all their row fields must stay byte-identical across catalogue
+	 * expansions.
+	 */
+	private static final int FROZEN_ROW_END_EXCLUSIVE = 350;
+
+	/**
+	 * Golden SHA-256 over the canonical serialization ({@link #canonicalRow}) of
+	 * ALL frozen rows 0..349. The spot checks in {@link #allEffectsValid} guard
+	 * the range edges; this hash makes ANY edit to ANY field of ANY frozen row
+	 * fail — including a mid-range row nowhere near a spot check. Recompute (only
+	 * for a deliberate, reviewed freeze change) by running this test and copying
+	 * the actual hash from the failure message.
+	 */
+	private static final String FROZEN_ROWS_SHA256 = "586ab2d5ca2efc1dde7a87dab6567d810eb43813863d57cfb08dc2e1474038a8";
+
+	/**
+	 * The full-freeze golden hash: canonical, locale-independent serialization of
+	 * every core row field of ids 0..349 (colors and float bits in hex, enums by
+	 * name), hashed with SHA-256 and compared to {@link #FROZEN_ROWS_SHA256}.
+	 */
+	@GameTest
+	public void frozenRowsGoldenHash(GameTestHelper helper) {
+		StringBuilder canonical = new StringBuilder();
+		for (int id = 0; id < FROZEN_ROW_END_EXCLUSIVE; id++) {
+			canonical.append(canonicalRow(EffectRegistry.get(id))).append('\n');
+		}
+
+		String actual = sha256Hex(canonical.toString());
+		helper.assertTrue(FROZEN_ROWS_SHA256.equals(actual),
+				"the frozen rows 0.." + (FROZEN_ROW_END_EXCLUSIVE - 1) + " changed: golden SHA-256 "
+						+ FROZEN_ROWS_SHA256 + " != actual " + actual
+						+ " (frozen rows must stay byte-identical across catalogue expansions)");
+		helper.succeed();
+	}
+
+	/**
+	 * One frozen row's canonical serialization: every core field, in declaration
+	 * order, joined with '|'. Floats are serialized as their raw IEEE-754 bits in
+	 * hex (no formatting/locale wobble), colors as fixed-width hex, enums by name.
+	 */
+	private static String canonicalRow(EffectDefinition def) {
+		return String.format(Locale.ROOT, "%d|%08X|%08X|%s|%08X|%08X|%s|%d|%08X|%s|%s|%s|%08X|%d|%s",
+				def.id(), def.argbPrimary(), def.argbSecondary(), def.surface().name(),
+				Float.floatToRawIntBits(def.paramA()), Float.floatToRawIntBits(def.paramB()),
+				def.insideBehaviorId(), def.behaviorVariant(), Float.floatToRawIntBits(def.behaviorStrength()),
+				def.guard().name(), def.context().name(), def.ambientSoundId(),
+				Float.floatToRawIntBits(def.ambientPitch()), def.ambientPeriodTicks(), def.screenTemplate());
+	}
+
+	private static String sha256Hex(String text) {
+		try {
+			byte[] digest = MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8));
+			StringBuilder hex = new StringBuilder(digest.length * 2);
+			for (byte b : digest) {
+				hex.append(String.format(Locale.ROOT, "%02x", b));
+			}
+
+			return hex.toString();
+		} catch (NoSuchAlgorithmException e) {
+			throw new IllegalStateException("SHA-256 unavailable", e);
+		}
+	}
+
 	/** Asserts one frozen catalogue row's palette/paramB/behaviorStrength golden values. */
 	private static void assertFrozenRow(GameTestHelper helper, int id, int argbPrimary, int argbSecondary,
 			float paramB, float behaviorStrength) {
@@ -185,6 +252,24 @@ public class EffectCatalogGameTests {
 	}
 
 	/**
+	 * The single MAX context cell every profile can reach (NIGHT_BLOOM countMult
+	 * 2 is exceeded here on purpose): countMult 3 exercises every
+	 * {@code scaleCount} clamp at its cap and periodDivisor 2 halves every
+	 * throttle, so the scaled-count emission paths are what the containment and
+	 * per-tick-budget asserts actually see.
+	 */
+	private static final ContextState MAX_CONTEXT = new ContextState(3.0F, 2, false, true);
+
+	/**
+	 * The per-tick particle budget: no single behavior tick may ask the client to
+	 * render more than this many particles (sum of {@code max(count, 1)} over the
+	 * tick's packets), even at {@link #MAX_CONTEXT}. Keeps any one effect from
+	 * flooding the particle engine (vanilla caps at 16384 alive; 10 nearby
+	 * shields x 128 stays well under it).
+	 */
+	private static final int MAX_PARTICLES_PER_TICK = 128;
+
+	/**
 	 * Runs the full 60-behavior x 7-variant matrix (every entry of
 	 * {@code InsideEffectBehavior.REGISTRY}) under the given shape and asserts
 	 * containment/deny-list on every particle packet the server sent. The seven game
@@ -193,7 +278,13 @@ public class EffectCatalogGameTests {
 	 * The matrix runs at both the minimum shield radius (4, where absolute-offset
 	 * geometry is proportionally largest) and a mid radius, and at both a neutral
 	 * and the maximum catalogue behavior strength (strength-scaled reach is what
-	 * historically pushed rings/spans past the shell on small shields).
+	 * historically pushed rings/spans past the shell on small shields). Packets are
+	 * drained and asserted PER BEHAVIOR TICK, so the {@link #MAX_PARTICLES_PER_TICK}
+	 * budget is enforced per tick, not on the cell aggregate. On top of the
+	 * NEUTRAL cells, every behavior/variant also runs one {@link #MAX_CONTEXT}
+	 * cell (countMult 3, periodDivisor 2) at the tightest geometry (radius 4,
+	 * strength 1.5), so context-scaled counts are exercised without doubling the
+	 * whole matrix.
 	 */
 	private static void runContainedMatrix(GameTestHelper helper, ShieldShape shape) {
 		ServerLevel level = helper.getLevel();
@@ -211,6 +302,8 @@ public class EffectCatalogGameTests {
 		zombie.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
 		zombie.setInvulnerable(true);
 
+		long[] gameTimes = {0L, 10L, 20L, 30L, 40L, 100L, 200L};
+
 		// Flush join/teleport noise so the asserted window contains ONLY matrix emissions.
 		capture.drainParticlePackets();
 		int captured = 0;
@@ -220,12 +313,13 @@ public class EffectCatalogGameTests {
 					EffectDefinition def = EffectDefinition.of(0, 0xFFFF8800, 0xFF884400, SurfaceTemplate.AURORA, 0.5F, 0.8F,
 							entry.getKey(), variant, strength, GuardStyle.NONE, ContextProfile.NONE, "block.beacon.ambient", 1.0F, 160, "tint");
 					for (float radius : new float[] {4.0F, 6.0F}) {
-						for (long gameTime : new long[] {0L, 10L, 20L, 30L, 40L, 100L, 200L}) {
+						int cellCaptured = 0;
+						for (long gameTime : gameTimes) {
 							entry.getValue().tick(level, center, radius, shape, def, gameTime, ContextState.NEUTRAL);
+							cellCaptured += assertCapturedTickLegal(helper, capture, shape, center, radius,
+									entry.getKey() + "@" + variant + " (radius " + radius + ", strength " + strength + ", t=" + gameTime + ")");
 						}
 
-						int cellCaptured = assertCapturedParticlesContained(helper, capture, shape, center, radius,
-								entry.getKey() + "@" + variant + " (radius " + radius + ", strength " + strength + ")");
 						// The ghost behaviors are pure particle apparitions: every
 						// variant must visibly emit in every matrix cell, which also
 						// proves they really ran (no vacuous pass).
@@ -235,6 +329,16 @@ public class EffectCatalogGameTests {
 						}
 
 						captured += cellCaptured;
+					}
+
+					// The MAX-context cell: tightest geometry only (radius 4 is where
+					// scaled counts + absolute offsets are most containment-hostile).
+					if (strength == 1.5F) {
+						for (long gameTime : gameTimes) {
+							entry.getValue().tick(level, center, 4.0F, shape, def, gameTime, MAX_CONTEXT);
+							captured += assertCapturedTickLegal(helper, capture, shape, center, 4.0F,
+									entry.getKey() + "@" + variant + " (MAX context, radius 4.0, t=" + gameTime + ")");
+						}
 					}
 				}
 			}
@@ -248,15 +352,36 @@ public class EffectCatalogGameTests {
 	}
 
 	/**
-	 * Asserts every particle packet captured since the last drain is legal for the
-	 * shape and returns how many were checked.
+	 * Asserts every particle packet captured since the last drain (= one behavior
+	 * tick) is legal for the shape — the FULL reconstructed client trajectory, not
+	 * just the packet origin — plus the per-tick particle budget. Returns how many
+	 * packets were checked.
+	 *
+	 * <ul>
+	 *   <li>count&gt;0: the client spawns each particle at
+	 *       {@code origin + nextGaussian() * dist} per axis, so the whole
+	 *       {@code origin ± SPREAD_SIGMAS * dist} box (all 8 corners) must be
+	 *       inside — the tails beyond {@code SPREAD_SIGMAS} (2.5) are the accepted
+	 *       &lt;1.3%-per-axis residue of the vanilla Gaussian;</li>
+	 *   <li>count=0: the single particle spawns at {@code pos + maxSpeed * dist},
+	 *       which must be inside; for the ENCHANT/NAUTILUS/VAULT_CONNECTION
+	 *       fly-toward types the DESTINATION is the packet pos and the particle
+	 *       additionally undershoots it by up to
+	 *       {@link BehaviorSupport#FLY_TOWARD_DIP} blocks of Y, so
+	 *       {@code pos - (0, 1.2, 0)} must be inside too;</li>
+	 *   <li>TRAIL particles lerp to the option's target: the target must be inside;</li>
+	 *   <li>the tick's total requested particle count (sum of
+	 *       {@code max(count, 1)}) must not exceed {@link #MAX_PARTICLES_PER_TICK}.</li>
+	 * </ul>
 	 */
-	private static int assertCapturedParticlesContained(GameTestHelper helper, MockPlayers.CapturingMockPlayer capture,
+	private static int assertCapturedTickLegal(GameTestHelper helper, MockPlayers.CapturingMockPlayer capture,
 			ShieldShape shape, Vec3 center, float radius, String label) {
 		double maxDist = radius * BehaviorSupport.MAX_DIST_FRAC + 1.0e-6;
 		int captured = 0;
+		int tickParticles = 0;
 		for (ClientboundLevelParticlesPacket packet : capture.drainParticlePackets()) {
 			captured++;
+			tickParticles += Math.max(packet.getCount(), 1);
 			helper.assertTrue(!BehaviorSupport.AIR_UNSAFE_PARTICLES.contains(packet.getParticle().getType()),
 					label + " emits air-unsafe particle " + BuiltInRegistries.PARTICLE_TYPE.getKey(packet.getParticle().getType())
 							+ " (self-removes outside water; see BehaviorSupport.AIR_UNSAFE_PARTICLES)");
@@ -278,9 +403,36 @@ public class EffectCatalogGameTests {
 						packet.getMaxSpeed() * packet.getYDist(),
 						packet.getMaxSpeed() * packet.getZDist());
 				assertPointContained(helper, shape, center, maxDist, spawn, label + " count=0 spawn point");
+			} else {
+				// count>0: the dist args are per-axis Gaussian STDDEVS on the client;
+				// the whole k-sigma spread box must stay inside. Checking all 8
+				// corners of origin ± k*dist bounds the vanilla spread reconstruction.
+				double hx = BehaviorSupport.SPREAD_SIGMAS * packet.getXDist();
+				double hy = BehaviorSupport.SPREAD_SIGMAS * packet.getYDist();
+				double hz = BehaviorSupport.SPREAD_SIGMAS * packet.getZDist();
+				if (hx != 0.0 || hy != 0.0 || hz != 0.0) {
+					for (int corner = 0; corner < 8; corner++) {
+						Vec3 point = pos.add(
+								(corner & 1) == 0 ? -hx : hx,
+								(corner & 2) == 0 ? -hy : hy,
+								(corner & 4) == 0 ? -hz : hz);
+						assertPointContained(helper, shape, center, maxDist, point,
+								label + " " + BehaviorSupport.SPREAD_SIGMAS + "-sigma spread corner " + corner);
+					}
+				}
+			}
+
+			if (BehaviorSupport.FLY_TOWARD_PARTICLES.contains(packet.getParticle().getType())) {
+				// FlyTowardsPositionParticle lands FLY_TOWARD_DIP blocks BELOW the
+				// packet position (the y -= 1.2 * pp^4 term), for count=0 and
+				// count>0 packet forms alike; the dipped destination must be inside.
+				assertPointContained(helper, shape, center, maxDist,
+						pos.subtract(0.0, BehaviorSupport.FLY_TOWARD_DIP, 0.0), label + " fly-toward dip destination");
 			}
 		}
 
+		helper.assertTrue(tickParticles <= MAX_PARTICLES_PER_TICK,
+				label + " asked for " + tickParticles + " particles in one tick (budget " + MAX_PARTICLES_PER_TICK + ")");
 		return captured;
 	}
 

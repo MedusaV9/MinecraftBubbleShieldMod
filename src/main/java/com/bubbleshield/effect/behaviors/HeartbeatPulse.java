@@ -61,9 +61,9 @@ public final class HeartbeatPulse implements InsideEffectBehavior {
 			};
 			level.playSound(null, center.x, center.y, center.z, SoundEvents.WARDEN_HEARTBEAT, SoundSource.AMBIENT, volume, pitch);
 			if (variant == 1) {
-				level.sendParticles(ParticleTypes.NOTE, true, false, center.x, center.y + 2.0, center.z, 3, 0.5, 0.5, 0.5, 0.0);
+				BehaviorSupport.sendContained(level, ParticleTypes.NOTE, shape, center, radius, center.x, center.y + 2.0, center.z, 3, 0.5, 0.5, 0.5, 0.0);
 			} else if (variant == 5) {
-				level.sendParticles(ParticleTypes.HEART, true, false, center.x, center.y + 1.5, center.z, ctx.scaleCount(6, 12), 0.8, 0.6, 0.8, 0.0);
+				BehaviorSupport.sendContained(level, ParticleTypes.HEART, shape, center, radius, center.x, center.y + 1.5, center.z, ctx.scaleCount(6, 12), 0.8, 0.6, 0.8, 0.0);
 			}
 		}
 

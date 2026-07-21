@@ -33,9 +33,11 @@ import net.minecraft.world.phys.Vec3;
  * in world units), raw UVs in [0, 1], and the same per-vertex dissolve alpha. The
  * primary-to-secondary color blend runs on a separate per-vertex top-to-bottom
  * fraction so it reads like the sphere's latitude blend even where the shader UV
- * is face-local (cube) or wraps around the tube (torus, whose blend fraction is
- * seam-continuous while its v coordinate stays injective). The sphere/dome
- * emitters are untouched, so their output stays byte-identical.
+ * is face-local (cube). The torus maps BOTH its shader v and its blend fraction
+ * to the seam-free polar quantity {@code (1 - cos(psi)) * 0.5}: the fx shaders
+ * treat v as non-periodic latitude, so a wrapping minor-angle v would paint a
+ * hard seam ring along the tube top. The sphere/dome emitters are untouched, so
+ * their output stays byte-identical.
  */
 public final class SphereMesh {
 	/** Distance (blocks) from a dissolve center over which the surface fades back in. */
@@ -266,9 +268,22 @@ public final class SphereMesh {
 	}
 
 	/**
+	 * The v span each cylinder cap fan covers from its rim (v = 0 or 1) toward its
+	 * center vertex: a small radial band so the caps show a live shader gradient
+	 * instead of collapsing to a single constant-v (visually flat/striped) value.
+	 */
+	private static final float CAP_V_BAND = 0.1F;
+
+	/**
 	 * Side wall (u = azimuth fraction, v = top-to-bottom fraction) plus top/bottom
-	 * discs as center fans of degenerate quads (the dome-disc precedent). Dimensions
-	 * from {@link ShieldGeometry}: horizontal radius 0.6, half-height 0.8.
+	 * discs as center fans of degenerate quads (the dome-disc precedent). The cap
+	 * center vertices carry {@code v = CAP_V_BAND} (top) / {@code 1 - CAP_V_BAND}
+	 * (bottom) so each cap sweeps a small radial v band rim-to-center — the rim
+	 * vertices are shared with the side wall, so the wall-to-cap v is continuous
+	 * and the fx shaders (which read v as non-periodic latitude) render the caps
+	 * as concentric latitude rings instead of one flat color. The color-blend
+	 * fraction stays 0/1 at the centers (unchanged cap coloring). Dimensions from
+	 * {@link ShieldGeometry}: horizontal radius 0.6, half-height 0.8.
 	 */
 	private static QuadMesh buildCylinder(int lonSteps, int heightSteps) {
 		float rho = (float) ShieldGeometry.CYLINDER_RADIUS_FRAC;
@@ -293,12 +308,13 @@ public final class SphereMesh {
 		}
 
 		// Caps: fan from the rim ring to a per-quad center vertex whose u averages
-		// the rim pair (exactly like the dome's closing disc).
+		// the rim pair (exactly like the dome's closing disc). The center's v steps
+		// CAP_V_BAND inward from the rim's 0/1 so the cap is a radial v gradient.
 		for (int lon = 0; lon < lonSteps; lon++) {
 			float centerU = ((float) lon + 0.5F) / lonSteps;
-			int topCenter = builder.vertex(0.0F, halfHeight, 0.0F, centerU, 0.0F, 0.0F);
+			int topCenter = builder.vertex(0.0F, halfHeight, 0.0F, centerU, CAP_V_BAND, 0.0F);
 			builder.triangle(side[0][lon], side[0][lon + 1], topCenter);
-			int bottomCenter = builder.vertex(0.0F, -halfHeight, 0.0F, centerU, 1.0F, 1.0F);
+			int bottomCenter = builder.vertex(0.0F, -halfHeight, 0.0F, centerU, 1.0F - CAP_V_BAND, 1.0F);
 			builder.triangle(side[heightSteps][lon + 1], side[heightSteps][lon], bottomCenter);
 		}
 
@@ -466,9 +482,13 @@ public final class SphereMesh {
 	}
 
 	/**
-	 * Torus: u = major-angle fraction, v = minor-angle fraction (injective around the
-	 * tube), while the color-blend fraction is the tube's top-to-bottom height
-	 * fraction so the primary-to-secondary blend stays seam-continuous. Dimensions
+	 * Torus: u = major-angle fraction; v = the tube's top-to-bottom POLAR fraction
+	 * {@code (1 - cos(psi)) * 0.5} — NOT the raw minor-angle fraction, which wraps
+	 * (0 and 1 meet at the tube top) and would paint a hard seam ring there in
+	 * every surface shader, since the fx shaders treat v as a non-periodic
+	 * latitude. The polar mapping is seam-free (cos is continuous across psi =
+	 * 0/2PI) and matches the sphere's "v = latitude" convention; the color-blend
+	 * fraction uses the same quantity, so blend and shader v agree. Dimensions
 	 * from {@link ShieldGeometry}: major radius 0.7, tube radius 0.3.
 	 */
 	private static QuadMesh buildRing(int majorSteps, int minorSteps) {
@@ -481,13 +501,12 @@ public final class SphereMesh {
 			float u = (float) a / majorSteps;
 			float phi = u * Mth.TWO_PI;
 			for (int b = 0; b <= minorSteps; b++) {
-				float v = (float) b / minorSteps;
-				float psi = v * Mth.TWO_PI;
+				float psi = (float) b / minorSteps * Mth.TWO_PI;
 				// psi = 0 is the tube's top; sin swings the ring radius outward first.
 				float y = minor * Mth.cos(psi);
 				float ringRadius = major + minor * Mth.sin(psi);
 				float latFrac = (1.0F - Mth.cos(psi)) * 0.5F;
-				grid[a][b] = builder.vertex(ringRadius * Mth.cos(phi), y, ringRadius * Mth.sin(phi), u, v, latFrac);
+				grid[a][b] = builder.vertex(ringRadius * Mth.cos(phi), y, ringRadius * Mth.sin(phi), u, latFrac, latFrac);
 			}
 		}
 

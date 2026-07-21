@@ -39,10 +39,10 @@ public final class MistLayer implements InsideEffectBehavior {
 			// size and override the 32-block send limiter so players deep inside a large
 			// bubble (radius up to 100) still see them.
 			int count = ctx.scaleCount(Mth.clamp((int) (radius * 2.0F), 16, 128), 128);
-			level.sendParticles(
+			BehaviorSupport.sendContained(level,
 					ParticleTypes.CLOUD,
-					true, false,
-					center.x, center.y + 0.2, center.z,
+					shape, center, radius,
+				center.x, center.y + 0.2, center.z,
 					count,
 					radius * 0.6, 0.15, radius * 0.6,
 					0.005
@@ -52,41 +52,41 @@ public final class MistLayer implements InsideEffectBehavior {
 
 		if (variant == 1) {
 			int count = ctx.scaleCount(Mth.clamp((int) (radius * 2.0F * def.behaviorStrength()), 16, 84), 84);
-			level.sendParticles(ParticleTypes.WHITE_ASH, true, false, center.x, center.y + 0.4, center.z, count, radius * 0.6, 0.3, radius * 0.6, 0.0);
-			level.sendParticles(ParticleTypes.ASH, true, false, center.x, center.y + 0.6, center.z, Math.min(42, count / 2), radius * 0.6, 0.3, radius * 0.6, 0.0);
+			BehaviorSupport.sendContained(level, ParticleTypes.WHITE_ASH, shape, center, radius, center.x, center.y + 0.4, center.z, count, radius * 0.6, 0.3, radius * 0.6, 0.0);
+			BehaviorSupport.sendContained(level, ParticleTypes.ASH, shape, center, radius, center.x, center.y + 0.6, center.z, Math.min(42, count / 2), radius * 0.6, 0.3, radius * 0.6, 0.0);
 			return;
 		}
 
 		if (variant == 2) {
 			int count = ctx.scaleCount(Mth.clamp((int) (radius * 2.0F * def.behaviorStrength()), 16, 128), 128);
-			level.sendParticles(ParticleTypes.SPORE_BLOSSOM_AIR, true, false, center.x, center.y + 0.8, center.z, count, radius * 0.6, 0.6, radius * 0.6, 0.0);
+			BehaviorSupport.sendContained(level, ParticleTypes.SPORE_BLOSSOM_AIR, shape, center, radius, center.x, center.y + 0.8, center.z, count, radius * 0.6, 0.6, radius * 0.6, 0.0);
 			return;
 		}
 
 		if (variant == 3) {
 			// Campfire smoke rises slowly, so keep the count low and the layer thin.
 			int count = ctx.scaleCount(Mth.clamp((int) (radius * 1.0F * def.behaviorStrength()), 8, 48), 48);
-			level.sendParticles(ParticleTypes.CAMPFIRE_COSY_SMOKE, true, false, center.x, center.y + 0.3, center.z, count, radius * 0.6, 0.1, radius * 0.6, 0.003);
+			BehaviorSupport.sendContained(level, ParticleTypes.CAMPFIRE_COSY_SMOKE, shape, center, radius, center.x, center.y + 0.3, center.z, count, radius * 0.6, 0.1, radius * 0.6, 0.003);
 			return;
 		}
 
 		if (variant == 4) {
 			int count = ctx.scaleCount(Mth.clamp((int) (radius * 2.0F * def.behaviorStrength()), 16, 96), 96);
-			level.sendParticles(ParticleTypes.WHITE_SMOKE, true, false, center.x, center.y + 0.3, center.z, count, radius * 0.6, 0.2, radius * 0.6, 0.002);
+			BehaviorSupport.sendContained(level, ParticleTypes.WHITE_SMOKE, shape, center, radius, center.x, center.y + 0.3, center.z, count, radius * 0.6, 0.2, radius * 0.6, 0.002);
 			return;
 		}
 
 		if (variant == 5) {
 			// Glowing fog: 84 clouds + 28 glow motes = 112 particles/pulse max.
 			int count = ctx.scaleCount(Mth.clamp((int) (radius * 2.0F * def.behaviorStrength()), 16, 84), 84);
-			level.sendParticles(ParticleTypes.CLOUD, true, false, center.x, center.y + 0.2, center.z, count, radius * 0.6, 0.15, radius * 0.6, 0.005);
-			level.sendParticles(ParticleTypes.GLOW, true, false, center.x, center.y + 0.6, center.z, Math.min(28, count / 3), radius * 0.55, 0.3, radius * 0.55, 0.0);
+			BehaviorSupport.sendContained(level, ParticleTypes.CLOUD, shape, center, radius, center.x, center.y + 0.2, center.z, count, radius * 0.6, 0.15, radius * 0.6, 0.005);
+			BehaviorSupport.sendContained(level, ParticleTypes.GLOW, shape, center, radius, center.x, center.y + 0.6, center.z, Math.min(28, count / 3), radius * 0.55, 0.3, radius * 0.55, 0.0);
 			return;
 		}
 
 		// v6: a knee-height fog rendered in the effect's palette dust.
 		DustParticleOptions dust = new DustParticleOptions(ctx.pickColor(def.argbPrimary(), def.argbSecondary()) & 0xFFFFFF, 1.6F);
 		int count = ctx.scaleCount(Mth.clamp((int) (radius * 2.0F * def.behaviorStrength()), 16, 128), 128);
-		level.sendParticles(dust, true, false, center.x, center.y + 0.4, center.z, count, radius * 0.6, 0.2, radius * 0.6, 0.0);
+		BehaviorSupport.sendContained(level, dust, shape, center, radius, center.x, center.y + 0.4, center.z, count, radius * 0.6, 0.2, radius * 0.6, 0.0);
 	}
 }

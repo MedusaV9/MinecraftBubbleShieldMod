@@ -65,11 +65,11 @@ public final class StaticOrbs implements InsideEffectBehavior {
 				case 6 -> ParticleTypes.WAX_OFF;
 				default -> ParticleTypes.END_ROD;
 			};
-			level.sendParticles(core, true, false, pos[orb][0], pos[orb][1], pos[orb][2], ctx.scaleCount(2, 4), 0.05, 0.05, 0.05, 0.0);
+			BehaviorSupport.sendContained(level, core, shape, center, radius, pos[orb][0], pos[orb][1], pos[orb][2], ctx.scaleCount(2, 4), 0.05, 0.05, 0.05, 0.0);
 			int crackle = ctx.scaleCount(discharging ? 8 : 2, 12);
-			level.sendParticles(ParticleTypes.ELECTRIC_SPARK, true, false, pos[orb][0], pos[orb][1], pos[orb][2], crackle, 0.3, 0.3, 0.3, variant == 2 && discharging ? 0.1 : 0.02);
+			BehaviorSupport.sendContained(level, ParticleTypes.ELECTRIC_SPARK, shape, center, radius, pos[orb][0], pos[orb][1], pos[orb][2], crackle, 0.3, 0.3, 0.3, variant == 2 && discharging ? 0.1 : 0.02);
 			if (discharging && variant == 2) {
-				level.sendParticles(ParticleTypes.FIREWORK, true, false, pos[orb][0], pos[orb][1], pos[orb][2], ctx.scaleCount(5, 10), 0.15, 0.15, 0.15, 0.08);
+				BehaviorSupport.sendContained(level, ParticleTypes.FIREWORK, shape, center, radius, pos[orb][0], pos[orb][1], pos[orb][2], ctx.scaleCount(5, 10), 0.15, 0.15, 0.15, 0.08);
 			}
 		}
 
@@ -78,8 +78,7 @@ public final class StaticOrbs implements InsideEffectBehavior {
 			int steps = ctx.scaleCount(Mth.clamp((int) (orbitDist * 2.0 / 0.5), 6, MAX_ARC), MAX_ARC);
 			for (int i = 0; i <= steps; i++) {
 				double t = (double) i / steps;
-				level.sendParticles(ParticleTypes.ELECTRIC_SPARK, true, false,
-						Mth.lerp(t, pos[0][0], pos[1][0]),
+				BehaviorSupport.sendContained(level, ParticleTypes.ELECTRIC_SPARK, shape, center, radius, Mth.lerp(t, pos[0][0], pos[1][0]),
 						Mth.lerp(t, pos[0][1], pos[1][1]) + Math.sin(t * Math.PI * 3.0 + pulse) * 0.2,
 						Mth.lerp(t, pos[0][2], pos[1][2]), 1, 0.03, 0.03, 0.03, 0.0);
 			}

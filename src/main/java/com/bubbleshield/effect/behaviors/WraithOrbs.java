@@ -93,8 +93,7 @@ public final class WraithOrbs implements InsideEffectBehavior {
 			Vec3 prev = BehaviorSupport.containPoint(shape, center, radius,
 					orbPoint(center, radius, def, o, orbs, gameTime - 10L, variant));
 			Vec3 target = BehaviorSupport.containPoint(shape, center, radius, pos);
-			level.sendParticles(new TrailParticleOption(target, dustRgb, 8), true, false,
-					prev.x, prev.y, prev.z, 1, 0.02, 0.02, 0.02, 0.0);
+			BehaviorSupport.sendContained(level, new TrailParticleOption(target, dustRgb, 8), shape, center, radius, prev.x, prev.y, prev.z, 1, 0.02, 0.02, 0.02, 0.0);
 		}
 	}
 

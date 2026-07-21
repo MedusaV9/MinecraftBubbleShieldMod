@@ -70,9 +70,9 @@ public final class HoneyDrip implements InsideEffectBehavior {
 			double x = center.x + horizontal * Math.cos(theta) * shell;
 			double y = center.y + up * shell;
 			double z = center.z + horizontal * Math.sin(theta) * shell;
-			level.sendParticles(drip, true, false, x, y, z, 1, 0.05, 0.05, 0.05, 0.0);
+			BehaviorSupport.sendContained(level, drip, shape, center, radius, x, y, z, 1, 0.05, 0.05, 0.05, 0.0);
 			if (variant == 6 && i % 3 == 0) {
-				level.sendParticles(ParticleTypes.WAX_ON, true, false, x, y - 0.2, z, 1, 0.05, 0.05, 0.05, 0.0);
+				BehaviorSupport.sendContained(level, ParticleTypes.WAX_ON, shape, center, radius, x, y - 0.2, z, 1, 0.05, 0.05, 0.05, 0.0);
 			}
 		}
 
@@ -82,8 +82,7 @@ public final class HoneyDrip implements InsideEffectBehavior {
 			int pools = ctx.scaleCount(Mth.clamp((int) Math.round(Math.PI * 2.0 * poolRadius / 2.5), 6, 24), 24);
 			for (int i = 0; i < pools; i++) {
 				double angle = Math.PI * 2.0 * i / pools;
-				level.sendParticles(ParticleTypes.LANDING_HONEY, true, false,
-						center.x + Math.cos(angle) * poolRadius, center.y + 0.1, center.z + Math.sin(angle) * poolRadius, 1, 0.2, 0.02, 0.2, 0.0);
+				BehaviorSupport.sendContained(level, ParticleTypes.LANDING_HONEY, shape, center, radius, center.x + Math.cos(angle) * poolRadius, center.y + 0.1, center.z + Math.sin(angle) * poolRadius, 1, 0.2, 0.02, 0.2, 0.0);
 			}
 		}
 	}

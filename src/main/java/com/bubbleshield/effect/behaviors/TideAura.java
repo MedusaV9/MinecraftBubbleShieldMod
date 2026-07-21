@@ -70,7 +70,7 @@ public final class TideAura implements InsideEffectBehavior {
 						new Vec3(player.getX(), player.getY() + 1.0, player.getZ()));
 				Vec3 spawn = BehaviorSupport.containPoint(shape, center, radius, new Vec3(
 						target.x + Math.cos(spawnAngle) * 1.6, target.y + 0.5, target.z + Math.sin(spawnAngle) * 1.6));
-				level.sendParticles(ParticleTypes.NAUTILUS, true, false, target.x, target.y, target.z, 0,
+				BehaviorSupport.sendContained(level, ParticleTypes.NAUTILUS, shape, center, radius, target.x, target.y, target.z, 0,
 						spawn.x - target.x, spawn.y - target.y, spawn.z - target.z, 1.0);
 			} else if (variant == 6 && player.isInWater()) {
 				player.addEffect(new MobEffectInstance(MobEffects.REGENERATION, DURATION_TICKS, 0));

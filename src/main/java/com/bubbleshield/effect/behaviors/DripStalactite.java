@@ -62,7 +62,7 @@ public final class DripStalactite implements InsideEffectBehavior {
 				case 6 -> station % 2 == 0 ? ParticleTypes.DRIPPING_DRIPSTONE_WATER : ParticleTypes.DRIPPING_DRIPSTONE_LAVA;
 				default -> ParticleTypes.DRIPPING_DRIPSTONE_WATER;
 			};
-			level.sendParticles(drip, true, false, x, y, z, drips, 0.1, 0.05, 0.1, 0.0);
+			BehaviorSupport.sendContained(level, drip, shape, center, radius, x, y, z, drips, 0.1, 0.05, 0.1, 0.0);
 		}
 
 		if (variant != 2 && variant != 5 && gameTime % 100L == 0L) {

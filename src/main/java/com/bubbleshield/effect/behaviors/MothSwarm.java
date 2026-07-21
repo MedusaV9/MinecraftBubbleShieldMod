@@ -72,16 +72,16 @@ public final class MothSwarm implements InsideEffectBehavior {
 					double angle = Math.PI * 2.0 * i / moths;
 					Vec3 spawn = BehaviorSupport.containPoint(shape, center, radius, new Vec3(
 							lx + Math.cos(angle) * 2.0, ly + 0.6 * Math.sin(t + i), lz + Math.sin(angle) * 2.0));
-					level.sendParticles(ParticleTypes.ENCHANT, true, false, lx, ly, lz, 0,
+					BehaviorSupport.sendContained(level, ParticleTypes.ENCHANT, shape, center, radius, lx, ly, lz, 0,
 							spawn.x - lx, spawn.y - ly, spawn.z - lz, 1.0);
 				}
 			} else {
-				level.sendParticles(moth, true, false, lx, ly, lz, moths, cloud, cloud * 0.6, cloud, 0.01);
+				BehaviorSupport.sendContained(level, moth, shape, center, radius, lx, ly, lz, moths, cloud, cloud * 0.6, cloud, 0.01);
 			}
 
 			if (variant != 1) {
 				SimpleParticleType marker = variant == 2 ? ParticleTypes.SOUL_FIRE_FLAME : ParticleTypes.GLOW;
-				level.sendParticles(marker, true, false, lx, ly, lz, 1, 0.02, 0.02, 0.02, 0.0);
+				BehaviorSupport.sendContained(level, marker, shape, center, radius, lx, ly, lz, 1, 0.02, 0.02, 0.02, 0.0);
 			}
 		}
 	}

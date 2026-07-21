@@ -98,7 +98,7 @@ public final class StormCage implements InsideEffectBehavior {
 		}
 
 		if (variant == 3 && gameTime % 20L == 0L) {
-			level.sendParticles(ParticleTypes.GUST, true, false, center.x, center.y + radius * 0.3, center.z, 2, radius * 0.4, radius * 0.15, radius * 0.4, 0.0);
+			BehaviorSupport.sendContained(level, ParticleTypes.GUST, shape, center, radius, center.x, center.y + radius * 0.3, center.z, 2, radius * 0.4, radius * 0.15, radius * 0.4, 0.0);
 		}
 
 		if (variant == 6 && gameTime % 40L == 0L) {

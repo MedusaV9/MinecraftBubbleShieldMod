@@ -70,7 +70,7 @@ public final class BubbleVeil implements InsideEffectBehavior {
 				double wx = Math.cos(angle) * radius * 0.85;
 				double wy = 0.4 + (i % 4) * 0.5;
 				double wz = Math.sin(angle) * radius * 0.85;
-				level.sendParticles(ParticleTypes.NAUTILUS, true, false, center.x, center.y + 1.0, center.z, 0, wx, wy - 1.0, wz, 1.0);
+				BehaviorSupport.sendContained(level, ParticleTypes.NAUTILUS, shape, center, radius, center.x, center.y + 1.0, center.z, 0, wx, wy - 1.0, wz, 1.0);
 			}
 			return;
 		}
@@ -84,15 +84,14 @@ public final class BubbleVeil implements InsideEffectBehavior {
 				double angle = curtainPhase + Math.PI * 2.0 * i / points;
 				double x = center.x + Math.cos(angle) * radius * CURTAIN_DIST_FRAC;
 				double z = center.z + Math.sin(angle) * radius * CURTAIN_DIST_FRAC;
-				level.sendParticles(ParticleTypes.SPLASH, true, false, x, center.y + Math.min(0.5, rise), z, 1, 0.1, 0.3, 0.1, 0.02);
+				BehaviorSupport.sendContained(level, ParticleTypes.SPLASH, shape, center, radius, x, center.y + Math.min(0.5, rise), z, 1, 0.1, 0.3, 0.1, 0.02);
 			}
 
 			RandomSource random = level.getRandom();
 			for (int i = 0; i < 5; i++) {
 				double angle = random.nextDouble() * Math.PI * 2.0;
 				double dist = Math.sqrt(random.nextDouble()) * radius * 0.7;
-				level.sendParticles(ParticleTypes.BUBBLE_POP, true, false,
-						center.x + Math.cos(angle) * dist, center.y + 0.5 + random.nextDouble() * radius * 0.4, center.z + Math.sin(angle) * dist, 10, 0.25, 0.25, 0.25, 0.05);
+				BehaviorSupport.sendContained(level, ParticleTypes.BUBBLE_POP, shape, center, radius, center.x + Math.cos(angle) * dist, center.y + 0.5 + random.nextDouble() * radius * 0.4, center.z + Math.sin(angle) * dist, 10, 0.25, 0.25, 0.25, 0.05);
 			}
 			return;
 		}
@@ -106,8 +105,7 @@ public final class BubbleVeil implements InsideEffectBehavior {
 				double up = 0.35 + random.nextDouble() * 0.65;
 				double horizontal = Math.sqrt(Math.max(0.0, 1.0 - up * up));
 				double shell = radius * (0.88 + random.nextDouble() * 0.08);
-				level.sendParticles(ParticleTypes.DRIPPING_WATER, true, false,
-						center.x + horizontal * Math.cos(theta) * shell, center.y + up * shell, center.z + horizontal * Math.sin(theta) * shell, 1, 0.05, 0.05, 0.05, 0.0);
+				BehaviorSupport.sendContained(level, ParticleTypes.DRIPPING_WATER, shape, center, radius, center.x + horizontal * Math.cos(theta) * shell, center.y + up * shell, center.z + horizontal * Math.sin(theta) * shell, 1, 0.05, 0.05, 0.05, 0.0);
 			}
 			return;
 		}
@@ -115,8 +113,8 @@ public final class BubbleVeil implements InsideEffectBehavior {
 		if (variant == 6) {
 			// Fountain: a splash jet above the projector plus falling water around it.
 			int jet = ctx.scaleCount(Mth.clamp((int) (radius * 3.0F * def.behaviorStrength()), 16, 80), 80);
-			level.sendParticles(ParticleTypes.SPLASH, true, false, center.x, center.y + 1.2, center.z, jet, 0.3, radius * 0.25, 0.3, 0.25);
-			level.sendParticles(ParticleTypes.FALLING_WATER, true, false, center.x, center.y + radius * 0.45, center.z, Math.min(32, jet / 2), 1.2, radius * 0.2, 1.2, 0.0);
+			BehaviorSupport.sendContained(level, ParticleTypes.SPLASH, shape, center, radius, center.x, center.y + 1.2, center.z, jet, 0.3, radius * 0.25, 0.3, 0.25);
+			BehaviorSupport.sendContained(level, ParticleTypes.FALLING_WATER, shape, center, radius, center.x, center.y + radius * 0.45, center.z, Math.min(32, jet / 2), 1.2, radius * 0.2, 1.2, 0.0);
 			return;
 		}
 
@@ -133,12 +131,12 @@ public final class BubbleVeil implements InsideEffectBehavior {
 			double x = center.x + Math.cos(angle) * radius * CURTAIN_DIST_FRAC;
 			double z = center.z + Math.sin(angle) * radius * CURTAIN_DIST_FRAC;
 			double rise = Math.min(0.5 + (Math.sin(angle * 3.0 + phase) + 1.0) * radius * 0.25, maxRise);
-			level.sendParticles(ParticleTypes.SPLASH, true, false, x, center.y + rise, z, 1, 0.1, 0.3, 0.1, 0.02);
+			BehaviorSupport.sendContained(level, ParticleTypes.SPLASH, shape, center, radius, x, center.y + rise, z, 1, 0.1, 0.3, 0.1, 0.02);
 		}
 
 		if (variant == 1) {
 			// Inner column of falling water above the projector, mimicking a downdraft.
-			level.sendParticles(ParticleTypes.FALLING_WATER, true, false, center.x, center.y + radius * 0.4, center.z, 16, 0.6, radius * 0.3, 0.6, 0.0);
+			BehaviorSupport.sendContained(level, ParticleTypes.FALLING_WATER, shape, center, radius, center.x, center.y + radius * 0.4, center.z, 16, 0.6, radius * 0.3, 0.6, 0.0);
 		}
 	}
 }

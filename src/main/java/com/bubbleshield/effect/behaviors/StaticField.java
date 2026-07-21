@@ -46,8 +46,7 @@ public final class StaticField implements InsideEffectBehavior {
 				double latitude = Math.PI * i / arcPoints;
 				double y = center.y + Math.sin(latitude) * shell;
 				double horizontal = Math.cos(latitude) * shell;
-				level.sendParticles(ParticleTypes.ELECTRIC_SPARK, true, false,
-						center.x + Math.cos(azimuth) * horizontal, y, center.z + Math.sin(azimuth) * horizontal, 1, 0.05, 0.05, 0.05, 0.0);
+				BehaviorSupport.sendContained(level, ParticleTypes.ELECTRIC_SPARK, shape, center, radius, center.x + Math.cos(azimuth) * horizontal, y, center.z + Math.sin(azimuth) * horizontal, 1, 0.05, 0.05, 0.05, 0.0);
 			}
 			return;
 		}
@@ -60,8 +59,7 @@ public final class StaticField implements InsideEffectBehavior {
 				double up = random.nextDouble();
 				double horizontal = Math.sqrt(Math.max(0.0, 1.0 - up * up));
 				double shell = radius * 0.9;
-				level.sendParticles(ParticleTypes.ELECTRIC_SPARK, true, false,
-						center.x + horizontal * Math.cos(theta) * shell, center.y + up * shell, center.z + horizontal * Math.sin(theta) * shell, 12, 0.3, 0.3, 0.3, 0.08);
+				BehaviorSupport.sendContained(level, ParticleTypes.ELECTRIC_SPARK, shape, center, radius, center.x + horizontal * Math.cos(theta) * shell, center.y + up * shell, center.z + horizontal * Math.sin(theta) * shell, 12, 0.3, 0.3, 0.3, 0.08);
 			}
 
 			if (gameTime % 40L == 0L) {
@@ -86,7 +84,7 @@ public final class StaticField implements InsideEffectBehavior {
 			double x = center.x + horizontal * Math.cos(theta) * shell;
 			double y = center.y + up * shell;
 			double z = center.z + horizontal * Math.sin(theta) * shell;
-			level.sendParticles(ParticleTypes.ELECTRIC_SPARK, true, false, x, y, z, 1, 0.05, 0.05, 0.05, 0.0);
+			BehaviorSupport.sendContained(level, ParticleTypes.ELECTRIC_SPARK, shape, center, radius, x, y, z, 1, 0.05, 0.05, 0.05, 0.0);
 			if (variant == 3 && i % 3 == 0) {
 				// The fleck hangs 0.3 below its spark: near the equator that dips under a
 				// dome's base plane, so contain it shape-aware.
@@ -97,11 +95,11 @@ public final class StaticField implements InsideEffectBehavior {
 		}
 
 		if ((variant == 1 || variant == 2) && gameTime % 40L == 0L) {
-			level.sendParticles(ParticleTypes.GUST, true, false, center.x, center.y + radius * 0.4, center.z, 2, radius * 0.3, radius * 0.2, radius * 0.3, 0.0);
+			BehaviorSupport.sendContained(level, ParticleTypes.GUST, shape, center, radius, center.x, center.y + radius * 0.4, center.z, 2, radius * 0.3, radius * 0.2, radius * 0.3, 0.0);
 		}
 
 		if (variant == 5 && gameTime % 20L == 0L) {
-			level.sendParticles(ParticleTypes.GUST, true, false, center.x, center.y + radius * 0.4, center.z, 1, radius * 0.3, radius * 0.2, radius * 0.3, 0.0);
+			BehaviorSupport.sendContained(level, ParticleTypes.GUST, shape, center, radius, center.x, center.y + radius * 0.4, center.z, 1, radius * 0.3, radius * 0.2, radius * 0.3, 0.0);
 		}
 
 		if (variant == 2 && gameTime % 40L == 0L) {
@@ -113,7 +111,7 @@ public final class StaticField implements InsideEffectBehavior {
 					center.x + Math.cos(angle) * radius * 0.9,
 					center.y + 1.0 + random.nextDouble() * radius * 0.4,
 					center.z + Math.sin(angle) * radius * 0.9));
-			level.sendParticles(ParticleTypes.ELECTRIC_SPARK, true, false, burst.x, burst.y, burst.z, 24, 0.4, 0.4, 0.4, 0.1);
+			BehaviorSupport.sendContained(level, ParticleTypes.ELECTRIC_SPARK, shape, center, radius, burst.x, burst.y, burst.z, 24, 0.4, 0.4, 0.4, 0.1);
 			level.playSound(null, burst.x, burst.y, burst.z, SoundEvents.SCULK_CLICKING, SoundSource.AMBIENT, Mth.clamp(radius / 12.0F, 0.6F, 4.0F), 1.8F);
 		}
 	}

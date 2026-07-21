@@ -67,8 +67,7 @@ public final class GlassShards implements InsideEffectBehavior {
 				continue;
 			}
 
-			level.sendParticles(particle, true, false,
-					center.x + Math.sin(lat) * Math.cos(lon) * shell,
+			BehaviorSupport.sendContained(level, particle, shape, center, radius, center.x + Math.sin(lat) * Math.cos(lon) * shell,
 					center.y + Math.abs(y),
 					center.z + Math.sin(lat) * Math.sin(lon) * shell,
 					1, 0.02, 0.02, 0.02, upDrift);
