@@ -12,12 +12,15 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
 
+import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.client.renderer.texture.TextureManager;
 import net.minecraft.resources.Identifier;
+import net.minecraft.world.phys.AABB;
 
 /**
  * Scene-copy provider for the refraction pipeline: after the main pass has drawn all
@@ -45,9 +48,26 @@ import net.minecraft.resources.Identifier;
  *       TEXTURE_BINDING | RENDER_ATTACHMENT).</li>
  * </ol>
  *
- * <p>Both steps are gated on at least one shield being visible in the camera's
- * dimension (mirroring {@link ShieldRenderer}'s submit condition), so the copy costs
- * nothing while no bubble can possibly draw. The wrapper {@link AbstractTexture}s are
+ * <p>Gating, two tiers so the expensive per-frame full-resolution copy only happens
+ * when a bubble is actually ON SCREEN:
+ * <ul>
+ *   <li>allocation + wrapper-texture registration (cheap after the first frame) run
+ *       whenever any shield could be SUBMITTED — the same condition as
+ *       {@link ShieldRenderer#collectSubmits} (active, radius above the visibility
+ *       floor, camera's dimension). This must stay at least as broad as the submit
+ *       condition: the bubble render types bind {@code Sampler1}/{@code Sampler2}
+ *       unconditionally, and an unregistered id would make
+ *       {@code TextureManager.getTexture} fall back to loading a nonexistent
+ *       resource;</li>
+ *   <li>the color+depth blit itself is additionally gated on at least one of those
+ *       shields intersecting the camera's cull {@link net.minecraft.client.renderer.culling.Frustum}
+ *       (the frame's own {@code CameraRenderState.cullFrustum}, tested against the
+ *       shield's world-space bounding box). An off-screen bubble is clipped by the
+ *       GPU before any fragment could sample the copy, so skipping the blit is
+ *       free of visual consequence.</li>
+ * </ul>
+ *
+ * <p>The wrapper {@link AbstractTexture}s are
  * registered with {@link TextureManager#register} under
  * {@code bubbleshield:scene_color} / {@code bubbleshield:scene_depth}; every bubble
  * draw re-resolves them by id ({@code RenderSetup.prepareTextures} calls
@@ -62,6 +82,13 @@ public final class SceneCopy {
 
 	/** Matches {@code ShieldRenderer.MIN_VISIBLE_RADIUS} (kept private there). */
 	private static final float MIN_VISIBLE_RADIUS = 0.05F;
+	/**
+	 * Slack added around the shield's radius for the frustum bounds test: absorbs the
+	 * block-center offset and float wobble so a bubble grazing the screen edge can
+	 * never be culled a frame early. Every {@link SphereMesh} shape variant fits
+	 * inside the radius-scaled unit box, so radius + margin bounds the membrane.
+	 */
+	private static final double FRUSTUM_MARGIN = 1.0;
 
 	private static TextureTarget copyTarget;
 	private static boolean texturesRegistered;
@@ -72,28 +99,53 @@ public final class SceneCopy {
 	}
 
 	public static void register() {
-		LevelRenderEvents.COLLECT_SUBMITS.register(context -> prepare());
+		LevelRenderEvents.COLLECT_SUBMITS.register(SceneCopy::prepare);
 		LevelRenderEvents.AFTER_SOLID_FEATURES.register(context -> copy());
 	}
 
-	/** Mirrors the submit condition in {@link ShieldRenderer#collectSubmits}. */
-	private static boolean anyShieldVisible() {
-		for (ClientShieldManager.ClientShield shield : ClientShieldManager.currentDimensionShields()) {
-			if (shield.active() && shield.currentRadius() >= MIN_VISIBLE_RADIUS) {
-				return true;
-			}
+	/**
+	 * Frustum gate for the expensive per-frame blit: the shield's world-space bounds
+	 * (projector block cube inflated by radius + margin, covering the membrane of
+	 * every shape variant) tested against the frame's cull frustum. The beam column
+	 * extends above {@code +radius}, but beam shaders never sample the scene copy, so
+	 * the membrane bounds are the right gate. Falls OPEN (treats the shield as on
+	 * screen) while the camera state is not initialized yet, preserving correctness.
+	 */
+	private static boolean isOnScreen(CameraRenderState camera, ClientShieldManager.ClientShield shield, float radius) {
+		if (!camera.initialized) {
+			return true;
 		}
 
-		return false;
+		return camera.cullFrustum.isVisible(new AABB(shield.pos()).inflate(radius + FRUSTUM_MARGIN));
 	}
 
 	/**
 	 * Frame step 1 (before texture views are resolved for this frame's draws):
-	 * allocate/resize the copy target and register the sampler textures.
+	 * allocate/resize the copy target and register the sampler textures whenever any
+	 * shield could be submitted (mirroring {@link ShieldRenderer#collectSubmits}'s
+	 * condition — this must stay at least as broad, because the bubble render types
+	 * bind the scene-copy ids unconditionally), and arm the blit only when one of
+	 * those shields actually intersects the camera frustum.
 	 */
-	private static void prepare() {
+	private static void prepare(LevelRenderContext context) {
 		copyArmed = false;
-		if (!anyShieldVisible()) {
+		CameraRenderState camera = context.levelState().cameraRenderState;
+		boolean anySubmittable = false;
+		boolean anyOnScreen = false;
+		for (ClientShieldManager.ClientShield shield : ClientShieldManager.currentDimensionShields()) {
+			float radius = shield.currentRadius();
+			if (!shield.active() || radius < MIN_VISIBLE_RADIUS) {
+				continue;
+			}
+
+			anySubmittable = true;
+			if (isOnScreen(camera, shield, radius)) {
+				anyOnScreen = true;
+				break;
+			}
+		}
+
+		if (!anySubmittable) {
 			return;
 		}
 
@@ -115,7 +167,7 @@ public final class SceneCopy {
 			texturesRegistered = true;
 		}
 
-		copyArmed = true;
+		copyArmed = anyOnScreen;
 	}
 
 	/**

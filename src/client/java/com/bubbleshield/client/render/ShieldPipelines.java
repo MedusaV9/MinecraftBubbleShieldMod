@@ -30,10 +30,12 @@ import net.minecraft.resources.Identifier;
  *
  * <p>The snippet is modeled on vanilla's {@code RenderPipelines.END_PORTAL_SNIPPET}
  * (GLOBALS + MATRICES_PROJECTION + FOG bind groups, QUADS), plus the
- * {@code SAMPLER0} bind group: every bubble fragment shader samples the shipped
- * surface texture atlas ({@link #SURFACE_ATLAS}, a 4x4 grid of 16 seamless
- * grayscale structure tiles whose A channel is an emission mask) through the
- * {@code Sampler0} uniform, layered onto its procedural pattern. The vertex
+ * {@code SAMPLER0_SAMPLER1_SAMPLER2} bind group: every bubble fragment shader
+ * samples the shipped surface texture atlas ({@link #SURFACE_ATLAS}, an 8x4 grid of
+ * 32 seamless grayscale structure tiles whose A channel is an emission mask) through
+ * the {@code Sampler0} uniform, layered onto its procedural pattern, plus the
+ * {@link SceneCopy} scene color/depth ({@code Sampler1}/{@code Sampler2}) for the
+ * refraction composite. The vertex
  * binding is {@code POSITION_TEX_COLOR} and the translucent blend + no-cull +
  * non-depth-writing depth state are copied from vanilla's translucent pipelines
  * (e.g. {@code BEACON_BEAM_TRANSLUCENT}).
@@ -51,7 +53,7 @@ import net.minecraft.resources.Identifier;
 public final class ShieldPipelines {
 	/**
 	 * The generated surface texture atlas every bubble fragment shader samples via
-	 * {@code Sampler0}: 2048x2048 RGBA, a 4x4 grid of 16 seamless 512px tiles.
+	 * {@code Sampler0}: 4096x2048 RGBA, an 8x4 grid of 32 seamless 512px tiles.
 	 * Per texel: R = coarse structural layer, G = mid-scale detail, B = fine grain,
 	 * A = emission mask (glow, NOT transparency). All channels are neutral grayscale
 	 * data — the shaders tint them with the live per-effect palette (recolor-safe).

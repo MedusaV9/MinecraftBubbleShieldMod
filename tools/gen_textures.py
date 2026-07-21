@@ -29,7 +29,8 @@ quantization).
 
 PNG size control: all channels are POSTERIZED (R to 128 levels, G to 64,
 B to 32, A to 24) before packing -- zlib then compresses the doubled tile
-count back into the same ballpark as the old 16-tile atlas. The steps stay
+count back into the same ballpark as the PREVIOUS generation's 16-tile
+2048x2048 atlas (the current atlas is 32 tiles at 4096x2048). The steps stay
 invisible after shader tinting (multi-layer blends dither them out).
 """
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Deterministic generator for the per-effect bubble surface shaders (fx_000..fx_419).
+"""Deterministic generator for the per-effect bubble surface shaders (fx_000..fx_839).
 
 Running `python3 tools/gen_surface_shaders.py` (re)writes ALL of
-src/client/resources/assets/bubbleshield/shaders/bubble/fx_000.fsh .. fx_419.fsh
+src/client/resources/assets/bubbleshield/shaders/bubble/fx_000.fsh .. fx_839.fsh
 plus tools/surface_manifest.json. Regeneration is byte-stable: a fixed global
 seed feeds a self-contained splitmix64 PRNG (no reliance on Python's `random`
 module internals), iteration is in sorted id order, and floats are formatted
@@ -381,7 +381,7 @@ Design (see /tmp/shader_plan.md sections 1, 2, 4.1 and AGENTS.md):
   every function defined before use.
 
 Usage:
-    python3 tools/gen_surface_shaders.py                  # all 420 + manifest
+    python3 tools/gen_surface_shaders.py                  # all 840 + manifest
     python3 tools/gen_surface_shaders.py --only 0-15      # subset (same bytes)
     python3 tools/gen_surface_shaders.py --only 0-15 --out /tmp/probe
 """

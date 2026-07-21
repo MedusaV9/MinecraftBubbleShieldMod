@@ -62,9 +62,15 @@ interface mismatches that fail on real drivers):
 
 On top of that it enforces the generated-shader invariants:
 
-* byte-uniqueness: no two .fsh across the scanned dirs are identical (SHA-256);
-* every generated fx_*.fsh carries all three structural layer markers
-  ([layer:deep:...], [layer:mid:...], [layer:rim:...]);
+* code-uniqueness: no two .fsh across the scanned dirs may share the same
+  COMMENT-STRIPPED, whitespace-normalized GLSL (SHA-256 of the executable
+  source, not the raw bytes) -- a unique-id comment or seed annotation can
+  never make two copies of the same executable shader count as distinct;
+* every generated fx_*.fsh carries all four structural layer markers
+  ([layer:deep:...], [layer:mid:...], [layer:rim:...], [layer:motif:...]),
+  and the in-file motif marker's (class, envelope) pair must MATCH the
+  manifest's recorded per-id motif fingerprint (motif/env), so the marker and
+  the manifest can never drift apart;
 * tools/surface_manifest.json exists, has EXACTLY the ids 0..COUNT-1, its
   entries match the fx_* files on disk 1:1, and its (family, warp, deep, rim,
   anim) stack tuples are pairwise distinct (the structural-variety guarantee);
@@ -104,18 +110,23 @@ GPU-less CI VM cannot run):
   all (their RenderSetup binds no texture);
 * the refraction scene-copy samplers (Sampler1 = scene color, Sampler2 =
   scene depth, provided by SceneCopy.java) are OPTIONAL per fx during the
-  incremental rollout -- a shader may declare none or all of them -- but the
-  contract stays fail-closed per file: declaring one without sampling it (or
-  sampling without declaring) is a hard failure, and as soon as ANY fx uses
-  them ShieldPipelines.java must bind BOTH via .withTexture("Sampler1"/
-  "Sampler2", ...) AND reference BindGroupLayouts.SAMPLER0_SAMPLER1_SAMPLER2,
-  otherwise the real client dies with "Missing sampler" at the first bubble
-  draw (invisible to glslang);
+  incremental rollout, but they are a PAIR: a shader declares BOTH Sampler1
+  and Sampler2 (and samples both) or NEITHER -- SceneCopy arms/blits color
+  and depth together, so a Sampler1-alone (or Sampler2-alone) shader is a
+  hard failure, as is declaring one without sampling it (or sampling without
+  declaring). As soon as ANY fx uses the pair ShieldPipelines.java must bind
+  BOTH via .withTexture("Sampler1"/"Sampler2", ...) AND reference
+  BindGroupLayouts.SAMPLER0_SAMPLER1_SAMPLER2, otherwise the real client dies
+  with "Missing sampler" at the first bubble draw (invisible to glslang);
 * the atlas itself must ship at
   src/main/resources/assets/bubbleshield/textures/effect/surface_atlas.png as
-  a valid PNG (8-byte signature, 13-byte IHDR) with the expected geometry
-  (4096x2048, 8-bit, color-type 6 = truecolor+alpha RGBA), and its
-  .png.mcmeta sibling must be valid JSON.
+  a valid PNG with the expected geometry (4096x2048, 8-bit, color-type 6 =
+  truecolor+alpha RGBA), and it is decoded END TO END, not just its IHDR: the
+  chunk chain must be well-formed, the concatenated IDAT payload must
+  zlib-decompress to exactly height * (1 + width*4) filtered bytes and the
+  IEND chunk must be present -- a truncated or corrupted atlas upload fails
+  here instead of at client resource load. Its .png.mcmeta sibling must be
+  valid JSON.
 
 The full scan at COUNT=840 is 841 files under bubble/ (840 fx_*.fsh +
 surface.vsh) + 8 under beam/ + 840 under screenfx/ (sfx_*.fsh) = 1689
@@ -138,6 +149,7 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+import zlib
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -174,6 +186,11 @@ COUNT_RE = re.compile(r"^\s*public static final int COUNT = (\d+);", re.MULTILIN
 FX_NAME = re.compile(r"^fx_(\d{3})\.fsh$")
 SFX_NAME = re.compile(r"^sfx_(\d{3})\.fsh$")
 LAYER_MARKERS = ("// [layer:deep:", "// [layer:mid:", "// [layer:rim:", "// [layer:motif:")
+# The per-id motif fingerprint marker the generator writes into every fx file
+# (// [layer:motif:<class>:<envelope>]); its (class, envelope) pair is
+# cross-checked against the manifest's recorded (motif, env) so the in-file
+# marker and the manifest can never drift apart.
+MOTIF_MARKER_RE = re.compile(r"^\s*// \[layer:motif:([a-z0-9]+):([a-z0-9]+)\]\s*$", re.MULTILINE)
 STACK_KEYS = ("family", "warp", "deep", "rim", "anim", "motif", "motifN", "env")
 # v9 per-EFFECT motif fingerprint: within one family, no two ids may share
 # the same (motif class, element count, envelope) triple -- the structural
@@ -247,6 +264,15 @@ def parse_registry_count() -> int:
 
 def strip_comments(text: str) -> str:
     return LINE_COMMENT.sub("", BLOCK_COMMENT.sub("", text))
+
+
+def normalized_code(text: str) -> str:
+    """The shader's EXECUTABLE source: comments stripped, per-line whitespace
+    collapsed, empty lines dropped. The uniqueness check hashes this (not the
+    raw bytes), so a unique-id comment or seed annotation can never make two
+    copies of the same executable shader count as distinct."""
+    lines = (" ".join(line.split()) for line in strip_comments(text).splitlines())
+    return "\n".join(line for line in lines if line)
 
 
 def parse_beam_names() -> tuple[str, ...]:
@@ -406,17 +432,21 @@ def check_manifest_ids(manifest: dict, count: int, name: str) -> list[str]:
 
 
 def check_generated_invariants(shaders: list[Path], count: int, skip_fx: bool) -> list[str]:
-    """Byte-uniqueness + fx layer markers + manifest agreement. Returns errors."""
+    """Code-uniqueness + fx layer markers + manifest agreement. Returns errors."""
     errors: list[str] = []
 
-    # 1. No two .fsh anywhere in the scanned dirs may be byte-identical.
+    # 1. No two .fsh anywhere in the scanned dirs may share the same
+    # COMMENT-STRIPPED, whitespace-normalized source: hashing the raw bytes
+    # would let two executably-identical shaders pass as "distinct" on the
+    # strength of a unique-id comment or seed annotation alone.
     by_digest: dict[str, Path] = {}
     for shader in shaders:
         if shader.suffix != ".fsh":
             continue
-        digest = hashlib.sha256(shader.read_bytes()).hexdigest()
+        digest = hashlib.sha256(normalized_code(shader.read_text(encoding="utf-8")).encode("utf-8")).hexdigest()
         if digest in by_digest:
-            errors.append(f"byte-identical shaders: {by_digest[digest].name} == {shader.name}")
+            errors.append(f"code-identical shaders (identical after comment stripping): "
+                          f"{by_digest[digest].name} == {shader.name}")
         else:
             by_digest[digest] = shader
 
@@ -426,12 +456,18 @@ def check_generated_invariants(shaders: list[Path], count: int, skip_fx: bool) -
         return errors
     fx_files = sorted(p for p in shaders if FX_NAME.match(p.name))
 
-    # 2. Every generated fx_*.fsh must carry the three structural layer markers.
+    # 2. Every generated fx_*.fsh must carry the four structural layer markers;
+    # the motif marker's (class, envelope) pair is remembered for the manifest
+    # cross-check below.
+    file_motifs: dict[str, tuple[str, str]] = {}
     for shader in fx_files:
         text = shader.read_text()
         for marker in LAYER_MARKERS:
             if marker not in text:
                 errors.append(f"{shader.name}: missing structural marker '{marker}...]'")
+        motif_match = MOTIF_MARKER_RE.search(text)
+        if motif_match:
+            file_motifs[shader.name] = (motif_match.group(1), motif_match.group(2))
 
     # 3. Manifest exists, covers exactly ids 0..COUNT-1, matches the fx_* file
     # set, and its stack tuples are pairwise distinct.
@@ -468,8 +504,13 @@ def check_generated_invariants(shaders: list[Path], count: int, skip_fx: bool) -
     # v9 per-EFFECT motif fingerprint distinctness: the (motif, motifN, env)
     # triple must be present on every entry and pairwise distinct WITHIN each
     # family -- two effects of one family must differ in structure AND
-    # motion, not just hue.
+    # motion, not just hue. The in-file '// [layer:motif:<class>:<envelope>]'
+    # marker must also MATCH the manifest's recorded (motif, env) pair, so the
+    # marker and the manifest can never drift apart (e.g. a stale manifest
+    # over regenerated files, or a hand-edited fx file).
     family_motifs: dict[tuple, str] = {}
+    motif_markers_checked = 0
+    fx_names_on_disk = {p.name for p in fx_files}
     for effect_id, entry in sorted(manifest.items()):
         triple = tuple(entry.get(key) for key in MOTIF_KEYS)
         if any(value is None for value in triple):
@@ -484,9 +525,25 @@ def check_generated_invariants(shaders: list[Path], count: int, skip_fx: bool) -
         else:
             family_motifs[fam_key] = effect_id
 
+        file_name = entry.get("file")
+        if file_name not in fx_names_on_disk:
+            continue  # already reported as a missing file above
+        marker = file_motifs.get(file_name)
+        if marker is None:
+            errors.append(f"{file_name}: manifest id {effect_id} records motif "
+                          f"({entry.get('motif')}, {entry.get('env')}) but the file has no "
+                          "parseable '// [layer:motif:<class>:<envelope>]' marker")
+        elif marker != (entry.get("motif"), entry.get("env")):
+            errors.append(f"{file_name}: in-file motif marker '// [layer:motif:{marker[0]}:{marker[1]}]' "
+                          f"does not match manifest id {effect_id}'s recorded motif "
+                          f"({entry.get('motif')}, {entry.get('env')})")
+        else:
+            motif_markers_checked += 1
+
     print(f"OK    generated-shader invariants ({len(fx_files)} fx files, "
           f"{len(manifest)} manifest entries, {len(stacks)} distinct stacks, "
-          f"{len(family_motifs)} per-family-distinct motif fingerprints)")
+          f"{len(family_motifs)} per-family-distinct motif fingerprints, "
+          f"{motif_markers_checked} in-file motif markers match the manifest)")
     return errors
 
 
@@ -659,6 +716,73 @@ def parse_png_ihdr(data: bytes) -> tuple[int, int, int, int] | str:
     return width, height, bit_depth, color_type
 
 
+# PNG color type -> samples per pixel, for the decoded-raster size check.
+PNG_CHANNELS = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}
+
+
+def parse_png(data: bytes) -> tuple[int, int, int, int] | str:
+    """Full structural decode of a PNG (not just the IHDR): the chunk chain
+    must be well-formed with valid per-chunk CRCs and terminated by IEND, and
+    the concatenated IDAT payload must zlib-decompress to EXACTLY the
+    height * (1 filter byte + scanline bytes) the IHDR geometry implies --
+    a truncated or bit-corrupted atlas passes an IHDR-only parse but fails
+    here instead of at client resource load. Returns (width, height, bit
+    depth, color type) on success, else an error description string."""
+    header = parse_png_ihdr(data)
+    if isinstance(header, str):
+        return header
+    width, height, bit_depth, color_type = header
+    compression, filter_method, interlace = struct.unpack(">BBB", data[26:29])
+    if compression != 0 or filter_method != 0:
+        return f"IHDR compression/filter method {compression}/{filter_method}, expected 0/0"
+    if interlace != 0:
+        # The Adam7 pass layout has a different decompressed size; the
+        # generator always writes non-interlaced scanlines.
+        return f"IHDR interlace method {interlace}, expected 0 (non-interlaced)"
+    channels = PNG_CHANNELS.get(color_type)
+    if channels is None:
+        return f"unknown PNG color type {color_type}"
+
+    idat = bytearray()
+    saw_iend = False
+    offset = 8
+    while offset < len(data):
+        if offset + 8 > len(data):
+            return f"truncated chunk header at byte {offset}"
+        length, chunk_type = struct.unpack(">I4s", data[offset:offset + 8])
+        chunk_name = chunk_type.decode("latin-1")
+        end = offset + 8 + length + 4  # header + payload + CRC
+        if end > len(data):
+            return f"truncated {chunk_name} chunk at byte {offset} (file ends {end - len(data)} bytes early)"
+        payload = data[offset + 8:offset + 8 + length]
+        (crc,) = struct.unpack(">I", data[end - 4:end])
+        if zlib.crc32(chunk_type + payload) != crc:
+            return f"{chunk_name} chunk at byte {offset} fails its CRC (corrupted)"
+        if chunk_type == b"IDAT":
+            idat += payload
+        elif chunk_type == b"IEND":
+            saw_iend = True
+            if end != len(data):
+                return f"{len(data) - end} trailing bytes after the IEND chunk"
+            break
+        offset = end
+    if not saw_iend:
+        return "no IEND chunk (truncated PNG)"
+    if not idat:
+        return "no IDAT chunk (no image data)"
+
+    try:
+        raster = zlib.decompress(bytes(idat))
+    except zlib.error as e:
+        return f"IDAT payload fails to zlib-decompress ({e})"
+    scanline_bytes = (width * channels * bit_depth + 7) // 8
+    expected = height * (1 + scanline_bytes)
+    if len(raster) != expected:
+        return (f"IDAT decompresses to {len(raster)} bytes, expected {expected} "
+                f"({height} scanlines x (1 filter byte + {scanline_bytes} pixel bytes))")
+    return width, height, bit_depth, color_type
+
+
 def check_texture_binding(shaders: list[Path], beam_names: tuple[str, ...]) -> list[str]:
     """The Sampler0 texture-binding contract, fail-closed (see module
     docstring). glslangValidator compiles a declared-but-unused sampler
@@ -730,8 +854,12 @@ def check_texture_binding(shaders: list[Path], beam_names: tuple[str, ...]) -> l
                           "(every bubble fx must sample the shared surface atlas)")
         # Scene-copy samplers: optional per fx (mixed rollout state is legal),
         # but a declared sampler must be used and vice versa -- same fail-closed
-        # shape as Sampler0.
-        uses_scene_sampler = False
+        # shape as Sampler0 -- AND the two are a PAIR: SceneCopy arms/blits the
+        # scene color and depth together, so a shader references {Sampler1,
+        # Sampler2} together or neither. Sampler1-alone (or Sampler2-alone) is
+        # a hard failure, not a legal half-migrated state.
+        scene_referenced: dict[str, bool] = {}
+        scene_complete = True
         for sampler in SCENE_SAMPLERS:
             scene_declared = re.search(
                 rf"^\s*uniform\s+sampler2D\s+{sampler}\s*;", text, re.MULTILINE) is not None
@@ -742,8 +870,15 @@ def check_texture_binding(shaders: list[Path], beam_names: tuple[str, ...]) -> l
             elif scene_used and not scene_declared:
                 errors.append(f"{shader.name}: samples {sampler} without the "
                               f"'uniform sampler2D {sampler};' declaration")
-            uses_scene_sampler |= scene_declared and scene_used
-        if uses_scene_sampler:
+            scene_referenced[sampler] = scene_declared or scene_used
+            scene_complete &= scene_declared and scene_used
+        if any(scene_referenced.values()) and not all(scene_referenced.values()):
+            present = ", ".join(s for s, r in sorted(scene_referenced.items()) if r)
+            absent = ", ".join(s for s, r in sorted(scene_referenced.items()) if not r)
+            errors.append(f"{shader.name}: references {present} but not {absent} -- the SceneCopy "
+                          "scene-copy contract is {Sampler1, Sampler2} together or neither "
+                          "(color and depth are armed/blitted as a pair)")
+        if scene_complete:
             scene_sampler_users += 1
         if LAYOUT_BINDING_RE.search(text):
             errors.append(f"{shader.name}: 'layout(binding' qualifier found (fails to compile at "
@@ -773,14 +908,16 @@ def check_texture_binding(shaders: list[Path], beam_names: tuple[str, ...]) -> l
                               f"ShieldPipelines.java has no '.withTexture(\"{sampler}\", "
                               f"SceneCopy.{constant}, ...)' binding")
 
-    # 3. The shipped atlas: a structurally valid PNG with the exact geometry
-    # the shaders' 8x4 tile math assumes, plus a valid-JSON .mcmeta sibling.
+    # 3. The shipped atlas: a fully-decodable PNG (well-formed chunk chain,
+    # CRCs, IEND, IDAT zlib-decompresses to the exact raster size -- not just
+    # a plausible IHDR) with the exact geometry the shaders' 8x4 tile math
+    # assumes, plus a valid-JSON .mcmeta sibling.
     atlas_geometry = None
     if not SURFACE_ATLAS_PNG.is_file():
         errors.append(f"surface atlas is missing: {SURFACE_ATLAS_PNG.relative_to(REPO_ROOT)} "
                       "(every bubble fx samples it; a missing texture fails at client resource load)")
     else:
-        parsed = parse_png_ihdr(SURFACE_ATLAS_PNG.read_bytes())
+        parsed = parse_png(SURFACE_ATLAS_PNG.read_bytes())
         if isinstance(parsed, str):
             errors.append(f"{SURFACE_ATLAS_PNG.relative_to(REPO_ROOT)}: {parsed}")
         else:
@@ -806,7 +943,8 @@ def check_texture_binding(shaders: list[Path], beam_names: tuple[str, ...]) -> l
         print(f"OK    Sampler0 texture-binding contract ({len(fx_files)} fx declare+sample Sampler0, "
               f"{scene_sampler_users} fx sample the Sampler1/Sampler2 scene copy, "
               f"{len(beam_files)} beam shaders sampler-free, no layout(binding, "
-              f"atlas {atlas_geometry} RGBA + valid mcmeta, ShieldPipelines binds \"{bound_path}\")")
+              f"atlas {atlas_geometry} RGBA fully decoded + valid mcmeta, "
+              f"ShieldPipelines binds \"{bound_path}\")")
     return errors
 
 
