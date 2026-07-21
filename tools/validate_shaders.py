@@ -100,8 +100,17 @@ GPU-less CI VM cannot run):
   a half-migrated shader), as is sampling without a declaration;
 * no bubble fx (or beam) shader may carry a 'layout(binding' qualifier (it
   fails to compile at #version 330; the binding comes from the bind group,
-  not from GLSL), and the beam shaders must NOT declare/sample Sampler0 at
+  not from GLSL), and the beam shaders must NOT reference ANY SamplerN at
   all (their RenderSetup binds no texture);
+* the refraction scene-copy samplers (Sampler1 = scene color, Sampler2 =
+  scene depth, provided by SceneCopy.java) are OPTIONAL per fx during the
+  incremental rollout -- a shader may declare none or all of them -- but the
+  contract stays fail-closed per file: declaring one without sampling it (or
+  sampling without declaring) is a hard failure, and as soon as ANY fx uses
+  them ShieldPipelines.java must bind BOTH via .withTexture("Sampler1"/
+  "Sampler2", ...) AND reference BindGroupLayouts.SAMPLER0_SAMPLER1_SAMPLER2,
+  otherwise the real client dies with "Missing sampler" at the first bubble
+  draw (invisible to glslang);
 * the atlas itself must ship at
   src/main/resources/assets/bubbleshield/textures/effect/surface_atlas.png as
   a valid PNG (8-byte signature, 13-byte IHDR) with the expected geometry
@@ -198,6 +207,15 @@ PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 SAMPLER0_DECL_RE = re.compile(r"^\s*uniform\s+sampler2D\s+Sampler0\s*;", re.MULTILINE)
 SAMPLER0_USE_RE = re.compile(r"\btexture\s*\(\s*Sampler0\b")
 SAMPLER0_ANY_RE = re.compile(r"\bSampler0\b")
+# The refraction scene-copy samplers (SceneCopy.java): OPTIONAL per fx during
+# the incremental rollout, but per-file fail-closed -- declaring without
+# sampling (or sampling without declaring) is a hard failure, exactly like
+# Sampler0. Maps sampler name -> the SceneCopy.java Identifier constant that
+# ShieldPipelines must bind it to.
+SCENE_SAMPLERS = {"Sampler1": "SCENE_COLOR_ID", "Sampler2": "SCENE_DEPTH_ID"}
+# Beam shaders bind no texture at all: ANY SamplerN reference (not just
+# Sampler0) would die with "Missing sampler" on the real client.
+ANY_SAMPLER_RE = re.compile(r"\bSampler[0-9]\b")
 # layout(binding = N) needs #version 420 / ARB_shading_language_420pack; at the
 # bubble shaders' #version 330 it fails to compile on real drivers. The slot
 # comes from the SAMPLER0 bind group, never from GLSL.
@@ -631,6 +649,7 @@ def check_texture_binding(shaders: list[Path], beam_names: tuple[str, ...]) -> l
     # the "Sampler0" key (comment-stripped source, so documentation mentions
     # can never satisfy the check).
     bound_path = None
+    pipelines_src = None
     if not SHIELD_PIPELINES_JAVA.is_file():
         errors.append(f"ShieldPipelines.java not found: {SHIELD_PIPELINES_JAVA}")
     else:
@@ -664,10 +683,13 @@ def check_texture_binding(shaders: list[Path], beam_names: tuple[str, ...]) -> l
     # 2. The GLSL side: every fx must both declare AND sample Sampler0 (a
     # declared-but-unused sampler is per-pipeline warning spam and the
     # signature of a half-migrated shader; sampling without a declaration
-    # cannot compile), no fx/beam shader may use layout(binding, and the beam
-    # shaders must stay Sampler0-free (their RenderSetup binds no texture).
+    # cannot compile), the OPTIONAL scene-copy samplers obey the same
+    # declare<->use pairing per file, no fx/beam shader may use
+    # layout(binding, and the beam shaders must stay free of ANY SamplerN
+    # (their RenderSetup binds no texture).
     fx_files = sorted(p for p in shaders if FX_NAME.match(p.name))
     beam_files = sorted(p for p in shaders if p.name in beam_names)
+    scene_sampler_users = 0
     for shader in fx_files:
         text = strip_comments(shader.read_text(encoding="utf-8"))
         declared = SAMPLER0_DECL_RE.search(text) is not None
@@ -682,17 +704,50 @@ def check_texture_binding(shaders: list[Path], beam_names: tuple[str, ...]) -> l
         elif not declared:
             errors.append(f"{shader.name}: missing 'uniform sampler2D Sampler0;' + 'texture(Sampler0' "
                           "(every bubble fx must sample the shared surface atlas)")
+        # Scene-copy samplers: optional per fx (mixed rollout state is legal),
+        # but a declared sampler must be used and vice versa -- same fail-closed
+        # shape as Sampler0.
+        uses_scene_sampler = False
+        for sampler in SCENE_SAMPLERS:
+            scene_declared = re.search(
+                rf"^\s*uniform\s+sampler2D\s+{sampler}\s*;", text, re.MULTILINE) is not None
+            scene_used = re.search(rf"\btexture\s*\(\s*{sampler}\b", text) is not None
+            if scene_declared and not scene_used:
+                errors.append(f"{shader.name}: declares 'uniform sampler2D {sampler};' but never calls "
+                              f"'texture({sampler}' (declared-but-unused sampler)")
+            elif scene_used and not scene_declared:
+                errors.append(f"{shader.name}: samples {sampler} without the "
+                              f"'uniform sampler2D {sampler};' declaration")
+            uses_scene_sampler |= scene_declared and scene_used
+        if uses_scene_sampler:
+            scene_sampler_users += 1
         if LAYOUT_BINDING_RE.search(text):
             errors.append(f"{shader.name}: 'layout(binding' qualifier found (fails to compile at "
-                          "#version 330; the slot comes from the SAMPLER0 bind group, not GLSL)")
+                          "#version 330; the slot comes from the sampler bind group, not GLSL)")
     for shader in beam_files:
         text = strip_comments(shader.read_text(encoding="utf-8"))
-        if SAMPLER0_ANY_RE.search(text):
-            errors.append(f"{shader.name}: references Sampler0, but the beam RenderSetup binds no "
-                          "texture (BEAM_SNIPPET has no SAMPLER0 bind group)")
+        if ANY_SAMPLER_RE.search(text):
+            errors.append(f"{shader.name}: references a SamplerN uniform, but the beam RenderSetup "
+                          "binds no texture (BEAM_SNIPPET has no sampler bind group)")
         if LAYOUT_BINDING_RE.search(text):
             errors.append(f"{shader.name}: 'layout(binding' qualifier found (fails to compile at "
                           "#version 330; beam pipelines bind no sampler at all)")
+
+    # 2b. As soon as ANY fx samples the scene copy, ShieldPipelines.java must
+    # carry the 3-sampler bind group AND bind both SceneCopy identifiers, or
+    # the real client dies with "Missing sampler" at the first bubble draw
+    # (never visible to glslang, which compiles each stage in isolation).
+    if scene_sampler_users and pipelines_src is not None:
+        if "BindGroupLayouts.SAMPLER0_SAMPLER1_SAMPLER2" not in pipelines_src:
+            errors.append(f"{scene_sampler_users} fx shader(s) sample the scene copy, but "
+                          "ShieldPipelines.java does not reference "
+                          "BindGroupLayouts.SAMPLER0_SAMPLER1_SAMPLER2 (the bubble snippet must "
+                          "expose the Sampler1/Sampler2 slots)")
+        for sampler, constant in SCENE_SAMPLERS.items():
+            if not re.search(rf'\.withTexture\(\s*"{sampler}"\s*,\s*SceneCopy\.{constant}\s*,', pipelines_src):
+                errors.append(f"{scene_sampler_users} fx shader(s) sample the scene copy, but "
+                              f"ShieldPipelines.java has no '.withTexture(\"{sampler}\", "
+                              f"SceneCopy.{constant}, ...)' binding")
 
     # 3. The shipped atlas: a structurally valid PNG with the exact geometry
     # the shaders' 4x4 tile math assumes, plus a valid-JSON .mcmeta sibling.
@@ -725,7 +780,8 @@ def check_texture_binding(shaders: list[Path], beam_names: tuple[str, ...]) -> l
 
     if not errors:
         print(f"OK    Sampler0 texture-binding contract ({len(fx_files)} fx declare+sample Sampler0, "
-              f"{len(beam_files)} beam shaders Sampler0-free, no layout(binding, "
+              f"{scene_sampler_users} fx sample the Sampler1/Sampler2 scene copy, "
+              f"{len(beam_files)} beam shaders sampler-free, no layout(binding, "
               f"atlas {atlas_geometry} RGBA + valid mcmeta, ShieldPipelines binds \"{bound_path}\")")
     return errors
 

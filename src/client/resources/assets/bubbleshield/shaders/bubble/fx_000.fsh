@@ -2,6 +2,7 @@
 
 #moj_import <minecraft:fog.glsl>
 #moj_import <minecraft:globals.glsl>
+#moj_import <minecraft:dynamictransforms.glsl>
 
 // The shipped surface atlas (bubbleshield:textures/effect/surface_atlas.png,
 // bound by ShieldPipelines through the SAMPLER0 bind group): a 4x4 grid of 16
@@ -9,6 +10,15 @@
 // B = fine grain, A = EMISSION mask (glow, NOT transparency). All hue comes
 // from vertexColor at runtime (recolor-safe).
 uniform sampler2D Sampler0;
+
+// REFRACTION POC (hand-edited on top of the generated body; the generator
+// takes over once the technique rolls out): SceneCopy blits the main render
+// target's color+depth right after the opaque/solid pass, BEFORE this
+// translucent membrane draws, so both are safe to SAMPLE here.
+// Sampler1 = scene color copy (clamp-to-edge LINEAR),
+// Sampler2 = scene depth copy (clamp-to-edge NEAREST, reverse-Z).
+uniform sampler2D Sampler1;
+uniform sampler2D Sampler2;
 
 // Bubble surface shader fx_000 -- family AURORA
 // stack: deep=voro x3 taps | mid=aurora+none+pulse | rim=graze_film | flourish=glint | tex=filaments
@@ -20,6 +30,9 @@ in vec2 texCoord0;
 in vec4 vertexColor;
 in float sphericalVertexDistance;
 in float cylindricalVertexDistance;
+// Camera-relative world-space position from surface.vsh: the camera is the
+// origin of this space, so view direction = -normalize(worldPos).
+in vec3 worldPos;
 
 out vec4 fragColor;
 
@@ -342,6 +355,39 @@ void main() {
     vec3 emitCol = clamp(mix(baseCol, vec3(1.0), 0.2994 * (1.0 - 0.5643 * baseLuma)), 0.0, 1.0);
     float emit = atlas.a * (0.3261 + 0.5232 * clamp(pattern, 0.0, 1.0)) * (1.0 - 0.1238 * (0.5 + 0.5 * sin(time * 0.120428))) * atlasPoleW;
     rgb += emit * 0.7847 * (1.0 - 0.7527 * baseLuma) * emitCol;
+    // [layer:refract:scene_copy] (POC)
+    // Real refraction: bend the post-opaque scene copy behind the membrane.
+    // The screen-space tap offset follows the VIEW-SPACE surface normal
+    // (mat3(ModelViewMat) rotates the world-space sphere direction into view
+    // space); three slightly-spread taps give chromatic dispersion. ~0.02-0.07
+    // UV of offset is tens of pixels at 854x480 -- an unmistakable bend.
+    vec2 screenUV = gl_FragCoord.xy / ScreenSize;
+    vec3 nView = normalize(mat3(ModelViewMat) * sdir);
+    vec3 viewDir = -normalize(worldPos);
+    float fresnel = pow(1.0 - abs(dot(sdir, viewDir)), 3.0);
+    // A dielectric shell deflects hardest at grazing incidence: scale the
+    // bend up toward the silhouette. The base term alone is ~30 px at
+    // 854x480, so the bend reads even at normal incidence.
+    float refractStrength = 0.035 + 0.045 * fresnel;
+    vec2 refractOff = nView.xy * refractStrength;
+    // Foreground rejection (reverse-Z: LARGER stored depth = CLOSER): when the
+    // offset tap lands on geometry nearer than this fragment, it belongs to an
+    // occluder IN FRONT of the bubble -- drop the offset so foreground
+    // silhouettes never smear across the membrane.
+    vec2 tapUV = clamp(screenUV + refractOff, vec2(0.001), vec2(0.999));
+    if (texture(Sampler2, tapUV).r > gl_FragCoord.z) {
+        refractOff = vec2(0.0);
+    }
+    vec3 refracted = vec3(
+        texture(Sampler1, clamp(screenUV + refractOff * 1.06, vec2(0.001), vec2(0.999))).r,
+        texture(Sampler1, clamp(screenUV + refractOff, vec2(0.001), vec2(0.999))).g,
+        texture(Sampler1, clamp(screenUV + refractOff * 0.94, vec2(0.001), vec2(0.999))).b);
+    // The refracted scene dominates the body (lightly palette-tinted); the
+    // procedural aurora survives as a secondary layer, and a fresnel rim
+    // re-asserts the palette's hot stop at the silhouette.
+    refracted *= mix(vec3(1.0), baseCol, 0.25);
+    rgb = mix(refracted, rgb, 0.22);
+    rgb += fresnel * hotStop * 0.85;
     // Presence BODY alpha (family-tuned, v6 solidity lift): a firm membrane
     // base even between features, a solid floor wherever the pattern is
     // present, rising toward the ceiling on bright features, plus the deep
@@ -355,7 +401,10 @@ void main() {
     // dissolve authority: clamp the body to the family ceiling FIRST, then
     // apply the whitelisted-player dissolve as the LAST alpha operation --
     // no path can push the final alpha above vertexColor.a * ceiling.
-    float alpha = clamp(bodyAlpha, 0.0, 0.8883) * vertexColor.a;
+    // Refraction floor: what shows "through" the bubble must be the REFRACTED
+    // scene copy, not the live background, so the membrane body runs near-
+    // opaque; the dissolve still wins as the outermost factor.
+    float alpha = clamp(max(bodyAlpha, 0.93), 0.0, 0.96) * vertexColor.a;
     vec4 color = vec4(clamp(rgb, 0.0, 1.0), alpha);
     if (color.a < 0.01) {
         discard;

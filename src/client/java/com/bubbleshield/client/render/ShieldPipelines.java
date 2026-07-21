@@ -12,6 +12,8 @@ import com.mojang.blaze3d.pipeline.ColorTargetState;
 import com.mojang.blaze3d.pipeline.DepthStencilState;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.platform.CompareOp;
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 
 import net.minecraft.client.renderer.BindGroupLayouts;
@@ -59,7 +61,11 @@ public final class ShieldPipelines {
 	private static final RenderPipeline.Snippet BUBBLE_SNIPPET = RenderPipeline.builder(RenderPipelines.GLOBALS_SNIPPET)
 			.withBindGroupLayout(BindGroupLayouts.MATRICES_PROJECTION)
 			.withBindGroupLayout(BindGroupLayouts.FOG)
-			.withBindGroupLayout(BindGroupLayouts.SAMPLER0)
+			// SAMPLER0 = the surface atlas; SAMPLER1/SAMPLER2 = the SceneCopy scene
+			// color/depth for refraction. The 3-sampler layout is shared by every
+			// bubble pipeline (a shader that does not declare Sampler1/Sampler2 just
+			// logs a one-time "does not use sampler" line at resource load).
+			.withBindGroupLayout(BindGroupLayouts.SAMPLER0_SAMPLER1_SAMPLER2)
 			.withVertexShader(BubbleShield.id("bubble/surface"))
 			.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX_COLOR)
 			.withPrimitiveTopology(PrimitiveTopology.QUADS)
@@ -127,8 +133,16 @@ public final class ShieldPipelines {
 			);
 			// sortOnUpload matches vanilla translucent render types (e.g. item_translucent);
 			// the atlas is bound to the snippet's SAMPLER0 group on every bubble draw.
+			// Sampler1/Sampler2 resolve the SceneCopy targets through the TextureManager
+			// on EVERY prepare() (so resizes are picked up): scene color clamped +
+			// LINEAR for the smooth refraction taps, scene depth clamped + NEAREST
+			// (filtering depth values would blend across geometry edges).
 			types[def.id()] = RenderType.create(name, RenderSetup.builder(pipeline)
 					.withTexture("Sampler0", SURFACE_ATLAS)
+					.withTexture("Sampler1", SceneCopy.SCENE_COLOR_ID,
+							() -> RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR))
+					.withTexture("Sampler2", SceneCopy.SCENE_DEPTH_ID,
+							() -> RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST))
 					.sortOnUpload()
 					.createRenderSetup());
 		}

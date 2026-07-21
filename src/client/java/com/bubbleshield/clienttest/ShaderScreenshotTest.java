@@ -27,6 +27,7 @@ import net.minecraft.client.gui.screens.worldselection.WorldCreationUiState;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.block.Blocks;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -92,6 +93,15 @@ public class ShaderScreenshotTest implements FabricClientGameTest {
 
 	/** Effect id used for the dome-shape variant shot. */
 	private static final int DOME_EFFECT_ID = 12;
+
+	/**
+	 * Refraction-POC backdrop: a wall of alternating 2-block red/white concrete
+	 * stripes at this x plane, a few blocks BEHIND the bubble's far edge (center
+	 * x 8.5 + radius 6 = 14.5) as seen from the outside camera, so the fx_000
+	 * scene-copy refraction is unmistakable — straight stripes beside the bubble,
+	 * visibly bent ones through it.
+	 */
+	private static final int BACKDROP_X = 18;
 
 	@Override
 	public void runTest(ClientGameTestContext ctx) {
@@ -197,6 +207,58 @@ public class ShaderScreenshotTest implements FabricClientGameTest {
 				} else {
 					failed++;
 				}
+			}
+
+			// --- Refraction POC (fx_000 samples the SceneCopy scene copy): striped
+			// backdrop + with-shield vs deactivated-control pair from the SAME camera.
+			// Captured LAST so the backdrop never contaminates the earlier shots.
+			ctx.runOnClient(mc -> {
+				if (!mc.gui.hud.isHidden()) {
+					mc.gui.hud.toggle();
+				}
+			});
+			server.runCommand(OUTSIDE_CAMERA);
+			server.runOnServer(mc -> {
+				ServerLevel level = mc.overworld();
+				for (int z = -14; z <= 14; z++) {
+					// 2-block-wide vertical stripes (~30 px each at the wall's ~23-block
+					// camera distance in an 854px frame): horizontal refraction offsets
+					// bend them visibly.
+					boolean red = Math.floorMod(Math.floorDiv(z, 2), 2) == 0;
+					for (int y = -60; y <= -46; y++) {
+						level.setBlock(new BlockPos(BACKDROP_X, y, z),
+								(red ? Blocks.CONCRETE.red() : Blocks.CONCRETE.white()).defaultBlockState(), 3);
+					}
+				}
+			});
+			// Long settle: lets the previous capture's inside-behavior particles
+			// (e.g. fx_081's drifting reverse-portal motes) expire so the
+			// refraction pair stays clean.
+			ctx.waitTicks(80);
+			if (capture(ctx, server, 0, 0, 0, "refraction_fx000_shield", captureDir)) {
+				captured++;
+			} else {
+				failed++;
+			}
+
+			// Control: identical camera + backdrop with the shield DEACTIVATED — the
+			// straight-stripe reference the refracted shot is compared against.
+			try {
+				server.runOnServer(mc -> {
+					BubbleShieldBlockEntity shield = (BubbleShieldBlockEntity) mc.overworld().getBlockEntity(PROJECTOR_POS);
+					shield.setActive(false);
+				});
+				// Same long settle: fx_000's own dust-ring particles outlive the
+				// deactivation by up to a couple of seconds.
+				ctx.waitTicks(80);
+				Path controlPng = ctx.takeScreenshot(TestScreenshotOptions.of("refraction_fx000_control")
+						.withDestinationDir(captureDir)
+						.disableCounterPrefix());
+				LOGGER.info("Captured refraction_fx000_control -> {}", controlPng);
+				captured++;
+			} catch (Exception e) {
+				LOGGER.error("Capture refraction_fx000_control failed", e);
+				failed++;
 			}
 
 			// Leave the world with the shield lowered so the close-out save is quiet.
