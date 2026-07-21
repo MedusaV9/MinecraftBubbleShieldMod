@@ -118,7 +118,8 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 
 	/**
 	 * Sends the next shape in the SPHERE -> DOME -> CYLINDER -> CUBE -> DIAMOND ->
-	 * RING cycle, echoing the current (server-synced) diameter/effect/mode/cycle/beam.
+	 * RING -> PYRAMID -> LENS -> HOURGLASS -> STAR cycle, echoing the current
+	 * (server-synced) diameter/effect/mode/cycle/beam.
 	 */
 	private void toggleShape() {
 		int next = (this.menu.shape() + 1) % ShieldShape.values().length;
@@ -133,6 +134,10 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 			case CUBE -> "gui.bubbleshield.shape.cube";
 			case DIAMOND -> "gui.bubbleshield.shape.diamond";
 			case RING -> "gui.bubbleshield.shape.ring";
+			case PYRAMID -> "gui.bubbleshield.shape.pyramid";
+			case LENS -> "gui.bubbleshield.shape.lens";
+			case HOURGLASS -> "gui.bubbleshield.shape.hourglass";
+			case STAR -> "gui.bubbleshield.shape.star";
 			default -> "gui.bubbleshield.shape.sphere";
 		});
 	}

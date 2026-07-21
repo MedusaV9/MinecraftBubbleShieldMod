@@ -25,7 +25,8 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * Draws every synced shield as a translucent procedural membrane (sphere, dome,
- * cylinder, cube, diamond or ring, per the synced shape) through the 26.2 submit-based level renderer
+ * cylinder, cube, diamond, ring, pyramid, lens, hourglass or star, per the synced
+ * shape) through the 26.2 submit-based level renderer
  * ({@code LevelRenderEvents.COLLECT_SUBMITS} + {@code SubmitNodeCollector.submitCustomGeometry}).
  *
  * <p>The camera position is captured during extraction
@@ -102,6 +103,10 @@ public final class ShieldRenderer {
 					case CUBE -> SPHERE.emitCube(pose, buffer, radius, argbPrimary, argbSecondary, alphaBase, dissolveCenters);
 					case DIAMOND -> SPHERE.emitDiamond(pose, buffer, radius, argbPrimary, argbSecondary, alphaBase, dissolveCenters);
 					case RING -> SPHERE.emitRing(pose, buffer, radius, argbPrimary, argbSecondary, alphaBase, dissolveCenters);
+					case PYRAMID -> SPHERE.emitPyramid(pose, buffer, radius, argbPrimary, argbSecondary, alphaBase, dissolveCenters);
+					case LENS -> SPHERE.emitLens(pose, buffer, radius, argbPrimary, argbSecondary, alphaBase, dissolveCenters);
+					case HOURGLASS -> SPHERE.emitHourglass(pose, buffer, radius, argbPrimary, argbSecondary, alphaBase, dissolveCenters);
+					case STAR -> SPHERE.emitStar(pose, buffer, radius, argbPrimary, argbSecondary, alphaBase, dissolveCenters);
 					default -> SPHERE.emit(pose, buffer, radius, argbPrimary, argbSecondary, alphaBase, dissolveCenters);
 				}
 			});

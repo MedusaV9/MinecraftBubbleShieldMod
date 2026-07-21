@@ -24,20 +24,26 @@ import net.minecraft.world.phys.Vec3;
  * close to the surface) so they can see/walk through the shield wall.
  *
  * <p><b>Shape variants:</b> {@link #emitCylinder}, {@link #emitCube},
- * {@link #emitDiamond} and {@link #emitRing} emit cached unit meshes for the
- * non-spherical {@link com.bubbleshield.shield.ShieldShape}s, built to the EXACT
- * inscribed dimensions of {@link ShieldGeometry} (cylinder 0.6/0.8, cube
- * 1/sqrt(3), octahedron L1 ball, torus 0.7/0.3) — that agreement is the whole
- * render-to-server contract. They follow the same conventions as the sphere:
- * unit-sized positions scaled by {@code radius} CPU-side (dissolve distances stay
- * in world units), raw UVs in [0, 1], and the same per-vertex dissolve alpha. The
- * primary-to-secondary color blend runs on a separate per-vertex top-to-bottom
- * fraction so it reads like the sphere's latitude blend even where the shader UV
- * is face-local (cube). The torus maps BOTH its shader v and its blend fraction
- * to the seam-free polar quantity {@code (1 - cos(psi)) * 0.5}: the fx shaders
- * treat v as non-periodic latitude, so a wrapping minor-angle v would paint a
- * hard seam ring along the tube top. The sphere/dome emitters are untouched, so
- * their output stays byte-identical.
+ * {@link #emitDiamond}, {@link #emitRing}, {@link #emitPyramid},
+ * {@link #emitLens}, {@link #emitHourglass} and {@link #emitStar} emit cached
+ * unit meshes for the non-spherical {@link com.bubbleshield.shield.ShieldShape}s,
+ * built to the EXACT inscribed dimensions of {@link ShieldGeometry} (cylinder
+ * 0.6/0.8, cube 1/sqrt(3), octahedron L1 ball, torus 0.7/0.3, pyramid apex 0.9 /
+ * base -0.5 / half-extent 0.6, lens y-scale 0.45, hourglass 0.8/0.55, star
+ * 0.55 &plusmn; 0.25 over six lobes at half-height 0.55) — that agreement is the
+ * whole render-to-server contract. They follow the same conventions as the
+ * sphere: unit-sized positions scaled by {@code radius} CPU-side (dissolve
+ * distances stay in world units), raw UVs in [0, 1], and the same per-vertex
+ * dissolve alpha. The primary-to-secondary color blend runs on a separate
+ * per-vertex top-to-bottom fraction so it reads like the sphere's latitude blend
+ * even where the shader UV is face-local (cube, pyramid base). The torus maps
+ * BOTH its shader v and its blend fraction to the seam-free polar quantity
+ * {@code (1 - cos(psi)) * 0.5}: the fx shaders treat v as non-periodic latitude,
+ * so a wrapping minor-angle v would paint a hard seam ring along the tube top.
+ * Every other shape keeps the sphere's "v = 0 at the top, 1 at the bottom"
+ * orientation so the shaders and the color blend read identically across
+ * shapes. The sphere/dome emitters are untouched, so their output stays
+ * byte-identical.
  */
 public final class SphereMesh {
 	/** Distance (blocks) from a dissolve center over which the surface fades back in. */
@@ -191,6 +197,26 @@ public final class SphereMesh {
 		emitQuadMesh(RING_MESH, pose, buffer, radius, argbPrimary, argbSecondary, alphaBase, dissolveCentersRelative);
 	}
 
+	/** Square pyramid: apex at +0.9, base plane at -0.5, base half-extent 0.6 (unit scale). */
+	public void emitPyramid(PoseStack.Pose pose, VertexConsumer buffer, float radius, int argbPrimary, int argbSecondary, float alphaBase, List<Vec3> dissolveCentersRelative) {
+		emitQuadMesh(PYRAMID_MESH, pose, buffer, radius, argbPrimary, argbSecondary, alphaBase, dissolveCentersRelative);
+	}
+
+	/** Oblate spheroid: equatorial radius 1, vertical semi-axis 0.45 (unit scale). */
+	public void emitLens(PoseStack.Pose pose, VertexConsumer buffer, float radius, int argbPrimary, int argbSecondary, float alphaBase, List<Vec3> dissolveCentersRelative) {
+		emitQuadMesh(LENS_MESH, pose, buffer, radius, argbPrimary, argbSecondary, alphaBase, dissolveCentersRelative);
+	}
+
+	/** Two cones tip-to-tip: waist at the center, caps at y = ±0.8 with radius 0.55 (unit scale). */
+	public void emitHourglass(PoseStack.Pose pose, VertexConsumer buffer, float radius, int argbPrimary, int argbSecondary, float alphaBase, List<Vec3> dissolveCentersRelative) {
+		emitQuadMesh(HOURGLASS_MESH, pose, buffer, radius, argbPrimary, argbSecondary, alphaBase, dissolveCentersRelative);
+	}
+
+	/** Six-lobed star prism: R(theta) = 0.55 + 0.25 cos(6 theta), caps at y = ±0.55 (unit scale). */
+	public void emitStar(PoseStack.Pose pose, VertexConsumer buffer, float radius, int argbPrimary, int argbSecondary, float alphaBase, List<Vec3> dissolveCentersRelative) {
+		emitQuadMesh(STAR_MESH, pose, buffer, radius, argbPrimary, argbSecondary, alphaBase, dissolveCentersRelative);
+	}
+
 	/**
 	 * Cached unit-scale quad soup for one non-spherical shape: unique vertices
 	 * (position + shader UV + color-blend fraction) plus 4-per-quad indices.
@@ -247,6 +273,10 @@ public final class SphereMesh {
 	private static final QuadMesh CUBE_MESH = buildCube(8);
 	private static final QuadMesh DIAMOND_MESH = buildDiamond(8);
 	private static final QuadMesh RING_MESH = buildRing(48, 24);
+	private static final QuadMesh PYRAMID_MESH = buildPyramid(8);
+	private static final QuadMesh LENS_MESH = buildLens(48, 32);
+	private static final QuadMesh HOURGLASS_MESH = buildHourglass(48, 16);
+	private static final QuadMesh STAR_MESH = buildStar(96, 12);
 
 	/** Shared emitter: colors computed per unique vertex, quads emitted by index. */
 	private static void emitQuadMesh(QuadMesh mesh, PoseStack.Pose pose, VertexConsumer buffer, float radius, int argbPrimary, int argbSecondary, float alphaBase, List<Vec3> dissolveCentersRelative) {
@@ -514,6 +544,203 @@ public final class SphereMesh {
 			for (int b = 0; b < minorSteps; b++) {
 				builder.quad(grid[a][b], grid[a][b + 1], grid[a + 1][b + 1], grid[a + 1][b]);
 			}
+		}
+
+		return builder.build();
+	}
+
+	/**
+	 * Square pyramid: apex at {@code +0.9} collapsing like a sphere pole row (all
+	 * apex vertices coincide, each keeping its own column's u), base plane at
+	 * {@code -0.5} with half-extent {@code 0.6}. The four taper faces follow the
+	 * cube's side-face scheme (u unwraps the perimeter as {@code (face + s) / 4},
+	 * v = top-to-bottom fraction = blend fraction), with the per-row half-extent
+	 * shrinking linearly per {@link ShieldGeometry#pyramidTaper} (at unit radius
+	 * that taper is exactly {@code 0.6 * t} for v = t). The base is a cube-style
+	 * cap grid: face-local UVs, constant blend fraction 1 (bottom). Dimensions
+	 * from {@link ShieldGeometry}: apex 0.9, base -0.5, half-extent 0.6.
+	 */
+	private static QuadMesh buildPyramid(int n) {
+		float apexY = (float) ShieldGeometry.PYRAMID_APEX_FRAC;
+		float baseY = (float) -ShieldGeometry.PYRAMID_BASE_FRAC;
+		float halfExtent = (float) ShieldGeometry.PYRAMID_BASE_HALF_EXTENT_FRAC;
+		QuadMeshBuilder builder = new QuadMeshBuilder();
+
+		// Taper faces in azimuth order (+X, +Z, -X, -Z), the cube's perimeter unwrap.
+		for (int face = 0; face < 4; face++) {
+			int[][] grid = new int[n + 1][n + 1];
+			for (int si = 0; si <= n; si++) {
+				float s = (float) si / n;
+				for (int ti = 0; ti <= n; ti++) {
+					float t = (float) ti / n;
+					float y = apexY - (apexY - baseY) * t;
+					// pyramidTaper(1, y) = 0.6 * (0.9 - y) / 1.4 = halfExtent * t.
+					float e = halfExtent * t;
+					float a = -e + 2.0F * e * s;
+					float x;
+					float z;
+					switch (face) {
+						case 0 -> {
+							x = e;
+							z = a;
+						}
+						case 1 -> {
+							x = -a;
+							z = e;
+						}
+						case 2 -> {
+							x = -e;
+							z = -a;
+						}
+						default -> {
+							x = a;
+							z = -e;
+						}
+					}
+
+					grid[si][ti] = builder.vertex(x, y, z, (face + s) / 4.0F, t, t);
+				}
+			}
+
+			addGridQuads(builder, grid, n);
+		}
+
+		// Base cap: full 2D face-local UVs, constant blend fraction (cube-cap style).
+		int[][] grid = new int[n + 1][n + 1];
+		for (int si = 0; si <= n; si++) {
+			float s = (float) si / n;
+			for (int ti = 0; ti <= n; ti++) {
+				float t = (float) ti / n;
+				grid[si][ti] = builder.vertex(-halfExtent + 2.0F * halfExtent * s, baseY, -halfExtent + 2.0F * halfExtent * t, s, t, 1.0F);
+			}
+		}
+
+		addGridQuads(builder, grid, n);
+		return builder.build();
+	}
+
+	/**
+	 * Oblate spheroid: the sphere's lat/lon grid with the y coordinate scaled by
+	 * {@link ShieldGeometry#LENS_HALF_HEIGHT_FRAC} (0.45) and the UVs unchanged
+	 * (u = longitude, v = latitude fraction — the exact sphere mapping, so every
+	 * surface shader animates identically to the sphere). The scaled grid lies
+	 * exactly on the server's containment ellipsoid
+	 * {@code (dx^2 + dz^2) / r^2 + dy^2 / (0.45 r)^2 = 1}.
+	 */
+	private static QuadMesh buildLens(int lonSteps, int latSteps) {
+		float yScale = (float) ShieldGeometry.LENS_HALF_HEIGHT_FRAC;
+		QuadMeshBuilder builder = new QuadMeshBuilder();
+
+		int[][] grid = new int[latSteps + 1][lonSteps + 1];
+		for (int lat = 0; lat <= latSteps; lat++) {
+			float v = (float) lat / latSteps;
+			float theta = v * Mth.PI;
+			float sinTheta = Mth.sin(theta);
+			float cosTheta = Mth.cos(theta);
+			for (int lon = 0; lon <= lonSteps; lon++) {
+				float u = (float) lon / lonSteps;
+				float phi = u * Mth.TWO_PI;
+				grid[lat][lon] = builder.vertex(sinTheta * Mth.cos(phi), cosTheta * yScale, sinTheta * Mth.sin(phi), u, v, v);
+			}
+		}
+
+		for (int lat = 0; lat < latSteps; lat++) {
+			for (int lon = 0; lon < lonSteps; lon++) {
+				builder.quad(grid[lat][lon], grid[lat + 1][lon], grid[lat + 1][lon + 1], grid[lat][lon + 1]);
+			}
+		}
+
+		return builder.build();
+	}
+
+	/**
+	 * Two cones tip-to-tip: the cylinder's side-wall scheme (u = azimuth fraction,
+	 * v = top-to-bottom fraction = blend fraction) with the per-row radius following
+	 * {@link ShieldGeometry#hourglassTaper} — {@code 0.55 * |y| / 0.8}, zero at the
+	 * waist row (whose vertices all collapse onto the axis point, each keeping its
+	 * own column's u, like a sphere pole row) — plus cylinder-style top/bottom cap
+	 * fans whose center vertices step {@link #CAP_V_BAND} inward from the rim's
+	 * v = 0/1. Requires an even {@code heightSteps} so one row lands exactly on the
+	 * waist. Dimensions from {@link ShieldGeometry}: half-height 0.8, cap radius 0.55.
+	 */
+	private static QuadMesh buildHourglass(int lonSteps, int heightSteps) {
+		float halfHeight = (float) ShieldGeometry.HOURGLASS_HALF_HEIGHT_FRAC;
+		float maxRadius = (float) ShieldGeometry.HOURGLASS_MAX_RADIUS_FRAC;
+		QuadMeshBuilder builder = new QuadMeshBuilder();
+
+		int[][] side = new int[heightSteps + 1][lonSteps + 1];
+		for (int row = 0; row <= heightSteps; row++) {
+			float v = (float) row / heightSteps;
+			float y = halfHeight - 2.0F * halfHeight * v;
+			// hourglassTaper(1, y) = 0.55 * |y| / 0.8.
+			float rho = maxRadius * Math.abs(y) / halfHeight;
+			for (int lon = 0; lon <= lonSteps; lon++) {
+				float u = (float) lon / lonSteps;
+				float phi = u * Mth.TWO_PI;
+				side[row][lon] = builder.vertex(rho * Mth.cos(phi), y, rho * Mth.sin(phi), u, v, v);
+			}
+		}
+
+		for (int row = 0; row < heightSteps; row++) {
+			for (int lon = 0; lon < lonSteps; lon++) {
+				builder.quad(side[row][lon], side[row + 1][lon], side[row + 1][lon + 1], side[row][lon + 1]);
+			}
+		}
+
+		// Cap fans, exactly the cylinder's: per-quad center vertices averaging the
+		// rim pair's u, v stepped CAP_V_BAND inward so each cap is a radial v band.
+		for (int lon = 0; lon < lonSteps; lon++) {
+			float centerU = ((float) lon + 0.5F) / lonSteps;
+			int topCenter = builder.vertex(0.0F, halfHeight, 0.0F, centerU, CAP_V_BAND, 0.0F);
+			builder.triangle(side[0][lon], side[0][lon + 1], topCenter);
+			int bottomCenter = builder.vertex(0.0F, -halfHeight, 0.0F, centerU, 1.0F - CAP_V_BAND, 1.0F);
+			builder.triangle(side[heightSteps][lon + 1], side[heightSteps][lon], bottomCenter);
+		}
+
+		return builder.build();
+	}
+
+	/**
+	 * Six-lobed star prism: the cylinder's side-wall scheme (u = azimuth fraction,
+	 * v = top-to-bottom fraction = blend fraction) with the per-column radius
+	 * following {@link ShieldGeometry#starRadius} — {@code 0.55 + 0.25 * cos(6 *
+	 * theta)}, so the wall lies exactly on the server's containment bound — plus
+	 * cylinder-style cap fans (the star polygon is star-shaped about the axis, so
+	 * a center fan tiles each cap without overlap) whose center vertices step
+	 * {@link #CAP_V_BAND} inward from the rim's v = 0/1. Dimensions from
+	 * {@link ShieldGeometry}: half-height 0.55, radius 0.55 &plusmn; 0.25, 6 lobes.
+	 */
+	private static QuadMesh buildStar(int lonSteps, int heightSteps) {
+		float halfHeight = (float) ShieldGeometry.STAR_HALF_HEIGHT_FRAC;
+		float radiusMid = (float) ShieldGeometry.STAR_RADIUS_MID_FRAC;
+		float radiusWave = (float) ShieldGeometry.STAR_RADIUS_WAVE_FRAC;
+		QuadMeshBuilder builder = new QuadMeshBuilder();
+
+		int[][] side = new int[heightSteps + 1][lonSteps + 1];
+		for (int row = 0; row <= heightSteps; row++) {
+			float v = (float) row / heightSteps;
+			float y = halfHeight - 2.0F * halfHeight * v;
+			for (int lon = 0; lon <= lonSteps; lon++) {
+				float u = (float) lon / lonSteps;
+				float phi = u * Mth.TWO_PI;
+				// starRadius(1, dx, dz) = 0.55 + 0.25 * cos(6 * atan2(dz, dx)).
+				float rho = radiusMid + radiusWave * Mth.cos(ShieldGeometry.STAR_LOBES * phi);
+				side[row][lon] = builder.vertex(rho * Mth.cos(phi), y, rho * Mth.sin(phi), u, v, v);
+			}
+		}
+
+		for (int row = 0; row < heightSteps; row++) {
+			for (int lon = 0; lon < lonSteps; lon++) {
+				builder.quad(side[row][lon], side[row + 1][lon], side[row + 1][lon + 1], side[row][lon + 1]);
+			}
+		}
+
+		for (int lon = 0; lon < lonSteps; lon++) {
+			float centerU = ((float) lon + 0.5F) / lonSteps;
+			int topCenter = builder.vertex(0.0F, halfHeight, 0.0F, centerU, CAP_V_BAND, 0.0F);
+			builder.triangle(side[0][lon], side[0][lon + 1], topCenter);
+			int bottomCenter = builder.vertex(0.0F, -halfHeight, 0.0F, centerU, 1.0F - CAP_V_BAND, 1.0F);
+			builder.triangle(side[heightSteps][lon + 1], side[heightSteps][lon], bottomCenter);
 		}
 
 		return builder.build();
