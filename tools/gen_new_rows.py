@@ -14,11 +14,21 @@ Row scheme for i in 0..419 (id = 420 + i):
   behavior = NEW_BEHAVIORS[i % 60], variant = i // 60   (exact 60 x 7 cover)
   surface  = NEW_SURFACES[i % 20]
   screen   = SCREEN28[i % 28]   (20 existing families + the 8 v5 ones)
-  guard    = GUARDS[i % 7], context = CONTEXTS[i % 6]
+  guard    = GUARDS[(i + i//7) % 7]
+  context  = CONTEXTS[(i + i//6 + i//60) % 6]
   palette  = deterministic HSV pair per (family nf = i//5, shade s = i%5),
              nudged on collision until globally unique
   sound    = POOL[i % len(POOL)] with a deterministically probed
              (pitch, period) making the triple globally unique
+
+The guard/context formulas are deliberately NOT the plain i%7 / i%6 residues:
+60 % 6 == 0 would lock every behavior to a single context, and 7 | 28 would
+make the guard a pure function of the screen family. Mixing in i//7 (resp.
+i//6 and the variant i//60) de-correlates the axes: every screen family sees
+all 7 guards (for i = s + 28t the guard walks (.. + 4t) % 7, and 4 is coprime
+to 7) and every behavior's 7 rows span all 6 contexts (for i = b + 60k the
+context walks (.. + 5k) % 6, and 5 is coprime to 6). Both properties are
+machine-asserted below before anything is emitted.
 
 Validity against EffectRegistry.validate() (all machine-asserted below before
 anything is emitted):
@@ -103,14 +113,30 @@ CONTEXTS = ["NONE", "NIGHT_BLOOM", "STORM_CHARGED", "CROWD_SCALE",
 
 PITCHES = ["0.6", "0.7", "0.8", "0.9", "1.0", "1.1", "1.2", "1.3", "1.4"]
 
+
+def guard_index(i: int) -> int:
+    """Guard for row index i. NOT i % 7 (7 | 28 would make the guard a pure
+    function of the screen family i % 28); the i//7 term makes every screen
+    family cycle through all 7 guards."""
+    return (i + i // 7) % 7
+
+
+def context_index(i: int) -> int:
+    """Context for row index i. NOT i % 6 (6 | 60 would lock every behavior
+    i % 60 to a single context); the i//6 + i//60 terms make every behavior's
+    7 variant rows (i = b + 60k) walk (.. + 5k) % 6, spanning all 6 contexts."""
+    return (i + i // 6 + i // 60) % 6
+
+
 # ---------------------------------------------------------------------------
 # Theme + naming word lists. 84 new color families (F84..F167), organized as 7
 # cycles of the 12 behavior blocks (each family's 5 rows span 5 consecutive
 # entries of NEW_BEHAVIORS, so nf % 12 tracks the behavior block the family
 # leans on). Every EN theme word and every DE theme word is distinct, and the
-# names are "<theme word> <shade word>" (EN) / "<theme>-<shade>" (DE), so all
-# 420 names per language are pairwise distinct by construction (still checked
-# against the existing 420 below, with a deterministic nudge on collision).
+# names are "<theme word> <shade word>" (EN) / a proper German compound of
+# theme + shade (DE, see de_compound_name), so all 420 names per language are
+# pairwise distinct by construction (still checked against the existing 420
+# below, with a deterministic nudge on collision).
 # ---------------------------------------------------------------------------
 THEMES = [
     # cycle A (F84..F95)
@@ -164,16 +190,44 @@ SHADE_SETS_EN = [
 
 SHADE_SETS_DE = [
     ["Klage", "Wacht", "Krone", "Walzer", "Glut"],
-    ["Stille", "Umzug", "Lichtkranz", "Träumerei", "Leuchtfeuer"],
+    ["Stille", "Trauerzug", "Lichtkranz", "Träumerei", "Leuchtfeuer"],
     ["Schleier", "Sonate", "Diadem", "Treiben", "Zunder"],
     ["Raunen", "Pilgerzug", "Reif", "Wiegenlied", "Lohe"],
     ["Seufzer", "Kavalkade", "Girlande", "Notturno", "Funke"],
     ["Grablied", "Gefolge", "Kranz", "Serenade", "Schimmer"],
-    ["Litanei", "Vorhut", "Geschmeide", "Nachtlied", "Glanz"],
+    ["Litanei", "Vorhut", "Kranz", "Wiegenlied", "Glanz"],
 ]
 
+# DE themes whose compounds need a linking form (Fugenelement): feminine nouns
+# in -e take -n ("Kapelle" -> "Kapellenstille", not the ungrammatical
+# "Kapelle-Stille"). Short compounds are fused, long ones keep a hyphen for
+# readability ("Kapellen-Trauerzug"). Themes absent here (e.g. "Menagerie",
+# "Tiefsee", "Parade") link without -n and stay plainly hyphenated.
+DE_THEME_LINK = {
+    "Kapelle": "Kapellen", "Dryade": "Dryaden", "Marionette": "Marionetten",
+    "Walküre": "Walküren", "Grabblüte": "Grabblüten", "Destille": "Destillen",
+    "Himmelsrakete": "Himmelsraketen", "Creeperhülle": "Creeperhüllen",
+    "Sonnenwende": "Sonnenwenden", "Ertrunkene": "Ertrunkenen",
+    "Turbine": "Turbinen", "Meduse": "Medusen", "Chorempore": "Choremporen",
+    "Blüte": "Blüten",
+}
+
+
+def de_compound_name(theme_de: str, shade_de: str) -> str:
+    """German display-name compound of theme + shade: hyphenated by default;
+    themes with a linking form fuse when short ("Kapellenstille") and keep a
+    hyphen after the linking form when long ("Kapellen-Trauerzug")."""
+    link = DE_THEME_LINK.get(theme_de)
+    if link is None:
+        return f"{theme_de}-{shade_de}"
+    fused = link + shade_de.lower()
+    if len(fused) <= 15:
+        return fused
+    return f"{link}-{shade_de}"
+
+
 # Per-behavior display labels: EN / DE (used for the behavior.bubbleshield.*
-# axis keys, prefixed "Inside: " / "Innen: ", and inside the effect descs).
+# axis keys, prefixed "Inside: " / "Innen: ").
 BEHAVIOR_LABELS = {
     "banshee_wails": ("Banshee wails", "Banshee-Klagen"),
     "ghost_riders": ("Ghost riders", "Geisterreiter"),
@@ -194,19 +248,19 @@ BEHAVIOR_LABELS = {
     "soul_wells": ("Soul wells", "Seelenquellen"),
     "chained_specters": ("Chained specters", "Gekettete Schemen"),
     "reaper_scythe": ("Reaper's scythe", "Schnittersense"),
-    "purgatory_queue": ("Purgatory queue", "Fegefeuer-Schlange"),
+    "purgatory_queue": ("Purgatory queue", "Fegefeuer-Warteschlange"),
     "spirit_rain": ("Spirit rain", "Seelenregen"),
     "ecto_fog_banks": ("Ecto fog banks", "Ektonebelbänke"),
     "aurora_ghosts": ("Aurora ghosts", "Aurora-Geister"),
     "static_haunt": ("Static haunt", "Statik-Spuk"),
-    "moonbeam_shafts": ("Moonbeam shafts", "Mondstrahl-Schächte"),
+    "moonbeam_shafts": ("Moonbeam shafts", "Mondlichtsäulen"),
     "creeper_effigies": ("Creeper effigies", "Creeper-Bildnisse"),
     "enderman_stalkers": ("Enderman stalkers", "Enderman-Schleicher"),
     "skeleton_army": ("Skeleton army", "Skelettarmee"),
     "slime_ghosts": ("Slime ghosts", "Schleimgeister"),
     "drowned_procession": ("Drowned procession", "Ertrunkenen-Prozession"),
     "constellation_wheel": ("Constellation wheel", "Sternbildrad"),
-    "comet_orrery": ("Comet orrery", "Kometen-Planetarium"),
+    "comet_orrery": ("Comet orrery", "Kometen-Umlaufwerk"),
     "eclipse_disc": ("Eclipse disc", "Finsternisscheibe"),
     "meteor_shower_veil": ("Meteor-shower veil", "Meteorschauer-Schleier"),
     "zodiac_beams": ("Zodiac beams", "Tierkreis-Strahlen"),
@@ -220,7 +274,7 @@ BEHAVIOR_LABELS = {
     "alchemy_circles": ("Alchemy circles", "Alchemiekreise"),
     "mirror_maze": ("Mirror maze", "Spiegelkabinett"),
     "arcane_turbines": ("Arcane turbines", "Arkane Turbinen"),
-    "abyssal_jellies": ("Abyssal jellies", "Abyssal-Quallen"),
+    "abyssal_jellies": ("Abyssal jellies", "Abyssale Quallen"),
     "void_rifts_inside": ("Void rifts", "Leerenrisse"),
     "leviathan_shadow": ("Leviathan shadow", "Leviathan-Schatten"),
     "anglerfish_lures": ("Anglerfish lures", "Anglerfisch-Köder"),
@@ -237,28 +291,102 @@ BEHAVIOR_LABELS = {
     "genie_plumes": ("Genie plumes", "Dschinn-Schwaden"),
 }
 
+# Per-behavior grammar for the desc sentences:
+#   (en_np, en_plural, de_np, de_plural)
+# en_np / de_np are mid-sentence noun phrases WITH their article where one is
+# needed ("a wailing choir", "the Styx ferry", "ein klagender Chor"); nouns
+# keep their German capitalization, only articles/adjectives are lowercase
+# (sentence-initial use upper-cases the first character). The plural flags
+# drive verb agreement (haunts/haunt, spukt/spuken, ...). Each behavior b is
+# only ever rendered by desc template b % 5, so the phrasing below is chosen
+# to read naturally in exactly that template.
+BEHAVIOR_GRAMMAR = {
+    "banshee_wails": ("banshee wails", True, "Banshee-Klagen", True),
+    "ghost_riders": ("ghost riders", True, "Geisterreiter", True),
+    "spirit_lanterns": ("spirit lanterns", True, "Geisterlaternen", True),
+    "haunted_portraits": ("haunted portraits", True, "verwunschene Porträts", True),
+    "poltergeist_toss": ("poltergeist tosses", True, "Poltergeist-Würfe", True),
+    "wailing_choir": ("a wailing choir", False, "ein klagender Chor", False),
+    "grave_hands": ("grave hands", True, "Grabhände", True),
+    "ecto_mist_maze": ("an ecto-mist maze", False, "ein Ektonebel-Labyrinth", False),
+    "phantom_bells": ("phantom bells", True, "Phantomglocken", True),
+    "seance_table": ("the séance table", False, "ein Séance-Tisch", False),
+    "ghost_wolves": ("ghost wolves", True, "Geisterwölfe", True),
+    "spectral_stag": ("a spectral stag", False, "ein Spektralhirsch", False),
+    "wisp_owls": ("wisp owls", True, "Irrlicht-Eulen", True),
+    "bone_fish": ("bone fish", True, "Knochenfische", True),
+    "carrion_crows": ("carrion crows", True, "Aaskrähen", True),
+    "styx_ferry": ("the Styx ferry", False, "die Styx-Fähre", False),
+    "soul_wells": ("soul wells", True, "Seelenquellen", True),
+    "chained_specters": ("chained specters", True, "gekettete Schemen", True),
+    "reaper_scythe": ("the reaper's scythe", False, "die Schnittersense", False),
+    "purgatory_queue": ("a purgatory queue", False, "eine Fegefeuer-Warteschlange", False),
+    "spirit_rain": ("spirit rain", False, "Seelenregen", False),
+    "ecto_fog_banks": ("ecto fog banks", True, "Ektonebelbänke", True),
+    "aurora_ghosts": ("aurora ghosts", True, "Aurora-Geister", True),
+    "static_haunt": ("a static haunt", False, "ein Statik-Spuk", False),
+    "moonbeam_shafts": ("moonbeam shafts", True, "Mondlichtsäulen", True),
+    "creeper_effigies": ("creeper effigies", True, "Creeper-Bildnisse", True),
+    "enderman_stalkers": ("enderman stalkers", True, "Enderman-Schleicher", True),
+    "skeleton_army": ("a skeleton army", False, "eine Skelettarmee", False),
+    "slime_ghosts": ("slime ghosts", True, "Schleimgeister", True),
+    "drowned_procession": ("a drowned procession", False, "eine Ertrunkenen-Prozession", False),
+    "constellation_wheel": ("a constellation wheel", False, "ein Sternbildrad", False),
+    "comet_orrery": ("a comet orrery", False, "ein Kometen-Umlaufwerk", False),
+    "eclipse_disc": ("an eclipse disc", False, "eine Finsternisscheibe", False),
+    "meteor_shower_veil": ("a meteor-shower veil", False, "ein Meteorschauer-Schleier", False),
+    "zodiac_beams": ("zodiac beams", True, "Tierkreis-Strahlen", True),
+    "dryad_bloom": ("dryad bloom", False, "Dryadenblüten", True),
+    "mushroom_ring_sprites": ("mushroom-ring sprites", True, "Hexenring-Kobolde", True),
+    "pollen_elementals": ("pollen elementals", True, "Pollen-Elementare", True),
+    "vine_serpents": ("vine serpents", True, "Rankenschlangen", True),
+    "seasons_wheel": ("the wheel of seasons", False, "das Rad der Jahreszeiten", False),
+    "clockwork_gears": ("clockwork gears", True, "Uhrwerk-Zahnräder", True),
+    "rune_forge": ("a rune forge", False, "eine Runenschmiede", False),
+    "alchemy_circles": ("alchemy circles", True, "Alchemiekreise", True),
+    "mirror_maze": ("a mirror maze", False, "ein Spiegelkabinett", False),
+    "arcane_turbines": ("arcane turbines", True, "arkane Turbinen", True),
+    "abyssal_jellies": ("abyssal jellies", True, "abyssale Quallen", True),
+    "void_rifts_inside": ("void rifts", True, "Leerenrisse", True),
+    "leviathan_shadow": ("a leviathan shadow", False, "ein Leviathan-Schatten", False),
+    "anglerfish_lures": ("anglerfish lures", True, "Anglerfisch-Köder", True),
+    "singularity_heart": ("a singularity heart", False, "ein Singularitätsherz", False),
+    "lantern_festival": ("a lantern festival", False, "ein Laternenfest", False),
+    "firework_regatta": ("a firework regatta", False, "eine Feuerwerks-Regatta", False),
+    "ghost_masquerade": ("a ghost masquerade", False, "ein Geister-Maskenball", False),
+    "drumline_golems": ("drumline golems", True, "Trommel-Golems", True),
+    "chime_curtains": ("chime curtains", True, "Klangvorhänge", True),
+    "sentinel_totems": ("sentinel totems", True, "Wächter-Totems", True),
+    "valkyrie_patrol": ("a valkyrie patrol", False, "eine Walküren-Patrouille", False),
+    "shield_maidens": ("shield maidens", True, "Schildmaiden", True),
+    "cerberus_watch": ("the Cerberus watch", False, "die Zerberus-Wache", False),
+    "genie_plumes": ("genie plumes", True, "Dschinn-Schwaden", True),
+}
+
 # Per-surface axis labels: (EN axis value, DE axis value, EN desc noun, DE desc noun).
+# The DE desc noun always follows "aus ..." in the templates, so it is given in
+# a form that reads naturally there (mass noun or dative plural).
 SURFACE_LABELS = {
-    "spectralveil": ("Spectral veil", "Spektralschleier", "spectral-veil", "Spektralschleier"),
+    "spectralveil": ("Spectral veil", "Spektralschleier", "spectral-veil", "Spektralschleiern"),
     "raymarchfog": ("Raymarched fog", "Strahlmarsch-Nebel", "raymarched-fog", "Strahlennebel"),
     "prismdisperse": ("Prism dispersion", "Prismenzerstreuung", "prism-split", "Prismenlicht"),
     "holoparallax": ("Holographic parallax", "Holo-Parallaxe", "holo-parallax", "Holo-Parallaxe"),
-    "orbittrap": ("Orbit-trap fractal", "Orbitfallen-Fraktal", "orbit-trap", "Orbitfraktal"),
+    "orbittrap": ("Orbit-trap fractal", "Orbitfallen-Fraktal", "orbit-trap", "Orbitfraktalen"),
     "crystalsdf": ("Crystal facets", "Kristallfacetten", "crystal-facet", "Kristallfacetten"),
-    "fluidink": ("Fluid ink", "Fließende Tinte", "fluid-ink", "Tintenstrom"),
-    "irisfilm": ("Iridescent film", "Irisierender Film", "iridescent-film", "Irisfilm"),
+    "fluidink": ("Fluid ink", "Fließende Tinte", "fluid-ink", "fließender Tinte"),
+    "irisfilm": ("Iridescent film", "Irisierender Film", "iridescent-film", "irisierendem Film"),
     "aethersmoke": ("Aether smoke", "Ätherrauch", "aether-smoke", "Ätherrauch"),
     "stainedglass": ("Stained glass", "Buntglas", "stained-glass", "Buntglas"),
-    "phantomecho": ("Phantom echoes", "Phantomechos", "phantom-echo", "Phantomecho"),
+    "phantomecho": ("Phantom echoes", "Phantomechos", "phantom-echo", "Phantomechos"),
     "gravlens": ("Gravitational lens", "Gravitationslinse", "gravity-lens", "Gravitationslinsen"),
     "mycelia": ("Mycelial threads", "Myzelfäden", "mycelial", "Myzel"),
-    "solarflare": ("Solar flares", "Sonneneruptionen", "solar-flare", "Sonneneruptions"),
+    "solarflare": ("Solar flares", "Sonneneruptionen", "solar-flare", "Sonneneruptionen"),
     "deepice": ("Deep ice", "Tiefeneis", "deep-ice", "Tiefeneis"),
-    "runecircuit": ("Rune circuitry", "Runenschaltkreise", "rune-circuit", "Runenschaltkreis"),
+    "runecircuit": ("Rune circuitry", "Runenschaltkreise", "rune-circuit", "Runenschaltkreisen"),
     "oilslick": ("Oil slick", "Ölfilm", "oil-slick", "Ölfilm"),
-    "plasmaglobe": ("Plasma globe", "Plasmakugel", "plasma-globe", "Plasmakugel"),
+    "plasmaglobe": ("Plasma globe", "Plasmakugel", "plasma-globe", "Kugelplasma"),
     "ectoplasm": ("Ectoplasm", "Ektoplasma", "ectoplasm", "Ektoplasma"),
-    "voidrift": ("Void rift", "Leerenspalt", "void-rift", "Leerenspalt"),
+    "voidrift": ("Void rift", "Leerenspalt", "void-rift", "Leerenspalten"),
 }
 
 HUE_NAMES = ["crimson", "ember", "amber", "gold", "lime", "verdant",
@@ -370,8 +498,8 @@ def build_new_rows(base_rows):
             "surface": NEW_SURFACES[i % 20],
             "behavior": NEW_BEHAVIORS[i % 60],
             "variant": i // 60,
-            "guard": GUARDS[i % 7],
-            "context": CONTEXTS[i % 6],
+            "guard": GUARDS[guard_index(i)],
+            "context": CONTEXTS[context_index(i)],
             "sound": sound,
             "pitch": pitch,
             "period": period,
@@ -402,7 +530,7 @@ def build_names(base_rows):
         shade_en = SHADE_SETS_EN[nf % 7][s5]
         shade_de = SHADE_SETS_DE[nf % 7][s5]
         en = f"{theme_en} {shade_en}"
-        de = f"{theme_de}-{shade_de}"
+        de = de_compound_name(theme_de, shade_de)
         for suffix in ("", " II", " III", " IV", " V"):
             if en + suffix not in en_used:
                 en = en + suffix
@@ -419,32 +547,71 @@ def build_names(base_rows):
     return en_names, de_names
 
 
-DESC_EN = [
-    "{b} haunt the bubble beneath a {s} shell.",
-    "{b} swirl inside a {s} canopy.",
-    "A {s} dome sheltering {bl}.",
-    "{b} gather under the {s} membrane.",
-    "The {s} shell hums with {bl}.",
+# Per-variant closing sentences: the 7 variants of a behavior share one base
+# sentence, so each variant appends its own short flavor sentence (keeps the
+# 420 descs per language pairwise distinct and less templated). Every base
+# sentence's subject shell noun is feminine in DE (Hülle/Kuppel/Membran), so
+# the "Ihr ..." tails always agree.
+VARIANT_TAILS_EN = [
+    "Its light holds low and steady.",
+    "Faint sparks chase along the rim.",
+    "A slow pulse rolls through the wall.",
+    "Pale motes drift where the wall thins.",
+    "Its sheen sharpens as night falls.",
+    "Soft echoes ring along the curve.",
+    "The crown of the dome burns brightest.",
 ]
 
-DESC_DE = [
-    "{b} spuken unter einer Hülle aus {s}.",
-    "{b} wirbeln in einer Kuppel aus {s}.",
-    "Eine Kuppel aus {s}, in der {b} hausen.",
-    "{b} sammeln sich unter der Membran aus {s}.",
-    "Die Hülle aus {s} summt vor {b}.",
+VARIANT_TAILS_DE = [
+    "Ihr Licht bleibt ruhig und gedämpft.",
+    "Schwache Funken jagen den Rand entlang.",
+    "Ein langsamer Puls rollt durch die Wand.",
+    "Blasse Lichtpunkte treiben, wo die Wand dünn wird.",
+    "Ihr Schimmer wird schärfer, wenn die Nacht hereinbricht.",
+    "Sanfte Echos klingen die Wölbung entlang.",
+    "Der Scheitel der Kuppel glüht am hellsten.",
 ]
+
+
+def cap_first(s: str) -> str:
+    return s[0].upper() + s[1:]
+
+
+def en_article(word: str) -> str:
+    return "an" if word[0] in "aeiou" else "a"
 
 
 def descs_for(row):
+    """One EN + one DE desc per row: template picked by i % 5 (== behavior % 5,
+    so each behavior's phrasing was chosen for exactly its template), with
+    number-correct verbs, correct articles (a/an, ein/eine) and a per-variant
+    closing sentence."""
     i = row["i"]
     s5 = i % 5
-    b_en, b_de = BEHAVIOR_LABELS[row["behavior"]]
+    en_np, en_pl, de_np, de_pl = BEHAVIOR_GRAMMAR[row["behavior"]]
     s_en = SURFACE_LABELS[row["surface"]][2]
     s_de = SURFACE_LABELS[row["surface"]][3]
-    en = DESC_EN[s5].format(b=b_en, bl=b_en[0].lower() + b_en[1:], s=s_en)
-    de = DESC_DE[s5].format(b=b_de, s=s_de)
-    return en, de
+    a_s = en_article(s_en)
+    if s5 == 0:
+        en = f"{cap_first(en_np)} {'haunt' if en_pl else 'haunts'} the bubble beneath {a_s} {s_en} shell."
+        de = f"{cap_first(de_np)} {'spuken' if de_pl else 'spukt'} unter einer Hülle aus {s_de}."
+    elif s5 == 1:
+        en = f"{cap_first(en_np)} {'swirl' if en_pl else 'swirls'} inside {a_s} {s_en} canopy."
+        de = f"{cap_first(de_np)} {'wirbeln' if de_pl else 'wirbelt'} in einer Kuppel aus {s_de}."
+    elif s5 == 2:
+        en = f"{a_s.capitalize()} {s_en} dome sheltering {en_np}."
+        de = f"Eine Kuppel aus {s_de}, in der {de_np} {'hausen' if de_pl else 'haust'}."
+    elif s5 == 3:
+        en = f"{cap_first(en_np)} {'gather' if en_pl else 'gathers'} under the {s_en} membrane."
+        if de_pl:
+            de = f"{cap_first(de_np)} sammeln sich unter der Membran aus {s_de}."
+        else:
+            de = f"{cap_first(de_np)} lauert unter der Membran aus {s_de}."
+    else:
+        en = f"The {s_en} shell hums with {en_np}."
+        de = f"Unter der summenden Hülle aus {s_de} {'regen' if de_pl else 'regt'} sich {de_np}."
+    variant = row["variant"]
+    return f"{en} {VARIANT_TAILS_EN[variant]}", f"{de} {VARIANT_TAILS_DE[variant]}"
 
 
 def assert_valid(base_rows, new_rows):
@@ -502,13 +669,37 @@ def assert_valid(base_rows, new_rows):
         pair_counts[pk] = pair_counts.get(pk, 0) + 1
         assert pair_counts[pk] <= 3, f"(surface, screen) pair {pk} exceeds the 3 cap"
 
-    for i in range(NEW_COUNT):
-        assert new_rows[i]["guard"] == GUARDS[i % 7]
-        assert new_rows[i]["context"] == CONTEXTS[i % 6]
+    # Guard/context de-correlation (validate() imposes nothing on these axes,
+    # but the assignment must not lock any behavior to one context nor make
+    # the guard a deterministic function of the screen family).
+    behavior_contexts, screen_guards = {}, {}
+    behavior_guards, guard_counts, context_counts = {}, {}, {}
+    for r in new_rows:
+        i = r["i"]
+        assert r["guard"] == GUARDS[guard_index(i)]
+        assert r["context"] == CONTEXTS[context_index(i)]
+        behavior_contexts.setdefault(r["behavior"], set()).add(r["context"])
+        behavior_guards.setdefault(r["behavior"], set()).add(r["guard"])
+        screen_guards.setdefault(r["screen"], set()).add(r["guard"])
+        guard_counts[r["guard"]] = guard_counts.get(r["guard"], 0) + 1
+        context_counts[r["context"]] = context_counts.get(r["context"], 0) + 1
+    for b, ctxs in behavior_contexts.items():
+        assert len(ctxs) >= 2, f"behavior {b} is locked to a single context: {ctxs}"
+    for s, gs in screen_guards.items():
+        assert len(gs) >= 2, f"screen {s} deterministically fixes the guard: {gs}"
+    assert set(guard_counts) == set(GUARDS), f"unused guards: {set(GUARDS) - set(guard_counts)}"
+    assert set(context_counts) == set(CONTEXTS), \
+        f"unused contexts: {set(CONTEXTS) - set(context_counts)}"
 
     print(f"asserted: {len(combined)} rows valid; behaviors {len(behaviors)} x 7; "
           f"screens {len(used_screens)}; surfaces {len(used_surfaces)}; "
           f"max (surface,screen) pair count {max(pair_counts.values())}")
+    print(f"de-correlation: contexts per behavior min "
+          f"{min(len(v) for v in behavior_contexts.values())}/6, guards per screen min "
+          f"{min(len(v) for v in screen_guards.values())}/7, guards per behavior min "
+          f"{min(len(v) for v in behavior_guards.values())}/7; "
+          f"guard counts {sorted(guard_counts.values())}, "
+          f"context counts {sorted(context_counts.values())}")
 
 
 def emit(base_rows, new_rows, en_names, de_names, out_dir: Path):
@@ -589,7 +780,11 @@ def main() -> None:
     for shades in SHADE_SETS_EN + SHADE_SETS_DE:
         assert len(set(shades)) == 5
     assert set(BEHAVIOR_LABELS) == set(NEW_BEHAVIORS)
+    assert set(BEHAVIOR_GRAMMAR) == set(NEW_BEHAVIORS)
     assert set(SURFACE_LABELS) == set(NEW_SURFACES)
+    assert set(DE_THEME_LINK) <= {t[1] for t in THEMES}, "DE_THEME_LINK has unknown themes"
+    assert len(VARIANT_TAILS_EN) == 7 and len(set(VARIANT_TAILS_EN)) == 7
+    assert len(VARIANT_TAILS_DE) == 7 and len(set(VARIANT_TAILS_DE)) == 7
 
     base_rows = parse_base_rows()
     new_rows = build_new_rows(base_rows)
