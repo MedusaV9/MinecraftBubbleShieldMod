@@ -10,19 +10,25 @@ with a fixed precision -- so diffs stay reviewable.
 
 Design (see /tmp/shader_plan.md sections 1, 2, 4.1 and AGENTS.md):
 
-* Fragment contract (v7): `#version 330`; only `#moj_import <minecraft:fog.glsl>`
-  and `<minecraft:globals.glsl>`; inputs texCoord0 (RAW [0,1] sphere UV),
-  vertexColor (rgb = palette = dominant chroma, a = dissolve; the final alpha
-  is clamp(bodyAlpha, 0, aMax) * vertexColor.a with EVERY alpha modifier --
-  emission, v5 back-face densify, ghost thinning, dither -- folded into
-  bodyAlpha BEFORE the clamp, so the dissolve multiply is the last alpha
-  operation and no path can exceed vertexColor.a * aMax),
-  sphericalVertexDistance, cylindricalVertexDistance; out fragColor;
-  animation ONLY via `float time = GameTime * 1200.0;`; the ONLY uniform
-  beyond the vanilla imports is `uniform sampler2D Sampler0` (the shipped
-  surface atlas, see the v6 bullet below -- ShieldPipelines binds it through
-  the SAMPLER0 bind group); `discard` when alpha < 0.01; the last statement
-  applies apply_fog exactly like the 16 original hand-written seed shaders.
+* Fragment contract (v8): `#version 330`; `#moj_import <minecraft:fog.glsl>`,
+  `<minecraft:globals.glsl>`, `<minecraft:dynamictransforms.glsl>` (ModelViewMat
+  for the view-space refraction offset) and `<minecraft:projection.glsl>`
+  (ProjMat for the reverse-Z depth linearization); inputs texCoord0 (RAW [0,1]
+  sphere UV), vertexColor (rgb = palette = dominant chroma, a = dissolve; the
+  final alpha is clamp(bodyAlpha, 0, aMax) * vertexColor.a with EVERY alpha
+  modifier -- emission, v5 back-face densify, ghost thinning, dither, the v8
+  refraction floor and depth-soft edge fade -- folded into bodyAlpha BEFORE
+  the clamp, so the dissolve multiply is the last alpha operation and no path
+  can exceed vertexColor.a * aMax), sphericalVertexDistance,
+  cylindricalVertexDistance, worldPos (camera-relative world position from
+  surface.vsh: view dir = -normalize(worldPos)); out fragColor; animation ONLY
+  via `float time = GameTime * 1200.0;`; the ONLY uniforms beyond the vanilla
+  imports are the plain `uniform sampler2D Sampler0/Sampler1/Sampler2`
+  declarations (surface atlas + SceneCopy scene color/depth, see the v6/v8
+  bullets below -- ShieldPipelines binds them through the
+  SAMPLER0_SAMPLER1_SAMPLER2 bind group); `discard` when alpha < 0.01; the
+  last statement applies apply_fog exactly like the 16 original hand-written
+  seed shaders.
 
 * Portability/robustness rules baked into every emitted file:
   - `invsmooth(lo, hi, x)` (== 1 - smoothstep(lo, hi, x)) replaces every
@@ -258,13 +264,58 @@ Design (see /tmp/shader_plan.md sections 1, 2, 4.1 and AGENTS.md):
     ghost thinning (V5_GHOST_RANGES) and a stronger ring/halo/body so it
     reads as solid as its star siblings.
 
+* v8 REALISM layer (EVERY file; the fx_000 hand-authored POC generalized):
+  every shader now composites over the SceneCopy scene copy so the bubble
+  reads as deep, lit ENERGY GLASS bending the world, not a flat decal.
+  - REFRACTION: `screenUV = gl_FragCoord.xy / ScreenSize`; the bumped normal
+    (see below) rotated into view space by mat3(ModelViewMat) drives a
+    screen-space offset that grows at grazing fresnel and falls off with the
+    fragment's camera distance (length(worldPos), capped); THREE spread taps
+    of Sampler1 give chromatic dispersion; a Sampler2 depth test drops the
+    offset when the tap lands on geometry NEARER than the fragment
+    (reverse-Z: larger stored depth = closer), so foreground silhouettes
+    never smear across the membrane. The refracted scene (palette-tinted
+    glass) is the see-through BASE; the family pattern rides on top as the
+    ENERGY, weighted by its own brightness + the fresnel rim; the emissive
+    glow adds after the composite. Per-family strengths (FAMILY_REALISM):
+    glassy families bend hardest with the thinnest energy film, dark/void
+    families bend least with deep glass tint, GRAVLENS bends the most.
+  - FRESNEL RIM: pow(1 - abs(dot(bumpN, viewV)), rimPow) folds into the rim
+    glow (feeding gpos, the rim dispersion mixes AND the alpha) plus a final
+    additive fresnel * hotStop -- edges glow, the center stays
+    refraction-dominated (the classic force-field look).
+  - FAKE LIGHTING: the atlas height gradient (2 extra static taps) tilts the
+    analytic sphere normal along its tangent frame (pole-faded: the u
+    tangent degenerates at the caps); a FIXED baked world key light drives a
+    wrap-diffuse multiplicative grade and a specular lobe added through the
+    luma-capped hotStop -- recolor-safe by construction, the membrane reads
+    as a lit curved 3D surface.
+  - FLOW-MAP ANIMATION: the atlas is sampled TWICE, advected along the curl
+    of its own height field at half-cycle-offset fract phases and
+    crossfaded by phase distance -- the energy visibly CRAWLS. The phase
+    speed completes integer cycles/day (day-wrap-safe) and the flow vector
+    is a function of the seam-periodic texUV domain (u = 0/1 safe); flicker
+    files keep riding the SMOOTH tuv twin (no strobe in the atlas domain).
+  - DEPTH-SOFT EDGES: bodyAlpha *= smoothstep(0, softDist, sceneViewDist -
+    fragViewDist) with both distances linearized from the reverse-Z ProjMat
+    (viewDist helper), so the shield melts into terrain instead of a hard
+    clip line. Applied together with the refraction alpha floor (what shows
+    through must be the REFRACTED copy, so the body runs near-opaque) BEFORE
+    the aMax clamp; the vertexColor.a dissolve stays the outermost alpha op.
+  - Photosensitivity: the flow crossfade and all lighting terms move on
+    slow smooth domains; the emission drive is unchanged (slow breath, no
+    >2 Hz full-field oscillation anywhere).
+
 * Compile safety: conservative GLSL 330 subset only -- const-bounded for
   loops (fbm <= 6 octaves, parallax <= 4 taps, voronoi 3x3/5x5), no while, no
-  switch, no arrays-of-structs, no uniforms beyond the two vanilla imports
-  plus the plain `uniform sampler2D Sampler0` atlas declaration (NO
-  layout(binding=...) qualifier -- that fails at #version 330), exactly one
-  texture() call per file (the atlas tile sample, always live into
-  fragColor), explicit float literals, every function defined before use.
+  switch, no arrays-of-structs, no uniforms beyond the four vanilla imports
+  plus the plain `uniform sampler2D Sampler0/Sampler1/Sampler2` declarations
+  (NO layout(binding=...) qualifier -- that fails at #version 330), exactly
+  ten texture() calls per file (5 atlas taps through the atlasTile helper:
+  static center + 2 gradient + 2 flow phases; 3 chromatic Sampler1 scene
+  taps; 2 Sampler2 depth taps -- all live into fragColor, so no
+  "does not use sampler" warning on any pipeline), explicit float literals,
+  every function defined before use.
 
 Usage:
     python3 tools/gen_surface_shaders.py                  # all 420 + manifest
@@ -618,6 +669,8 @@ HELPER_DEPS = {
     "sparkle": ["cellHash", "invsmooth"],
     "ringPulse": ["hash22", "invsmooth"],
     "sdSeg": [],
+    "atlasTile": [],
+    "viewDist": [],
     "deepField": [],  # deps filled per deep recipe at emission time
 }
 
@@ -627,7 +680,8 @@ CANONICAL_ORDER = [
     "warp2", "curl2", "voro2", "voro3", "voronoise", "hexDist", "hexCoords",
     "triGrid", "truchet", "polarFold", "spiralWarp", "caustic", "caustic3",
     "thinFilm", "accentPalette", "gradient3", "satLift", "hueSpin",
-    "rimGraze", "rimLat", "sparkle", "ringPulse", "sdSeg", "deepField",
+    "rimGraze", "rimLat", "sparkle", "ringPulse", "sdSeg", "atlasTile",
+    "viewDist", "deepField",
 ]
 
 
@@ -1128,6 +1182,24 @@ def helper_source(name: str, c: dict) -> str:
             "    vec2 ba = b - a;\n"
             "    float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0);\n"
             "    return length(pa - ba * h);\n"
+            "}")
+    if name == "atlasTile":
+        return (
+            "// one inset-clamped tap of this file's surface-atlas tile: fract()\n"
+            "// wraps the (seam-periodic) repeat domain, and the inset keeps the\n"
+            "// linear-filtered lookup inside the tile for ANY flow/gradient offset\n"
+            "vec4 atlasTile(vec2 p) {\n"
+            f"    return texture(Sampler0, (vec2({c['tileX']}, {c['tileY']}) + clamp(fract(p), 0.004, 0.996)) * 0.25);\n"
+            "}")
+    if name == "viewDist":
+        return (
+            "// view-space distance from a reverse-Z depth value (26.2 stores depth\n"
+            "// with near = 1, far = 0 under ARB_clip_control): with the perspective\n"
+            "// terms m22 = ProjMat[2][2] and m32 = ProjMat[3][2], the stored depth\n"
+            "// of a point at view distance D is m32 / D - m22, so D = m32 / (d +\n"
+            "// m22). Drives the v8 depth-soft edge fade against the scene copy.\n"
+            "float viewDist(float d) {\n"
+            "    return ProjMat[3][2] / (d + ProjMat[2][2]);\n"
             "}")
     if name == "deepField":
         recipe = c["deep"]
@@ -2351,6 +2423,78 @@ DEEP_WEIGHT = {
     "AETHERSMOKE": 0.65, "STAINEDGLASS": 0.7,
 }
 
+# ---------------------------------------------------------------------------
+# v8 REALISM knobs (EVERY file): per-family ranges for the scene-copy
+# refraction, fresnel rim, fake key light, flow-map advection and depth-soft
+# edge terms. Category presets keep the table reviewable; per-id variety
+# comes from the positional draws inside each range. Units: "refr" is
+# screen-UV * view-blocks (the emitted offset divides by the fragment's
+# camera distance and is capped), "flowAmp" is tile units per unit height
+# slope (the generator divides by the baked gradient epsilon), "soft" is
+# world blocks, "floor" is the refraction body-alpha floor.
+# ---------------------------------------------------------------------------
+REALISM_DEFAULT = {
+    "refr": (0.45, 0.75),       # base scene-copy bend
+    "refrFres": (0.8, 1.5),     # extra bend factor at grazing fresnel (x refr)
+    "disp": (0.045, 0.090),     # chromatic split half-spread of the 3 taps
+    "glass": (0.18, 0.32),      # refracted-scene tint toward the live palette
+    "energy": (0.30, 0.42),     # energy-overlay base weight over the glass
+    "energyGain": (0.38, 0.55), # pattern-driven overlay gain
+    "rimPow": (2.4, 3.6),       # fresnel exponent
+    "fresRim": (0.35, 0.60),    # fresnel fold into the rim glow
+    "fresGlow": (0.55, 0.85),   # additive fresnel * hotStop rim
+    "bump": (1.0, 1.9),         # atlas-gradient normal perturbation
+    "wrap": (0.35, 0.60),       # wrap-diffuse softness
+    "diffFloor": (0.58, 0.70),  # unlit-side diffuse floor
+    "diffGain": (0.50, 0.68),   # lit-side diffuse gain
+    "specPow": (14.0, 26.0),    # key-light specular exponent
+    "specW": (0.28, 0.50),      # specular weight (through the luma-capped hotStop)
+    "flowSpd": (0.05, 0.12),    # flow crossfade cycles/s (day-quantized)
+    "flowAmp": (0.030, 0.070),  # flow displacement per unit height slope
+    "soft": (0.5, 1.1),         # depth-soft edge distance (blocks)
+    "floor": (0.88, 0.92),      # refraction body-alpha floor
+}
+# Category overrides: glassy families bend the scene hardest and keep the
+# energy film thin (dielectric look); dark/void families bend little and
+# tint the glass deep (smoked glass, energy dominant); soft/vapour families
+# diffuse the light, flow widest and melt deepest into terrain. Every family
+# not listed below keeps the default ("energetic" plasma/bolt/lattice) feel.
+REALISM_CATEGORIES = {
+    "glassy": {"refr": (0.70, 1.05), "refrFres": (1.0, 1.8), "disp": (0.08, 0.14),
+               "glass": (0.10, 0.22), "energy": (0.18, 0.28), "energyGain": (0.34, 0.48),
+               "specPow": (24.0, 44.0), "specW": (0.45, 0.70), "bump": (1.3, 2.4),
+               "fresGlow": (0.45, 0.70), "floor": (0.90, 0.94)},
+    "dark":   {"refr": (0.24, 0.42), "disp": (0.030, 0.060), "glass": (0.38, 0.58),
+               "energy": (0.42, 0.56), "energyGain": (0.34, 0.48), "fresGlow": (0.50, 0.80),
+               "specW": (0.18, 0.34), "diffFloor": (0.62, 0.74), "diffGain": (0.36, 0.52),
+               "floor": (0.86, 0.90)},
+    "soft":   {"refr": (0.30, 0.50), "disp": (0.035, 0.070), "bump": (0.6, 1.2),
+               "soft": (1.0, 1.8), "energy": (0.34, 0.46), "specPow": (8.0, 16.0),
+               "specW": (0.16, 0.30), "flowAmp": (0.045, 0.095), "floor": (0.87, 0.91)},
+}
+REALISM_CATEGORY_BY_FAMILY = {}
+for _fam in ("THINFILM", "CAUSTIC", "MOIRE", "KALEIDO", "INTERFERENCE", "WAVES",
+             "CHROME", "CRYSTALREFRACT", "SHARDTESS", "CRYSTALSDF", "PRISMDISPERSE",
+             "IRISFILM", "STAINEDGLASS", "DEEPICE", "OILSLICK", "FROSTFERN",
+             "GRAVLENS"):
+    REALISM_CATEGORY_BY_FAMILY[_fam] = "glassy"
+for _fam in ("STARFIELD", "PORTALVOID", "VOIDTENDRIL", "VOIDRIFT", "BIOLUME",
+             "KALISET", "ORBITTRAP", "MYCELIA", "RUNECIRCUIT", "GALAXYSWIRL",
+             "EMBERSTORM", "LAVAFLOW", "TENDRILNET", "NEBULA"):
+    REALISM_CATEGORY_BY_FAMILY[_fam] = "dark"
+for _fam in ("CURLSMOKE", "VOLUMECLOUD", "RAYMARCHFOG", "AETHERSMOKE",
+             "ECTOPLASM", "PHANTOMECHO", "SPECTRALVEIL"):
+    REALISM_CATEGORY_BY_FAMILY[_fam] = "soft"
+FAMILY_REALISM = {fam: {**REALISM_DEFAULT,
+                        **REALISM_CATEGORIES.get(REALISM_CATEGORY_BY_FAMILY.get(fam), {})}
+                  for fam in FAMILIES}
+# The gravitational lens bends the scene hardest of all (that IS the
+# technique) with the widest chromatic split.
+FAMILY_REALISM["GRAVLENS"] = {**FAMILY_REALISM["GRAVLENS"],
+                              "refr": (1.15, 1.55), "refrFres": (1.2, 2.0),
+                              "disp": (0.10, 0.16)}
+assert set(FAMILY_REALISM) == set(FAMILIES), "FAMILY_REALISM must cover every family"
+
 
 def secondary_consts(prim: int, sec: int) -> tuple:
     """Bakes the primary -> secondary palette relation into three shader
@@ -2415,16 +2559,17 @@ def emit_shader(asg: dict) -> str:
       96..127 v3 depth/3D-domain knobs (v4 adds 123..127 for the
       Beer-Lambert / soft-clip knobs and repurposes 85 for the hot-stop
       saturation lift), 128..143 v6 atlas-texture/emission knobs, 144..151
-      v7 wash-guard/pole-fade/gating knobs (each extension appends to the
-      stream, so growing 128 -> 144 -> 160 shifted no older draw). The
-      draws are POSITIONAL lookups into a fixed 160-entry table, so a
-      composer reusing a spare index only correlates two knobs -- it can
-      never shift any other draw.
+      v7 wash-guard/pole-fade/gating knobs, 152..183 v8 realism knobs
+      (refraction/fresnel/key-light/flow/depth-soft; each extension appends
+      to the stream, so growing 128 -> 144 -> 160 -> 192 shifted no older
+      draw). The draws are POSITIONAL lookups into a fixed 192-entry table,
+      so a composer reusing a spare index only correlates two knobs -- it
+      can never shift any other draw.
     """
     effect_id = asg["id"]
     family = asg["family"]
     rng = Rng(asg["seed"])
-    draws = [rng.unit() for _ in range(160)]
+    draws = [rng.unit() for _ in range(192)]
 
     def u(i, lo, hi):
         return lo + (hi - lo) * draws[i]
@@ -2515,6 +2660,8 @@ def emit_shader(asg: dict) -> str:
     needs.add("gradient3")      # 3-stop runtime palette grade
     needs.add("satLift")        # anti-washout saturation lift
     needs.add("hueSpin")        # hue-nudged highlight stop
+    needs.add("atlasTile")      # v8: every atlas tap (flow + gradient) runs through it
+    needs.add("viewDist")       # v8: reverse-Z linearization for the depth-soft fade
     needs.add("deepField")
     needs.update(deep_field_deps(asg["deep"]))
 
@@ -2672,7 +2819,9 @@ def emit_shader(asg: dict) -> str:
     a_base = F(u(92, 0.22 + 0.45 * floor_lo, 0.28 + 0.45 * floor_hi))
     a_floor = F(u(93, floor_lo + 0.14, floor_hi + 0.14))
     a_gain = F(u(94, *pres["gain"]))   # family-tuned alpha rise on features
-    a_max = F(u(95, min(0.96, amax_lo + 0.06), min(0.97, amax_hi + 0.06)))
+    # v8: the family ceiling still varies, but the refraction floor (below)
+    # must fit under it -- the final clamp uses the lifted a_max_refr.
+    a_max_raw = u(95, min(0.96, amax_lo + 0.06), min(0.97, amax_hi + 0.06))
 
     # v3 3D-depth knobs (indices 96..127).
     def unit3(i0):
@@ -2737,10 +2886,17 @@ def emit_shader(asg: dict) -> str:
     # shift integer lattice periods per day).
     tile = FAMILY_TILE[family]
     tile_name = ATLAS_TILES[tile]
+    # baked tile origin for the atlasTile helper (all v8 atlas taps run
+    # through it, so every tap gets the same inset clamp)
+    c["tileX"] = F(float(tile % 4))
+    c["tileY"] = F(float(tile // 4))
     tex_mul = max(1, round(u(128, 8.0, 16.0) / sx))  # target ~8..16 tile repeats per u wrap
-    tex_wr = F(u(129, 0.35, 0.60))     # coarse structural layer weight (atlas.r)
-    tex_wg = F(u(130, 0.30, 0.55))     # mid-scale detail weight (atlas.g)
-    tex_wb = F(u(131, 0.20, 0.45))     # fine grain weight (atlas.b)
+    tex_wr_raw = u(129, 0.35, 0.60)    # coarse structural layer weight (atlas.r)
+    tex_wg_raw = u(130, 0.30, 0.55)    # mid-scale detail weight (atlas.g)
+    tex_wb_raw = u(131, 0.20, 0.45)    # fine grain weight (atlas.b)
+    tex_wr = F(tex_wr_raw)
+    tex_wg = F(tex_wg_raw)
+    tex_wb = F(tex_wb_raw)
     tex_mm0 = F(u(132, 0.60, 0.75))    # mid modulation floor
     tex_mm1 = F(u(133, 0.45, 0.75))    # mid modulation depth (x texDetail)
     # v7: the additive lift into mid is smaller AND mostly gated through the
@@ -2773,6 +2929,48 @@ def emit_shader(asg: dict) -> str:
         star_detail_scale = F(u(147, 1.9, 2.6))
         star_detail_bias = F(u(148, 0.16, 0.26))
         star_emit_scale = F(u(149, 1.7, 2.4))
+
+    # v8 realism knobs (indices 152..183, appended to the stream -- no older
+    # draw shifts): scene-copy refraction, fresnel rim, fixed key light,
+    # flow-map advection and depth-soft edges, all family-ranged
+    # (FAMILY_REALISM) with per-id variety inside each range.
+    real = FAMILY_REALISM[family]
+    refr_base = u(152, *real["refr"])
+    refr_fres = refr_base * u(153, *real["refrFres"])
+    refr_disp = u(154, *real["disp"])
+    glass_tint = F(u(155, *real["glass"]))
+    energy_base = F(u(156, *real["energy"]))
+    energy_gain = F(u(157, *real["energyGain"]))
+    energy_fres = F(u(158, 0.10, 0.22))    # fresnel lift of the energy overlay
+    rim_pow = F(u(159, *real["rimPow"]))
+    fres_rim = F(u(160, *real["fresRim"]))
+    fres_glow = F(u(161, *real["fresGlow"]))
+    bump_amp = F(u(162, *real["bump"]))
+    light_wrap = u(163, *real["wrap"])
+    diff_floor = F(u(164, *real["diffFloor"]))
+    diff_gain = F(u(165, *real["diffGain"]))
+    spec_pow = F(u(166, *real["specPow"]))
+    spec_w = F(u(167, *real["specW"]))
+    # fixed world key-light direction; y is drawn positive (sky light), so
+    # the norm can never be near zero
+    _lx, _ly, _lz = (u(168, -0.85, 0.85), u(169, 0.45, 0.95), u(170, -0.85, 0.85))
+    _ln = math.sqrt(_lx * _lx + _ly * _ly + _lz * _lz)
+    key_light = (_lx / _ln, _ly / _ln, _lz / _ln)
+    flow_speed = F6(quant_fract_speed(u(171, *real["flowSpd"])))
+    grad_eps = u(175, 0.012, 0.022)        # atlas height-gradient tap offset (tile units)
+    # the emitted flow constant folds the /eps gradient normalization in, so
+    # the crawl displacement is flowAmp tile units per unit height slope
+    flow_scale = u(172, *real["flowAmp"]) / grad_eps
+    flow_sign = 1.0 if u(178, 0.0, 1.0) < 0.5 else -1.0
+    depth_soft = F(u(173, *real["soft"]))
+    refr_floor = u(174, *real["floor"])
+    refr_cap = F(u(176, 0.10, 0.16))       # max screen-UV offset (near-camera sanity)
+    energy_max = F(u(177, 0.80, 0.90))     # energy overlay ceiling
+    a_max_refr = F(min(0.965, max(a_max_raw, refr_floor + 0.025)))
+    # unit-sum HEIGHT weights: the same R/G/B structural mix as texDetail,
+    # normalized so the height field spans a stable range for the gradient
+    _hw_sum = tex_wr_raw + tex_wg_raw + tex_wb_raw
+    height_w = (tex_wr_raw / _hw_sum, tex_wg_raw / _hw_sum, tex_wb_raw / _hw_sum)
 
     sec_ang, sec_sat, sec_val = secondary_consts(
         asg["primary"], asg["secondary"] if asg.get("secondary") is not None else asg["primary"])
@@ -2829,17 +3027,26 @@ def emit_shader(asg: dict) -> str:
     lines.append("")
     lines.append("#moj_import <minecraft:fog.glsl>")
     lines.append("#moj_import <minecraft:globals.glsl>")
+    lines.append("#moj_import <minecraft:dynamictransforms.glsl>")
+    lines.append("#moj_import <minecraft:projection.glsl>")
     lines.append("")
     lines.append("// The shipped surface atlas (bubbleshield:textures/effect/surface_atlas.png,")
-    lines.append("// bound by ShieldPipelines through the SAMPLER0 bind group): a 4x4 grid of 16")
-    lines.append("// seamless grayscale tiles. Per texel: R = coarse structure, G = mid detail,")
-    lines.append("// B = fine grain, A = EMISSION mask (glow, NOT transparency). All hue comes")
-    lines.append("// from vertexColor at runtime (recolor-safe).")
+    lines.append("// bound by ShieldPipelines through the SAMPLER0_SAMPLER1_SAMPLER2 bind")
+    lines.append("// group): a 4x4 grid of 16 seamless grayscale tiles. Per texel: R = coarse")
+    lines.append("// structure, G = mid detail, B = fine grain, A = EMISSION mask (glow, NOT")
+    lines.append("// transparency). All hue comes from vertexColor at runtime (recolor-safe).")
     lines.append("uniform sampler2D Sampler0;")
+    lines.append("// SceneCopy blits the main render target's color+depth right after the")
+    lines.append("// opaque/solid pass, BEFORE this translucent membrane draws, so both are")
+    lines.append("// safe to SAMPLE here. Sampler1 = scene color copy (clamp-to-edge LINEAR),")
+    lines.append("// Sampler2 = scene depth copy (clamp-to-edge NEAREST, reverse-Z).")
+    lines.append("uniform sampler2D Sampler1;")
+    lines.append("uniform sampler2D Sampler2;")
     lines.append("")
     lines.append(f"// Bubble surface shader fx_{effect_id:03d} -- family {family}")
     lines.append(f"// stack: deep={asg['deep']} x{taps} taps | mid={family.lower()}+{warp}+{anim} | rim={rim} | flourish={flourish} | tex={tile_name}")
     lines.append(f"// fbm: {c['fbmMode']} x{c['octaves']} octaves | seed {asg['seed']:016x}")
+    lines.append(f"// v8 realism: refr {F(refr_base)}+{F(refr_fres)}*fres/dist (cap {refr_cap}) | energy {energy_base}+{energy_gain}*p | flow {flow_speed} c/s | soft {depth_soft}m")
     lines.append("// GENERATED by tools/gen_surface_shaders.py -- do not hand-edit; edit the")
     lines.append("// generator and regenerate instead (byte-stable, fixed seed).")
     lines.append("")
@@ -2847,6 +3054,9 @@ def emit_shader(asg: dict) -> str:
     lines.append("in vec4 vertexColor;")
     lines.append("in float sphericalVertexDistance;")
     lines.append("in float cylindricalVertexDistance;")
+    lines.append("// Camera-relative world-space position from surface.vsh: the camera is")
+    lines.append("// the origin of this space, so view direction = -normalize(worldPos).")
+    lines.append("in vec3 worldPos;")
     lines.append("")
     lines.append("out vec4 fragColor;")
     lines.append("")
@@ -2941,8 +3151,25 @@ def emit_shader(asg: dict) -> str:
         lines.append(f"    vec2 texUV = tuv * {F(float(tex_mul))};")
     else:
         lines.append(f"    vec2 texUV = wuv * {F(float(tex_mul))};")
-    lines.append(f"    vec2 tileUV = (vec2({F(float(tile % 4))}, {F(float(tile // 4))}) + clamp(fract(texUV), 0.004, 0.996)) * 0.25;")
-    lines.append("    vec4 atlas = texture(Sampler0, tileUV);")
+    lines.append("    // v8 height taps: the atlas R/G/B structural mix doubles as a HEIGHT")
+    lines.append("    // field. Its 2-tap gradient (a) tilts the shading normal (bump) and")
+    lines.append("    // (b) builds the divergence-free flow vector the energy crawls along.")
+    lines.append(f"    vec3 hgtW = vec3({F(height_w[0])}, {F(height_w[1])}, {F(height_w[2])});")
+    lines.append("    float hgtC = dot(atlasTile(texUV).rgb, hgtW);")
+    lines.append(f"    float hgtX = dot(atlasTile(texUV + vec2({F(grad_eps)}, 0.0)).rgb, hgtW);")
+    lines.append(f"    float hgtY = dot(atlasTile(texUV + vec2(0.0, {F(grad_eps)})).rgb, hgtW);")
+    lines.append("    vec2 atlasSlope = vec2(hgtX - hgtC, hgtY - hgtC);")
+    lines.append("    // [layer:flow:atlas_curl]")
+    lines.append("    // v8 dual-phase flow-map advection: two taps advected along the curl")
+    lines.append("    // of the height field at half-cycle-offset fract phases, crossfaded")
+    lines.append("    // by phase distance -- the energy visibly CRAWLS across the membrane.")
+    lines.append("    // The phase speed completes integer cycles per day (day-wrap-safe)")
+    lines.append("    // and the flow vector is a function of the seam-periodic texUV domain")
+    lines.append("    // (u = 0/1 safe by construction).")
+    lines.append(f"    vec2 flowVec = vec2(atlasSlope.y, -atlasSlope.x) * {F(flow_sign * flow_scale)};")
+    lines.append(f"    float flowA = fract(time * {flow_speed});")
+    lines.append("    float flowB = fract(flowA + 0.5);")
+    lines.append("    vec4 atlas = mix(atlasTile(texUV + flowVec * flowA), atlasTile(texUV + flowVec * flowB), abs(flowA - 0.5) * 2.0);")
     lines.append("    // v7 atlas pole fade: texUV is longitude-dependent, so at v = 0/1 the")
     lines.append("    // tile would pinch into an apex rosette. Every atlas INFLUENCE (mid")
     lines.append("    // lift, body grade, emission) fades to its no-atlas value at the caps.")
@@ -2957,6 +3184,21 @@ def emit_shader(asg: dict) -> str:
     lines.append("    // signature stays dominant and dark palettes keep their dark gaps")
     lines.append(f"    mid = clamp(mid * mix(1.0, {tex_mm0} + {tex_mm1} * texDetail, atlasPoleW) + {tex_ma} * texDetail * ({F(tex_mid_gate)} + {F(1.0 - tex_mid_gate)} * clamp(mid, 0.0, 1.0)) * atlasPoleW, 0.0, 1.5);")
     lines.append("")
+    lines.append("    // [layer:normal:atlas_bump]")
+    lines.append("    // v8 perturbed shading normal: the atlas height gradient tilts the")
+    lines.append("    // analytic sphere normal along its tangent frame (dsdir/du, dsdir/dv).")
+    lines.append("    // Pole-faded: the u tangent degenerates at the caps, so the bump")
+    lines.append("    // scales with atlasPoleW and the normal falls back to sdir there.")
+    lines.append("    vec3 tanU = vec3(-sin(6.2831853 * baseUV.x), 0.0, cos(6.2831853 * baseUV.x));")
+    lines.append("    vec3 tanV = vec3(cos(3.1415927 * baseUV.y) * cos(6.2831853 * baseUV.x),")
+    lines.append("        -sin(3.1415927 * baseUV.y),")
+    lines.append("        cos(3.1415927 * baseUV.y) * sin(6.2831853 * baseUV.x));")
+    lines.append(f"    vec3 bumpN = normalize(sdir + (tanU * atlasSlope.x + tanV * atlasSlope.y) * ({bump_amp} * atlasPoleW));")
+    lines.append("    vec3 viewV = -normalize(worldPos);")
+    lines.append("    // fresnel rim (view angle against the bumped normal): the classic")
+    lines.append("    // force-field edge glow; abs() keeps the back faces consistent")
+    lines.append(f"    float fresnel = pow(1.0 - abs(dot(bumpN, viewV)), {rim_pow});")
+    lines.append("")
     lines.append(f"    // [layer:rim:{rim}]")
     lines.append("    // Silhouette / band lift so the membrane reads as a curved shell:")
     lines.append("    // a wide soft inner glow (style-specific) plus a thin hot line at")
@@ -2966,7 +3208,9 @@ def emit_shader(asg: dict) -> str:
     lines.append(f"    float rimLine = smoothstep({F(line_l0)}, {F(line_l1)}, rimSlope);")
     for ln in rim_lines:
         lines.append("    " + ln)
-    lines.append(f"    rim = clamp(rim + {line_w} * rimLine, 0.0, 1.4);")
+    lines.append("    // v8: the fresnel term folds into the rim glow -- edges glow, the")
+    lines.append("    // center stays refraction-dominated (see the [layer:refract] mix).")
+    lines.append(f"    rim = clamp(rim + {line_w} * rimLine + {fres_rim} * fresnel, 0.0, 1.4);")
     lines.append("")
     lines.append("    // Flourish accent + micro grain keep large areas alive up close.")
     for ln in flourish_lines:
@@ -3020,6 +3264,49 @@ def emit_shader(asg: dict) -> str:
     lines.append(f"    rgb = mix(rgb, rgb * (0.72 + 0.56 * rimDisp), clamp(rim, 0.0, 1.0) * {F(u(83, 0.10, 0.22))});")
     lines.append(f"    vec3 lineDisp = 0.5 + 0.5 * cos(vec3(0.6452, 0.8065, 1.0) * (rimLine * {line_disp_f} + baseUV.y * 0.31 + {line_disp_p}) * 6.2831853);")
     lines.append(f"    rgb = mix(rgb, hotStop * (0.62 + 0.50 * lineDisp), clamp(rimLine, 0.0, 1.0) * {line_disp_w});")
+    lines.append("    // [layer:light:wrapkey]")
+    lines.append("    // v8 fake lighting: wrap-diffuse + specular from a FIXED world key")
+    lines.append("    // light against the bumped normal, applied to the ENERGY only (the")
+    lines.append("    // refracted scene below is already lit). Recolor-safe: the diffuse is")
+    lines.append("    // a bounded multiplicative grade and the specular adds the palette's")
+    lines.append("    // own luma-capped hot stop -- no baked hue anywhere.")
+    lines.append(f"    vec3 keyL = vec3({F(key_light[0])}, {F(key_light[1])}, {F(key_light[2])});")
+    lines.append(f"    float keyDiff = clamp((dot(bumpN, keyL) + {F(light_wrap)}) / {F(1.0 + light_wrap)}, 0.0, 1.0);")
+    lines.append(f"    rgb *= {diff_floor} + {diff_gain} * keyDiff;")
+    lines.append("    float keySpec = pow(clamp(dot(reflect(-viewV, bumpN), keyL), 0.0, 1.0), " + spec_pow + ");")
+    lines.append(f"    rgb += hotStop * (keySpec * {spec_w});")
+    lines.append("    // [layer:refract:scene_copy]")
+    lines.append("    // v8 refraction: bend the post-opaque scene copy behind the membrane.")
+    lines.append("    // The screen-space offset follows the VIEW-SPACE bumped normal")
+    lines.append("    // (mat3(ModelViewMat) rotates camera-relative world into view space),")
+    lines.append("    // grows at grazing fresnel and falls off with camera distance; three")
+    lines.append("    // spread taps give chromatic dispersion. Foreground rejection")
+    lines.append("    // (reverse-Z: LARGER stored depth = CLOSER): when the offset tap")
+    lines.append("    // lands on geometry nearer than this fragment it belongs to an")
+    lines.append("    // occluder IN FRONT of the bubble -- drop the offset so foreground")
+    lines.append("    // silhouettes never smear across the membrane.")
+    lines.append("    vec2 screenUV = gl_FragCoord.xy / ScreenSize;")
+    lines.append("    vec3 viewN = mat3(ModelViewMat) * bumpN;")
+    lines.append(f"    float refrAmp = min(({F(refr_base)} + {F(refr_fres)} * fresnel) / max(length(worldPos), 1.0), {refr_cap});")
+    lines.append("    vec2 refrOff = viewN.xy * refrAmp;")
+    lines.append("    vec2 refrTap = clamp(screenUV + refrOff, vec2(0.001), vec2(0.999));")
+    lines.append("    if (texture(Sampler2, refrTap).r > gl_FragCoord.z) {")
+    lines.append("        refrOff = vec2(0.0);")
+    lines.append("    }")
+    lines.append("    vec3 refracted = vec3(")
+    lines.append(f"        texture(Sampler1, clamp(screenUV + refrOff * {F(1.0 + refr_disp)}, vec2(0.001), vec2(0.999))).r,")
+    lines.append("        texture(Sampler1, clamp(screenUV + refrOff, vec2(0.001), vec2(0.999))).g,")
+    lines.append(f"        texture(Sampler1, clamp(screenUV + refrOff * {F(1.0 - refr_disp)}, vec2(0.001), vec2(0.999))).b);")
+    lines.append("    // energy-glass composite: the refracted scene (lightly tinted toward")
+    lines.append("    // the live palette) is the see-through BASE; the family's pattern")
+    lines.append("    // rides on top as the ENERGY, weighted by its own brightness and the")
+    lines.append("    // fresnel rim -- gaps read as tinted glass bending the world,")
+    lines.append("    // features as energy, edges glow. Recolor-safe: the tint and the")
+    lines.append("    // fresnel glow both derive from the live vertexColor palette.")
+    lines.append(f"    refracted *= mix(vec3(1.0), baseCol, {glass_tint});")
+    lines.append(f"    float energyW = clamp({energy_base} + {energy_gain} * clamp(pattern, 0.0, 1.0) + {energy_fres} * fresnel, 0.0, {energy_max});")
+    lines.append("    rgb = mix(refracted, rgb, energyW);")
+    lines.append(f"    rgb += fresnel * hotStop * {fres_glow};")
     # v7 strobe-free emission drive: the emissive add must never oscillate
     # faster than ~2 Hz (photosensitivity). Three sources could: (1) the
     # strobe/gate multipliers baked into the LIGHTNING/HOLOGRID/HOLOPARALLAX
@@ -3102,10 +3389,21 @@ def emit_shader(asg: dict) -> str:
         lines.append("    // below still bounds it.")
         lines.append("    float v5Dither = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));")
         lines.append(f"    bodyAlpha *= 1.0 + (v5Dither - 0.5) * {v5_dither};")
+    lines.append("    // [layer:depthsoft:scene_depth]")
+    lines.append("    // v8 refraction floor + depth-soft edges, folded into bodyAlpha BEFORE")
+    lines.append("    // the ceiling clamp: what shows through the membrane must be the")
+    lines.append("    // REFRACTED scene copy (not the live background), so the body runs")
+    lines.append("    // near-opaque; where the membrane approaches solid geometry the alpha")
+    lines.append("    // melts to zero (linearized reverse-Z view distances) instead of")
+    lines.append("    // leaving a hard clip line against the terrain.")
+    lines.append(f"    bodyAlpha = max(bodyAlpha, {F(refr_floor)});")
+    lines.append("    float fragVDist = viewDist(gl_FragCoord.z);")
+    lines.append("    float sceneVDist = viewDist(texture(Sampler2, screenUV).r);")
+    lines.append(f"    bodyAlpha *= smoothstep(0.0, {depth_soft}, sceneVDist - fragVDist);")
     lines.append("    // dissolve authority: clamp the body to the family ceiling FIRST, then")
     lines.append("    // apply the whitelisted-player dissolve as the LAST alpha operation --")
     lines.append("    // no path can push the final alpha above vertexColor.a * ceiling.")
-    lines.append(f"    float alpha = clamp(bodyAlpha, 0.0, {a_max}) * vertexColor.a;")
+    lines.append(f"    float alpha = clamp(bodyAlpha, 0.0, {a_max_refr}) * vertexColor.a;")
     lines.append("    vec4 color = vec4(clamp(rgb, 0.0, 1.0), alpha);")
     lines.append("    if (color.a < 0.01) {")
     lines.append("        discard;")
@@ -3116,11 +3414,11 @@ def emit_shader(asg: dict) -> str:
 
     source = "\n".join(lines) + "\n"
     n = source.count("\n")
-    # Upper bound raised 540 -> 580 for the v7 quality pass: the atlas pole
-    # fade, wash-guard emission block, strobe-free emission drive and the
-    # body-alpha dissolve restructure add ~15-25 lines to EVERY file.
-    if not 110 <= n <= 580:
-        sys.exit(f"fx_{effect_id:03d}: emitted {n} lines, outside the 110..580 sanity bounds")
+    # Upper bound raised 580 -> 660 for the v8 realism pass: the flow-map
+    # advection, bump/fresnel, key-light, scene-copy refraction and depth-soft
+    # blocks add ~55-70 lines to EVERY file.
+    if not 130 <= n <= 660:
+        sys.exit(f"fx_{effect_id:03d}: emitted {n} lines, outside the 130..660 sanity bounds")
     return source
 
 
