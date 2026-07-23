@@ -45,6 +45,18 @@ public class ShieldState {
 	 * ({@code stringUtf8(32)} throws an EncoderException on longer strings).
 	 */
 	public static final int MAX_NAME_LENGTH = 32;
+	/**
+	 * Hard cap on whitelist entries, shared by the C2S add path ({@code ServerNet})
+	 * and {@link #load}, so neither a request flood nor edited NBT can grow the
+	 * whitelist beyond what the sync payloads and NBT are sized for.
+	 */
+	public static final int MAX_WHITELIST_SIZE = 64;
+	/**
+	 * NBT-load cap for fuel_seconds: far above anything the fuel map can grant in
+	 * one sitting but finite, so edited NBT cannot park a near-Integer.MAX_VALUE
+	 * value that later arithmetic (top-ups, comparator math) could overflow.
+	 */
+	public static final int MAX_LOADED_FUEL_SECONDS = 100000;
 
 	public boolean active;
 	public int effectId;
@@ -83,6 +95,26 @@ public class ShieldState {
 	public final Map<String, UUID> whitelistNameToUuid = new HashMap<>();
 	public int fuelSeconds;
 	public long cooldownUntil;
+	/**
+	 * Ticks of ACTIVE runtime accumulated toward the next passive fuel drain. Unlike
+	 * the old {@code gameTime % interval} check, this only advances while the shield
+	 * is active and fires (then resets) when it reaches the effective drain interval,
+	 * so toggling the shield off across payment ticks can never dodge the drain: the
+	 * cost is always exactly one fuel-second per interval of ACTIVE ticks.
+	 */
+	public int drainAccum;
+	/** Ticks of active runtime accumulated toward the next regen pulse; see {@link #drainAccum}. */
+	public int regenAccum;
+	/** Game time of the most recent shield damage application; 0 until first hit. */
+	public long lastHitGameTime;
+	/** Total damage ever absorbed by this shield (accumulated in applyDamage). */
+	public float absorbedTotal;
+	/**
+	 * False while a break cooldown that has not yet been announced is pending: set
+	 * false when a break cooldown starts, so a later "shield ready again" ping can
+	 * fire exactly once. Defaults to true (nothing to announce).
+	 */
+	public boolean readyAnnounced = true;
 
 	private static final Codec<Map<String, UUID>> NAME_TO_UUID_CODEC = Codec.unboundedMap(Codec.STRING, UUIDUtil.CODEC);
 
@@ -171,6 +203,11 @@ public class ShieldState {
 		output.store("whitelist_name_uuids", NAME_TO_UUID_CODEC, Map.copyOf(this.whitelistNameToUuid));
 		output.putInt("fuel_seconds", this.fuelSeconds);
 		output.putLong("cooldown_until", this.cooldownUntil);
+		output.putInt("drain_accum", this.drainAccum);
+		output.putInt("regen_accum", this.regenAccum);
+		output.putLong("last_hit_game_time", this.lastHitGameTime);
+		output.putFloat("absorbed_total", this.absorbedTotal);
+		output.putBoolean("ready_announced", this.readyAnnounced);
 	}
 
 	public void load(ValueInput input) {
@@ -209,19 +246,48 @@ public class ShieldState {
 		// value would render an invisible HUD bar. Same rule as the C2S validation.
 		this.colorOverride = isValidColorOverride(loadedColorOverride) ? loadedColorOverride : NO_COLOR_OVERRIDE;
 
+		// Whitelist hardening: the C2S add path enforces MAX_WHITELIST_SIZE and
+		// StringUtil.isValidPlayerName, but /data or an NBT editor bypasses both. An
+		// oversized list would bloat every sync payload, and a >16-char (or
+		// control-char) name would blow up the bounded stringUtf8(16) name codec in
+		// ShieldSyncS2C on every broadcast. Apply the exact same rules on load:
+		// trim, drop invalid names, cap at MAX_WHITELIST_SIZE entries.
 		this.whitelistNames.clear();
 		for (String name : input.listOrEmpty("whitelist_names", Codec.STRING)) {
-			this.whitelistNames.add(name);
+			if (this.whitelistNames.size() >= MAX_WHITELIST_SIZE) {
+				break;
+			}
+
+			String trimmed = name.trim();
+			if (!trimmed.isEmpty() && StringUtil.isValidPlayerName(trimmed)) {
+				this.whitelistNames.add(trimmed);
+			}
 		}
 
 		this.whitelistUuids.clear();
 		for (UUID uuid : input.listOrEmpty("whitelist_uuids", UUIDUtil.CODEC)) {
+			if (this.whitelistUuids.size() >= MAX_WHITELIST_SIZE) {
+				break;
+			}
+
 			this.whitelistUuids.add(uuid);
 		}
 
 		this.whitelistNameToUuid.clear();
 		this.whitelistNameToUuid.putAll(input.read("whitelist_name_uuids", NAME_TO_UUID_CODEC).orElse(Map.of()));
-		this.fuelSeconds = input.getIntOr("fuel_seconds", 0);
-		this.cooldownUntil = input.getLongOr("cooldown_until", 0L);
+		// fuel_seconds/cooldown_until load clamps (D4): a negative or absurd value
+		// edited into the NBT must not leak into the drain/cooldown math. The
+		// remaining cooldown is additionally capped against the maximum possible
+		// break cooldown on the first server tick after load (the state holder has
+		// no game time here); see BubbleShieldBlockEntity.
+		this.fuelSeconds = Math.clamp(input.getIntOr("fuel_seconds", 0), 0, MAX_LOADED_FUEL_SECONDS);
+		this.cooldownUntil = Math.max(0L, input.getLongOr("cooldown_until", 0L));
+		// Accumulators clamp into [0, their firing threshold]: a tampered value can
+		// at worst fire one drain/regen pulse immediately, never skip payments.
+		this.drainAccum = Math.clamp(input.getIntOr("drain_accum", 0), 0, ShieldLogic.MAX_DRAIN_INTERVAL_TICKS);
+		this.regenAccum = Math.clamp(input.getIntOr("regen_accum", 0), 0, ShieldLogic.REGEN_PERIOD_TICKS);
+		this.lastHitGameTime = Math.max(0L, input.getLongOr("last_hit_game_time", 0L));
+		this.absorbedTotal = sanitizeLoadedFloat(input.getFloatOr("absorbed_total", 0.0F), 0.0F, Float.MAX_VALUE, 0.0F);
+		this.readyAnnounced = input.getBooleanOr("ready_announced", true);
 	}
 }

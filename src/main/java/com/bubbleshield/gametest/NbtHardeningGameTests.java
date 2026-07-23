@@ -2,11 +2,14 @@ package com.bubbleshield.gametest;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import com.bubbleshield.block.BubbleShieldBlockEntity;
 import com.bubbleshield.effect.EffectRegistry;
+import com.bubbleshield.menu.BubbleShieldMenu;
 import com.bubbleshield.net.ShieldPayloads;
 import com.bubbleshield.registry.ModBlocks;
+import com.bubbleshield.shield.ShieldLogic;
 import com.bubbleshield.shield.ShieldState;
 
 import io.netty.buffer.Unpooled;
@@ -17,10 +20,15 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.ProblemReporter;
+import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.projectile.arrow.Arrow;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.TagValueOutput;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * NBT-load hardening: persisted data is UNTRUSTED (players can edit it via /data or
@@ -31,7 +39,10 @@ import net.minecraft.world.level.storage.TagValueOutput;
  * level), the effect_id range clamp, and the legacy pre-"powered" save re-seed
  * (an absent key must not count as an observed-false level, or a steady redstone
  * source next to the projector would be misread as a rising edge on the first
- * neighbor update).
+ * neighbor update). Also hosts the WP1 hardening coverage: whitelist load
+ * cap/sanitization, fuel/cooldown load clamps (incl. the first-tick cooldown
+ * cap), 16-bit-safe menu data slots under absurd loaded health, the same-tick
+ * projectile volley radius recompute, and the collision-free expulsion probe.
  */
 public class NbtHardeningGameTests {
 	/**
@@ -156,16 +167,308 @@ public class NbtHardeningGameTests {
 
 	/** A minimal, otherwise-valid sync payload carrying {@code customName}. */
 	private static ShieldPayloads.ShieldSyncS2C syncPayload(GameTestHelper helper, String customName) {
+		return syncPayload(helper, customName, List.of());
+	}
+
+	/** A minimal, otherwise-valid sync payload carrying {@code customName} and {@code whitelistNames}. */
+	private static ShieldPayloads.ShieldSyncS2C syncPayload(GameTestHelper helper, String customName, List<String> whitelistNames) {
 		return new ShieldPayloads.ShieldSyncS2C(
 			new BlockPos(0, 64, 0),
 			helper.getLevel().dimension(),
 			new ShieldPayloads.ShieldVisual(false, 0, ShieldState.DEFAULT_TARGET_RADIUS, 0.0F, 1.0F, 0, 0, ShieldState.NO_COLOR_OVERRIDE, 0),
 			List.of(),
-			List.of(),
+			whitelistNames,
 			0,
 			Optional.empty(),
 			customName
 		);
+	}
+
+	/**
+	 * (c) 100 whitelist entries edited into the NBT — 70 valid plus 30 garbage
+	 * (space-containing, oversized, control-character) names — load back capped at
+	 * {@link ShieldState#MAX_WHITELIST_SIZE} with every survivor passing the same
+	 * name-validity rule the C2S add path enforces. 100 whitelist UUIDs cap the
+	 * same way, and the loaded name set survives ShieldSyncS2C's bounded
+	 * stringUtf8(16) per-name codec — which an UNSANITIZED oversized name breaks.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT)
+	public void oversizedWhitelistCappedAndSanitizedOnLoad(GameTestHelper helper) {
+		var registries = helper.getLevel().registryAccess();
+
+		ShieldState original = new ShieldState();
+		for (int i = 0; i < 70; i++) {
+			original.whitelistNames.add("Player" + i);
+		}
+		for (int i = 0; i < 20; i++) {
+			original.whitelistNames.add("Bad Name" + i); // spaces are invalid in player names
+		}
+		for (int i = 0; i < 5; i++) {
+			original.whitelistNames.add("W".repeat(17 + i)); // above the 16-char limit
+		}
+		for (int i = 0; i < 5; i++) {
+			original.whitelistNames.add("Ctrl\u00A7Name" + i); // section sign (>= 127) is invalid
+		}
+		helper.assertTrue(original.whitelistNames.size() == 100, "test setup: expected 100 raw names");
+		for (int i = 0; i < 100; i++) {
+			original.whitelistUuids.add(java.util.UUID.randomUUID());
+		}
+
+		TagValueOutput output = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, registries);
+		original.save(output);
+		CompoundTag tag = output.buildResult();
+
+		ShieldState loaded = new ShieldState();
+		loaded.load(TagValueInput.create(ProblemReporter.DISCARDING, registries, tag));
+		helper.assertTrue(
+				loaded.whitelistNames.size() == ShieldState.MAX_WHITELIST_SIZE,
+				"70 valid names must cap at " + ShieldState.MAX_WHITELIST_SIZE + ", got " + loaded.whitelistNames.size());
+		for (String name : loaded.whitelistNames) {
+			helper.assertTrue(
+					net.minecraft.util.StringUtil.isValidPlayerName(name),
+					"every loaded whitelist name must pass the C2S validity rule, got '" + name + "'");
+			helper.assertTrue(name.startsWith("Player"), "garbage names must be dropped on load, got '" + name + "'");
+		}
+
+		helper.assertTrue(
+				loaded.whitelistUuids.size() == ShieldState.MAX_WHITELIST_SIZE,
+				"100 whitelist UUIDs must cap at " + ShieldState.MAX_WHITELIST_SIZE + ", got " + loaded.whitelistUuids.size());
+
+		// The loaded (sanitized) name set must survive the bounded sync codec.
+		RegistryFriendlyByteBuf buffer = new RegistryFriendlyByteBuf(Unpooled.buffer(), registries);
+		try {
+			ShieldPayloads.ShieldSyncS2C payload = syncPayload(helper, "", List.copyOf(loaded.whitelistNames));
+			ShieldPayloads.ShieldSyncS2C.CODEC.encode(buffer, payload);
+			ShieldPayloads.ShieldSyncS2C decoded = ShieldPayloads.ShieldSyncS2C.CODEC.decode(buffer);
+			helper.assertTrue(
+					Set.copyOf(decoded.whitelistNames()).equals(loaded.whitelistNames),
+					"the sanitized whitelist should round-trip through ShieldSyncS2C");
+		} finally {
+			buffer.release();
+		}
+
+		// Defect mechanism pin: WITHOUT the load sanitization an oversized name
+		// blows up the bounded stringUtf8(16) name codec on every shield broadcast.
+		RegistryFriendlyByteBuf poison = new RegistryFriendlyByteBuf(Unpooled.buffer(), registries);
+		boolean threw = false;
+		try {
+			ShieldPayloads.ShieldSyncS2C.CODEC.encode(poison, syncPayload(helper, "", List.of("W".repeat(17))));
+		} catch (Exception expected) {
+			threw = true;
+		} finally {
+			poison.release();
+		}
+
+		helper.assertTrue(threw, "encoding an unsanitized 17-char whitelist name must throw; load sanitization prevents exactly this");
+		helper.succeed();
+	}
+
+	/**
+	 * (d) fuel_seconds/cooldown_until load clamps, plus the first-tick cooldown cap:
+	 * a cooldown_until edited absurdly far into the future is capped at the maximum
+	 * possible break cooldown on the first server tick after load (ShieldState.load
+	 * has no game time, so the block entity applies the cap when the level clock is
+	 * available). The tick-accumulator fields clamp to their firing thresholds too.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 200, padding = 16)
+	public void fuelAndCooldownClampedOnLoad(GameTestHelper helper) {
+		var registries = helper.getLevel().registryAccess();
+
+		ShieldState original = new ShieldState();
+		TagValueOutput output = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, registries);
+		original.save(output);
+		CompoundTag tag = output.buildResult();
+
+		tag.putInt("fuel_seconds", Integer.MAX_VALUE);
+		tag.putLong("cooldown_until", -12345L);
+		tag.putInt("drain_accum", 999999);
+		tag.putInt("regen_accum", 999999);
+		ShieldState loaded = new ShieldState();
+		loaded.load(TagValueInput.create(ProblemReporter.DISCARDING, registries, tag));
+		helper.assertTrue(
+				loaded.fuelSeconds == ShieldState.MAX_LOADED_FUEL_SECONDS,
+				"a huge fuel_seconds must clamp to " + ShieldState.MAX_LOADED_FUEL_SECONDS + ", got " + loaded.fuelSeconds);
+		helper.assertTrue(loaded.cooldownUntil == 0L, "a negative cooldown_until must clamp to 0, got " + loaded.cooldownUntil);
+		helper.assertTrue(
+				loaded.drainAccum <= ShieldLogic.MAX_DRAIN_INTERVAL_TICKS,
+				"drain_accum must clamp to its firing threshold, got " + loaded.drainAccum);
+		helper.assertTrue(
+				loaded.regenAccum <= ShieldLogic.REGEN_PERIOD_TICKS,
+				"regen_accum must clamp to its firing threshold, got " + loaded.regenAccum);
+
+		tag.putInt("fuel_seconds", -50);
+		ShieldState negative = new ShieldState();
+		negative.load(TagValueInput.create(ProblemReporter.DISCARDING, registries, tag));
+		helper.assertTrue(negative.fuelSeconds == 0, "a negative fuel_seconds must clamp to 0, got " + negative.fuelSeconds);
+
+		// First-tick cap: a live projector re-loaded with an absurd future cooldown.
+		helper.setBlock(PROJECTOR_POS, ModBlocks.BUBBLE_SHIELD_PROJECTOR);
+		BubbleShieldBlockEntity be = helper.getBlockEntity(PROJECTOR_POS, BubbleShieldBlockEntity.class);
+		CompoundTag beTag = be.saveCustomOnly(registries);
+		beTag.putLong("cooldown_until", helper.getLevel().getGameTime() + 100_000_000L);
+		be.loadCustomOnly(TagValueInput.create(ProblemReporter.DISCARDING, registries, beTag));
+
+		helper.runAfterDelay(2, () -> {
+			long remaining = be.getShieldState().cooldownUntil - helper.getLevel().getGameTime();
+			helper.assertTrue(
+					remaining <= ShieldLogic.breakCooldownTicks(0),
+					"the first tick after load must cap the remaining cooldown at "
+							+ ShieldLogic.breakCooldownTicks(0) + " ticks, got " + remaining);
+			helper.assertTrue(remaining > 0, "the capped cooldown should still be pending, got " + remaining);
+			helper.succeed();
+		});
+	}
+
+	/**
+	 * (e) A health/max_health of 1e9 edited into the NBT keeps every menu data slot
+	 * 16-bit safe: health syncs as permille (&le; 1000, never the old health*10
+	 * encoding that overflowed above 3276.7 HP), max health caps at 32767, and no
+	 * slot ever goes negative. Read synchronously after load, before the tier
+	 * refresh on the next tick re-derives maxHealth.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, padding = 16)
+	public void hugeLoadedHealthKeepsMenuDataSafe(GameTestHelper helper) {
+		helper.setBlock(PROJECTOR_POS, ModBlocks.BUBBLE_SHIELD_PROJECTOR);
+		BubbleShieldBlockEntity be = helper.getBlockEntity(PROJECTOR_POS, BubbleShieldBlockEntity.class);
+
+		var registries = helper.getLevel().registryAccess();
+		CompoundTag tag = be.saveCustomOnly(registries);
+		tag.putFloat("max_health", 1.0e9F);
+		tag.putFloat("health", 1.0e9F);
+		be.loadCustomOnly(TagValueInput.create(ProblemReporter.DISCARDING, registries, tag));
+
+		ShieldState state = be.getShieldState();
+		helper.assertTrue(
+				state.maxHealth == ShieldState.MAX_LOADED_HEALTH,
+				"max_health should clamp to MAX_LOADED_HEALTH on load, got " + state.maxHealth);
+
+		int permille = be.getMenuData().get(BubbleShieldMenu.DATA_HEALTH_PERMILLE);
+		helper.assertTrue(
+				permille >= 0 && permille <= 1000,
+				"DATA_HEALTH_PERMILLE must stay in [0, 1000] at 1e6 HP, got " + permille);
+		int maxHealth = be.getMenuData().get(BubbleShieldMenu.DATA_MAX_HEALTH);
+		helper.assertTrue(
+				maxHealth == Short.MAX_VALUE,
+				"DATA_MAX_HEALTH must be min'd at 32767 for a 1e6 max health, got " + maxHealth);
+
+		// 16-bit safety across the whole frozen layout: no slot may be negative or
+		// above Short.MAX_VALUE (data slots replicate as 16-bit signed values).
+		for (int slot = 0; slot < BubbleShieldMenu.DATA_COUNT; slot++) {
+			int value = be.getMenuData().get(slot);
+			helper.assertTrue(
+					value >= 0 && value <= Short.MAX_VALUE,
+					"menu data slot " + slot + " must stay 16-bit safe, got " + value);
+		}
+
+		helper.succeed();
+	}
+
+	/**
+	 * (f) Two arrows crossing the boundary on the same tick: the first hit shrinks
+	 * the shield, and the second arrow must be tested against the POST-shrink
+	 * radius. Both arrows end the crossing tick 7.71 blocks from the center —
+	 * inside the pre-hit boundary (8) but outside the post-first-hit boundary
+	 * (95/100 * 8 = 7.6) — so exactly one may be absorbed. With the stale
+	 * radius cached before the interception loop, both were.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 200, padding = 16)
+	public void volleySecondArrowSeesShrunkRadius(GameTestHelper helper) {
+		helper.setBlock(PROJECTOR_POS, ModBlocks.BUBBLE_SHIELD_PROJECTOR);
+		BubbleShieldBlockEntity be = helper.getBlockEntity(PROJECTOR_POS, BubbleShieldBlockEntity.class);
+		ShieldState state = be.getShieldState();
+		state.targetRadius = 8.0F;
+		be.addFuelSeconds(PLENTY_OF_FUEL);
+		helper.assertTrue(be.tryActivate(), "shield should activate");
+		helper.assertTrue(be.currentRadius() == 8.0F, "shield radius should start at 8");
+
+		// Both dive straight down in lockstep (no gravity, 1.2 blocks/tick), from
+		// ~8.91 blocks above the center to ~7.71: one shared outside->inside
+		// crossing tick, both ending in the (7.6, 8) shell. Tier 0, so no regen can
+		// mask the damage accounting.
+		Arrow first = helper.spawn(EntityTypes.ARROW, new Vec3(4.5, 2.5 + 8.9, 4.1));
+		Arrow second = helper.spawn(EntityTypes.ARROW, new Vec3(4.5, 2.5 + 8.9, 4.9));
+		for (Arrow arrow : new Arrow[] {first, second}) {
+			arrow.setNoGravity(true);
+			arrow.setDeltaMovement(0.0, -1.2, 0.0);
+		}
+
+		helper.onEachTick(() -> {
+			if (state.health == state.maxHealth) {
+				return; // no interception yet
+			}
+
+			// First observed interception tick: exactly one absorb (5 damage) may
+			// have landed — the survivor sat outside the recomputed 7.6 boundary.
+			helper.assertTrue(
+					state.health == 95.0F,
+					"only ONE arrow of the same-tick volley may be absorbed, health is " + state.health);
+			boolean firstAlive = !first.isRemoved();
+			boolean secondAlive = !second.isRemoved();
+			helper.assertTrue(
+					firstAlive != secondAlive,
+					"exactly one arrow should survive the volley (first=" + firstAlive + ", second=" + secondAlive + ")");
+			// Stop the survivor before its continued flight crosses the shrunk boundary.
+			(firstAlive ? first : second).discard();
+			helper.succeed();
+		});
+	}
+
+	/**
+	 * (g) The barrier expulsion probes for a collision-free landing spot: with a
+	 * wall hugging the bubble along the pushback direction, the naive target sits
+	 * inside the stone, but the expelled player must end up outside the shield in
+	 * a spot where their bounding box collides with nothing.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, padding = 16)
+	public void expulsionAgainstWallFindsFreeSpot(GameTestHelper helper) {
+		// Projector at the -X edge so the +X pushback target (center + radius +
+		// 0.75 = relative x 5.25) and the probe offsets stay inside the structure.
+		BlockPos projectorPos = new BlockPos(0, 2, 4);
+		helper.setBlock(projectorPos, ModBlocks.BUBBLE_SHIELD_PROJECTOR);
+		BubbleShieldBlockEntity be = helper.getBlockEntity(projectorPos, BubbleShieldBlockEntity.class);
+		ShieldState state = be.getShieldState();
+		state.targetRadius = 4.0F;
+		be.addFuelSeconds(PLENTY_OF_FUEL);
+		helper.assertTrue(be.tryActivate(), "shield should activate");
+
+		// A 2-thick, 4-tall stone wall hugging the bubble along +X: the naive
+		// pushback target lands inside it.
+		for (int x = 5; x <= 6; x++) {
+			for (int y = 2; y <= 5; y++) {
+				for (int z = 3; z <= 5; z++) {
+					helper.setBlock(new BlockPos(x, y, z), Blocks.STONE);
+				}
+			}
+		}
+
+		Vec3 center = Vec3.atCenterOf(helper.absolutePos(projectorPos));
+		ServerPlayer stranger = MockPlayers.createUniqueMockPlayer(helper);
+		try {
+			stranger.snapTo(center.x + 3.0, center.y - 0.5, center.z);
+
+			double radius = be.currentRadius();
+			// Defect pin: the naive (pre-fix) pushback target collides with the wall.
+			Vec3 naive = new Vec3(center.x + radius + ShieldLogic.PUSHBACK_MARGIN, center.y - 0.5, center.z);
+			AABB naiveBox = stranger.getBoundingBox().move(
+					naive.x - stranger.getX(), naive.y - stranger.getY(), naive.z - stranger.getZ());
+			helper.assertTrue(
+					!helper.getLevel().noCollision(stranger, naiveBox),
+					"test setup: the naive pushback target must collide with the wall");
+
+			helper.assertTrue(
+					ShieldLogic.expelBlockedPlayers(helper.getLevel(), helper.absolutePos(projectorPos), state),
+					"the barrier should expel the non-whitelisted stranger");
+			helper.assertTrue(
+					stranger.position().distanceTo(center) > radius,
+					"the expelled player must end up outside the shield, distance is " + stranger.position().distanceTo(center));
+			helper.assertTrue(
+					helper.getLevel().noCollision(stranger, stranger.getBoundingBox()),
+					"the expelled player must land in a collision-free spot, landed at " + stranger.position());
+		} finally {
+			MockPlayers.removeMockPlayer(helper, stranger);
+		}
+
+		helper.succeed();
 	}
 
 	/**

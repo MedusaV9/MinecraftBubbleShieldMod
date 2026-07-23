@@ -14,7 +14,7 @@
   "gui.bubbleshield.effects": "Effekte...",
   "gui.bubbleshield.effects_page": "Effekte (Seite %s/%s)",
   "gui.bubbleshield.diameter": "Durchmesser: %s",
-  "gui.bubbleshield.health": "Zustand: %s",
+  "gui.bubbleshield.health": "LP: %s",
   "gui.bubbleshield.fuel": "Brennstoff: %ss",
   "gui.bubbleshield.cooldown": "Abklingzeit: %ss",
   "gui.bubbleshield.add": "Hinzufügen",

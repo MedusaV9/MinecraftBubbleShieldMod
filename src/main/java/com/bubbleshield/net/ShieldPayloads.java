@@ -181,7 +181,10 @@ public final class ShieldPayloads {
 			ResourceKey.streamCodec(Registries.DIMENSION), ShieldSyncS2C::dimension,
 			ShieldVisual.STREAM_CODEC, ShieldSyncS2C::visual,
 			UUIDUtil.STREAM_CODEC.apply(ByteBufCodecs.list()), ShieldSyncS2C::whitelist,
-			ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()), ShieldSyncS2C::whitelistNames,
+			// Whitelist entries are player names (at most 16 characters, enforced by
+			// the C2S add path and re-applied on NBT load); the bounded per-name codec
+			// rejects oversized strings at decode time like WhitelistModifyC2S does.
+			ByteBufCodecs.stringUtf8(16).apply(ByteBufCodecs.list()), ShieldSyncS2C::whitelistNames,
 			ByteBufCodecs.VAR_INT, ShieldSyncS2C::cooldownSeconds,
 			ByteBufCodecs.optional(UUIDUtil.STREAM_CODEC), ShieldSyncS2C::ownerUuid,
 			ByteBufCodecs.stringUtf8(32), ShieldSyncS2C::customName,

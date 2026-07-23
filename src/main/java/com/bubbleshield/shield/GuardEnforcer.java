@@ -12,8 +12,9 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * Applies the shield effect's {@link GuardStyle} (boundary retaliation) to a player
- * the barrier just expelled. Only the ServerLevel-aware call sites invoke this, so
- * {@link ShieldLogic#applyPlayerBarrier} itself stays pure/level-free.
+ * the barrier just expelled. Only the ServerLevel-aware call sites invoke this;
+ * {@link ShieldLogic#applyPlayerBarrier} itself only touches the level through the
+ * player's own {@code level()} (Y clamp + collision-free spot probing).
  */
 public final class GuardEnforcer {
 	/** Extra outward horizontal delta the GUST style adds on top of the plain pushback. */

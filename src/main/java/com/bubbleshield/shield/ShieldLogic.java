@@ -35,6 +35,7 @@ import net.minecraft.world.entity.projectile.ShulkerBullet;
 import net.minecraft.world.entity.projectile.arrow.ThrownTrident;
 import net.minecraft.world.entity.projectile.hurtingprojectile.AbstractHurtingProjectile;
 import net.minecraft.world.entity.projectile.throwableitemprojectile.ThrowableItemProjectile;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
@@ -141,11 +142,15 @@ public final class ShieldLogic {
 	 * @return true if the shield broke.
 	 */
 	public static boolean applyDamage(ShieldState state, float amount, long gameTime, long cooldownTicks) {
+		state.lastHitGameTime = gameTime;
+		state.absorbedTotal += Math.max(0.0F, amount);
 		state.health -= amount;
 		if (state.health <= 0.0F) {
 			state.active = false;
 			state.health = state.maxHealth;
 			state.cooldownUntil = gameTime + cooldownTicks;
+			// Arms the one-time "shield ready again" ping for when this cooldown elapses.
+			state.readyAnnounced = false;
 			return true;
 		}
 
@@ -162,7 +167,8 @@ public final class ShieldLogic {
 	 * interval in ticks is {@code TICKS_PER_FUEL_SECOND * (eco ? 2 : 1) * (capacitor ? 2 : 1)},
 	 * capped at {@link #MAX_DRAIN_INTERVAL_TICKS} (80). So: 20 plain, 40 with either
 	 * ECO or a capacitor, and 80 (the cap) with both. Pure; the drain in
-	 * {@link #serverTick} fires whenever {@code gameTime} is a multiple of this interval.
+	 * {@link #serverTick} fires whenever {@link ShieldState#drainAccum} (active
+	 * ticks since the last drain) reaches this interval.
 	 */
 	public static int drainIntervalTicks(boolean eco, boolean capacitor) {
 		return Math.min(MAX_DRAIN_INTERVAL_TICKS, TICKS_PER_FUEL_SECOND * (eco ? 2 : 1) * (capacitor ? 2 : 1));
@@ -186,11 +192,18 @@ public final class ShieldLogic {
 		boolean changed = false;
 		long gameTime = level.getGameTime();
 
-		// Combined passive-drain rule: the active shield burns 1 fuel-second whenever
-		// gameTime is a multiple of the effective drain interval, which is
-		// TICKS_PER_FUEL_SECOND * (eco ? 2 : 1) * (capacitor ? 2 : 1) ticks, capped at
-		// MAX_DRAIN_INTERVAL_TICKS (80). Plain: 20; ECO or capacitor: 40; both: 80 (cap).
-		if (gameTime % drainIntervalTicks(state.mode == ShieldMode.ECO, capacitor) == 0) {
+		// Combined passive-drain rule: the active shield burns 1 fuel-second per
+		// effective drain interval of ACTIVE ticks, which is TICKS_PER_FUEL_SECOND
+		// * (eco ? 2 : 1) * (capacitor ? 2 : 1), capped at MAX_DRAIN_INTERVAL_TICKS
+		// (80). Plain: 20; ECO or capacitor: 40; both: 80 (cap). The persisted
+		// per-shield accumulator (instead of the old gameTime % interval check)
+		// closes the dodge exploit where toggling the shield off across the level's
+		// payment ticks kept it active for free: only active ticks advance the
+		// accumulator, and it survives deactivation, so every interval of active
+		// runtime is paid exactly once no matter how the shield is toggled.
+		state.drainAccum++;
+		if (state.drainAccum >= drainIntervalTicks(state.mode == ShieldMode.ECO, capacitor)) {
+			state.drainAccum = 0;
 			state.fuelSeconds--;
 			changed = true;
 			if (state.fuelSeconds <= 0) {
@@ -200,18 +213,25 @@ public final class ShieldLogic {
 			}
 		}
 
-		// Fueled regeneration: tier-1+ shields heal every 2 seconds, each pulse
+		// Fueled regeneration: tier-1+ shields heal once per REGEN_PERIOD_TICKS of
+		// active runtime (same accumulator scheme as the drain above), each pulse
 		// burning one extra fuel-second on top of the runtime drain -- unless a flux
 		// capacitor is installed, which makes regen pulses fuel-free. ECO mode
-		// suppresses regeneration entirely as part of its efficiency trade-off.
-		if (tier >= 1 && state.mode != ShieldMode.ECO && state.health < state.maxHealth && state.fuelSeconds > 0 && gameTime % REGEN_PERIOD_TICKS == 0) {
-			state.health = Math.min(state.maxHealth, state.health + (tier == 1 ? TIER_1_REGEN_PER_PULSE : TIER_2_REGEN_PER_PULSE));
-			changed = true;
-			if (!capacitor) {
-				state.fuelSeconds = Math.max(0, state.fuelSeconds - 1);
-				if (state.fuelSeconds <= 0) {
-					state.active = false;
-					return true;
+		// suppresses regeneration entirely as part of its efficiency trade-off. The
+		// accumulator always advances while active; the pulse conditions are
+		// evaluated when it fires, matching the old boundary-tick semantics.
+		state.regenAccum++;
+		if (state.regenAccum >= REGEN_PERIOD_TICKS) {
+			state.regenAccum = 0;
+			if (tier >= 1 && state.mode != ShieldMode.ECO && state.health < state.maxHealth && state.fuelSeconds > 0) {
+				state.health = Math.min(state.maxHealth, state.health + (tier == 1 ? TIER_1_REGEN_PER_PULSE : TIER_2_REGEN_PER_PULSE));
+				changed = true;
+				if (!capacitor) {
+					state.fuelSeconds = Math.max(0, state.fuelSeconds - 1);
+					if (state.fuelSeconds <= 0) {
+						state.active = false;
+						return true;
+					}
 				}
 			}
 		}
@@ -407,6 +427,11 @@ public final class ShieldLogic {
 	private static boolean interceptProjectiles(ServerLevel level, BlockPos pos, Vec3 center, double radius, ShieldState state, AABB area, long breakCooldownTicks, BubbleShieldBlockEntity self) {
 		boolean changed = false;
 
+		// The boundary shrinks as hits land, so it is recomputed after every applied
+		// hit below: a later projectile in the same tick's volley must test the
+		// POST-shrink radius, not the stale one cached before the loop (a projectile
+		// now sitting between the old and the new boundary is no longer crossing in).
+		double boundary = radius;
 		for (Projectile projectile : level.getEntitiesOfClass(Projectile.class, area)) {
 			if (!state.active) {
 				break;
@@ -418,7 +443,7 @@ public final class ShieldLogic {
 			// never re-trigger: their prev-position was snapped onto the current
 			// position below, so from this tick on prev is inside (and the deflected
 			// outbound flight is inside->outside, which never counts as crossing in).
-			if (!ShieldGeometry.crossedInto(state.shape, center, radius, prev, current)) {
+			if (!ShieldGeometry.crossedInto(state.shape, center, boundary, prev, current)) {
 				continue;
 			}
 
@@ -497,6 +522,9 @@ public final class ShieldLogic {
 			}
 
 			changed = true;
+			// The hit shrank the shield: later projectiles in this same volley must
+			// be tested against the new, smaller boundary (0 once broken).
+			boundary = currentRadius(state);
 
 			// overrideLimiter=true lifts the 32-block send limit so the hit burst is
 			// visible to players far from the projector on large bubbles.
@@ -543,10 +571,43 @@ public final class ShieldLogic {
 		// Riding players are moved via their root vehicle so the whole stack leaves the shield.
 		Entity mover = player.getRootVehicle();
 		double targetY = Mth.clamp(mover.getY(), player.level().getMinY(), player.level().getMaxY());
-		mover.teleportTo(target.x, targetY, target.z);
+		Vec3 spot = findExpulsionSpot(player.level(), mover, new Vec3(target.x, targetY, target.z), horizontal);
+		mover.teleportTo(spot.x, spot.y, spot.z);
 		mover.setDeltaMovement(Vec3.ZERO);
 		player.setDeltaMovement(Vec3.ZERO);
 		return true;
+	}
+
+	/** Upward probe range for {@link #findExpulsionSpot} (blocks). */
+	private static final int EXPULSION_PROBE_UP = 8;
+	/** Extra outward probe range for {@link #findExpulsionSpot} (blocks beyond the pushback target). */
+	private static final int EXPULSION_PROBE_OUT = 4;
+
+	/**
+	 * Picks a collision-free spot for the barrier expulsion teleport. The direct
+	 * pushback target is used unchanged when it is free (the common, cheap case:
+	 * one {@code noCollision} check). When it would shove the player into blocks
+	 * (e.g. a wall hugging the bubble), nearby offsets are probed — per upward step
+	 * (0..{@value #EXPULSION_PROBE_UP} blocks), slightly further outward along the
+	 * pushback direction (0..{@value #EXPULSION_PROBE_OUT} blocks) — and the first
+	 * free spot wins. Falls back to the legacy direct target when everything is
+	 * blocked, which still guarantees the player ends up outside the boundary.
+	 */
+	private static Vec3 findExpulsionSpot(Level level, Entity mover, Vec3 target, Vec3 outward) {
+		AABB box = mover.getBoundingBox();
+		for (int up = 0; up <= EXPULSION_PROBE_UP; up++) {
+			for (int out = 0; out <= EXPULSION_PROBE_OUT; out++) {
+				double x = target.x + outward.x * out;
+				double y = Math.min(target.y + up, level.getMaxY());
+				double z = target.z + outward.z * out;
+				AABB probe = box.move(x - mover.getX(), y - mover.getY(), z - mover.getZ());
+				if (level.noCollision(mover, probe)) {
+					return new Vec3(x, y, z);
+				}
+			}
+		}
+
+		return target;
 	}
 
 	/**

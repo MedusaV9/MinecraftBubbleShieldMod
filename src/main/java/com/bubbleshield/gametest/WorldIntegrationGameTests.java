@@ -254,8 +254,9 @@ public class WorldIntegrationGameTests {
 	public void sculkSensorHearsFuelOutDeactivation(GameTestHelper helper) {
 		BubbleShieldBlockEntity be = placeProjector(helper);
 		// Enough fuel that the shield outlives the sensor's 10-tick settling window
-		// (first drain within 20 ticks of activation, one more every 20 after), but
-		// runs dry well within maxTicks: deactivation ~81-100 ticks after activation.
+		// (the drain accumulator aligns to the activation tick: first drain 20 ticks
+		// after activation, one more every 20 after), but runs dry well within
+		// maxTicks: deactivation exactly 100 ticks after activation.
 		be.addFuelSeconds(5);
 		helper.assertTrue(be.tryActivate(), "the fueled shield should activate");
 

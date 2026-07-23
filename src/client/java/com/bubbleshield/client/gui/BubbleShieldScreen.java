@@ -236,7 +236,20 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 
 		graphics.text(this.font, fuel, 8, 20, LABEL_COLOR, false);
 		graphics.text(this.font, Component.translatable("gui.bubbleshield.tier", this.menu.tier()), 8, 44, LABEL_COLOR, false);
-		graphics.text(this.font, Component.translatable("gui.bubbleshield.health", String.format("%.1f", this.menu.health())), 8, 56, LABEL_COLOR, false);
+
+		// Health arrives as permille + whole max HP (the old health*10 slot overflowed
+		// above 3276.7 HP); display "HP: cur/max" with the same graceful degrade as
+		// the fuel row: full label, bare "cur/max" value, then an elided value.
+		String healthValue = this.menu.currentHealth() + "/" + this.menu.maxHealth();
+		String health = Component.translatable("gui.bubbleshield.health", healthValue).getString();
+		if (this.font.width(health) > LABEL_MAX_WIDTH) {
+			health = healthValue;
+		}
+		if (this.font.width(health) > LABEL_MAX_WIDTH) {
+			health = this.font.plainSubstrByWidth(health, LABEL_MAX_WIDTH - this.font.width("...")) + "...";
+		}
+
+		graphics.text(this.font, health, 8, 56, LABEL_COLOR, false);
 		graphics.text(this.font, Component.translatable("gui.bubbleshield.cooldown", this.menu.cooldownSeconds()), 8, 66, LABEL_COLOR, false);
 	}
 

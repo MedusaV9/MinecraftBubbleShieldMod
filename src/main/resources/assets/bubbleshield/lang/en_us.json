@@ -14,7 +14,7 @@
   "gui.bubbleshield.effects": "Effects...",
   "gui.bubbleshield.effects_page": "Effects (Page %s/%s)",
   "gui.bubbleshield.diameter": "Diameter: %s",
-  "gui.bubbleshield.health": "Health: %s",
+  "gui.bubbleshield.health": "HP: %s",
   "gui.bubbleshield.fuel": "Fuel: %ss",
   "gui.bubbleshield.cooldown": "Cooldown: %ss",
   "gui.bubbleshield.add": "Add",

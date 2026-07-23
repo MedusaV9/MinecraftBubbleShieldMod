@@ -44,8 +44,12 @@ public final class ServerNet {
 	public static final int MAX_DIAMETER = 200;
 	public static final int MIN_EFFECT_ID = 0;
 	public static final int MAX_EFFECT_ID = EffectRegistry.COUNT - 1;
-	/** Hard cap on whitelist entries to keep payloads and NBT bounded. */
-	public static final int MAX_WHITELIST_SIZE = 64;
+	/**
+	 * Hard cap on whitelist entries to keep payloads and NBT bounded. Delegates to
+	 * {@link ShieldState#MAX_WHITELIST_SIZE} so the C2S add path and the NBT load
+	 * path share the exact same cap (same pattern as MAX_SHIELD_NAME_LENGTH).
+	 */
+	public static final int MAX_WHITELIST_SIZE = ShieldState.MAX_WHITELIST_SIZE;
 	/** Hard cap on the custom shield name, matching the SetNameC2S/ShieldSyncS2C codecs. */
 	public static final int MAX_SHIELD_NAME_LENGTH = ShieldState.MAX_NAME_LENGTH;
 

@@ -133,9 +133,11 @@ public class ModeGameTests {
 		ShieldState defenseState = defense.getShieldState();
 		ShieldState ecoState = eco.getShieldState();
 
-		// Tier 0, full health, DEFENSE/ECO: the ONLY fuel sink is the passive drain, so a
-		// tick where both fuels dropped is exactly a 40-tick boundary. Starting the window
-		// there makes the expected drain counts exact regardless of test start time.
+		// Tier 0, full health, DEFENSE/ECO: the ONLY fuel sink is the passive drain.
+		// Both shields activated on the same tick, so their drain accumulators are
+		// aligned and a tick where both fuels dropped is exactly a shared 40-tick
+		// boundary. Starting the window there makes the expected drain counts exact
+		// regardless of test start time.
 		int[] prevFuel = {-1, -1};
 		int[] baseline = new int[2];
 		long[] deadline = {-1L};

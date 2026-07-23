@@ -81,15 +81,30 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	 * signal so a pre-existing steady level is never misread as a rising edge.
 	 */
 	private boolean poweredInitialized;
-	/** Live server-side snapshot for the menu; values in SECONDS (data slots sync 16-bit signed). */
+	/**
+	 * Set on NBT load: the first server tick caps the remaining break cooldown at
+	 * the maximum possible break cooldown. ShieldState.load already forces
+	 * cooldown_until &gt;= 0, but it has no game time, so an absurd future value
+	 * edited into the NBT (which would lock the projector for in-game years) can
+	 * only be bounded here, where the level clock is available.
+	 */
+	private boolean capLoadedCooldown;
+	/**
+	 * Live server-side snapshot for the menu; values in SECONDS (data slots sync
+	 * 16-bit signed, so every case below clamps into [0, Short.MAX_VALUE]).
+	 */
 	private final ContainerData menuData = new ContainerData() {
 		@Override
 		public int get(int dataId) {
 			ShieldState state = BubbleShieldBlockEntity.this.shieldState;
 			return switch (dataId) {
-				case BubbleShieldMenu.DATA_FUEL_SECONDS -> Math.min(state.fuelSeconds, Short.MAX_VALUE);
-				case BubbleShieldMenu.DATA_HEALTH_TIMES_10 -> Math.round(state.health * 10.0F);
-				case BubbleShieldMenu.DATA_DIAMETER -> Math.round(state.targetRadius * 2.0F);
+				case BubbleShieldMenu.DATA_FUEL_SECONDS -> Mth.clamp(state.fuelSeconds, 0, Short.MAX_VALUE);
+				// Permille of max health (0..1000): the old health*10 encoding
+				// overflowed the 16-bit slot above 3276.7 HP.
+				case BubbleShieldMenu.DATA_HEALTH_PERMILLE -> state.maxHealth > 0.0F
+						? Mth.clamp(Math.round(1000.0F * state.health / state.maxHealth), 0, 1000)
+						: 0;
+				case BubbleShieldMenu.DATA_DIAMETER -> Mth.clamp(Math.round(state.targetRadius * 2.0F), 0, Short.MAX_VALUE);
 				case BubbleShieldMenu.DATA_EFFECT_ID -> state.effectId;
 				case BubbleShieldMenu.DATA_ACTIVE -> state.active ? 1 : 0;
 				case BubbleShieldMenu.DATA_COOLDOWN_SECONDS -> (int) Math.min(Short.MAX_VALUE, BubbleShieldBlockEntity.this.cooldownTicksLeft() / ShieldLogic.TICKS_PER_FUEL_SECOND);
@@ -99,6 +114,14 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 				case BubbleShieldMenu.DATA_CYCLE -> state.cycleEffect ? 1 : 0;
 				case BubbleShieldMenu.DATA_CAPACITOR -> BubbleShieldBlockEntity.this.hasCapacitor() ? 1 : 0;
 				case BubbleShieldMenu.DATA_BEAM -> state.beamStyle.ordinal();
+				case BubbleShieldMenu.DATA_MAX_HEALTH -> Mth.clamp(Math.round(state.maxHealth), 0, Short.MAX_VALUE);
+				case BubbleShieldMenu.DATA_REGEN_PER_MIN_X10 -> BubbleShieldBlockEntity.this.regenPerMinuteTimes10();
+				case BubbleShieldMenu.DATA_DRAIN_PER_MIN_X10 -> BubbleShieldBlockEntity.this.drainPerMinuteTimes10();
+				case BubbleShieldMenu.DATA_WHITELIST_COUNT -> Mth.clamp(state.whitelistNames.size(), 0, ShieldState.MAX_WHITELIST_SIZE);
+				// Placeholder until a later WP wires a gamerule.
+				case BubbleShieldMenu.DATA_STRENGTH_PERCENT -> 100;
+				// Placeholder until a later WP counts engaging threats.
+				case BubbleShieldMenu.DATA_THREAT_COUNT -> 0;
 				default -> 0;
 			};
 		}
@@ -199,6 +222,40 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		return Math.max(0L, this.shieldState.cooldownUntil - gameTime);
 	}
 
+	/**
+	 * Current regeneration rate for the menu's {@code DATA_REGEN_PER_MIN_X10} slot:
+	 * HP per minute x10 from the tier regen logic (one pulse per
+	 * {@link ShieldLogic#REGEN_PERIOD_TICKS}), 0 when there is no regen (tier 0),
+	 * in ECO mode (which suppresses regen) or while inactive.
+	 */
+	private int regenPerMinuteTimes10() {
+		ShieldState state = this.shieldState;
+		int tier = this.tier();
+		if (!state.active || tier < 1 || state.mode == ShieldMode.ECO) {
+			return 0;
+		}
+
+		float perPulse = tier == 1 ? ShieldLogic.TIER_1_REGEN_PER_PULSE : ShieldLogic.TIER_2_REGEN_PER_PULSE;
+		int pulsesPerMinute = 1200 / ShieldLogic.REGEN_PERIOD_TICKS;
+		return Mth.clamp(Math.round(perPulse * pulsesPerMinute * 10.0F), 0, Short.MAX_VALUE);
+	}
+
+	/**
+	 * Current passive fuel drain for the menu's {@code DATA_DRAIN_PER_MIN_X10} slot:
+	 * fuel-seconds per minute x10 from {@link ShieldLogic#drainIntervalTicks}
+	 * (including the ECO/capacitor modifiers), 0 while inactive. Regen/pulse
+	 * surcharges are intentionally not counted: this is the steady baseline rate.
+	 */
+	private int drainPerMinuteTimes10() {
+		ShieldState state = this.shieldState;
+		if (!state.active) {
+			return 0;
+		}
+
+		// 1 fuel-second per interval ticks -> (1200 / interval) per minute, x10.
+		return Mth.clamp(12000 / ShieldLogic.drainIntervalTicks(state.mode == ShieldMode.ECO, this.hasCapacitor()), 0, Short.MAX_VALUE);
+	}
+
 	public float currentRadius() {
 		return ShieldLogic.currentRadius(this.shieldState);
 	}
@@ -215,6 +272,18 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		this.consumeFuelSlot();
 		this.refreshTier();
 		if (this.level instanceof ServerLevel serverLevel) {
+			// Load hardening: cap a (possibly tampered) remaining cooldown at the
+			// maximum possible break cooldown; breakCooldownTicks(0) is the longest
+			// any tier can be assigned (tier 2 halves it).
+			if (this.capLoadedCooldown) {
+				this.capLoadedCooldown = false;
+				long maxCooldownUntil = serverLevel.getGameTime() + ShieldLogic.breakCooldownTicks(0);
+				if (this.shieldState.cooldownUntil > maxCooldownUntil) {
+					this.shieldState.cooldownUntil = maxCooldownUntil;
+					this.markUpdated();
+				}
+			}
+
 			// ShieldLogic flips state.active directly on fuel-out and break-by-damage;
 			// snapshot the flag so those paths stay sculk-audible like setActive(false).
 			boolean wasActive = this.shieldState.active;
@@ -836,6 +905,8 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		this.capacitorContainer.fromItemList(input.listOrEmpty("capacitor_items", ItemStack.CODEC));
 		// Re-derive tier-dependent fields on the next tick (covers cores edited while unloaded).
 		this.lastTier = -1;
+		// Cap the remaining cooldown on the first tick (needs the level clock).
+		this.capLoadedCooldown = true;
 	}
 
 	@Override

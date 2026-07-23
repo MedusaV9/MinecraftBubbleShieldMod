@@ -72,8 +72,10 @@ public class CapacitorGameTests {
 		ShieldState bareState = bare.getShieldState();
 		ShieldState upgradedState = upgraded.getShieldState();
 
-		// Tier 0, full health, DEFENSE: the ONLY fuel sink is the passive drain, so a
-		// tick where both fuels dropped is exactly a 40-tick boundary (like ModeGameTests).
+		// Tier 0, full health, DEFENSE: the ONLY fuel sink is the passive drain. Both
+		// shields activated on the same tick, so their drain accumulators are aligned
+		// and a tick where both fuels dropped is exactly a shared 40-tick boundary
+		// (like ModeGameTests).
 		int[] prevFuel = {-1, -1};
 		int[] baseline = new int[2];
 		long[] deadline = {-1L};

@@ -26,8 +26,16 @@ import org.jspecify.annotations.Nullable;
  * slots are replicated as 16-bit signed values.
  */
 public class BubbleShieldMenu extends AbstractContainerMenu {
+	// FROZEN slot layout: every slot replicates as a 16-bit signed value, so each
+	// encoding below must stay within [0, 32767]. Later changes may only fill the
+	// placeholder values (strength/threat) or APPEND new slots — never renumber.
 	public static final int DATA_FUEL_SECONDS = 0;
-	public static final int DATA_HEALTH_TIMES_10 = 1;
+	/**
+	 * Health as permille of max health, 0..1000 (replaces the old health*10
+	 * encoding, which overflowed the 16-bit slot above 3276.7 HP). Combine with
+	 * {@link #DATA_MAX_HEALTH} to display absolute HP; see {@link #currentHealth()}.
+	 */
+	public static final int DATA_HEALTH_PERMILLE = 1;
 	public static final int DATA_DIAMETER = 2;
 	public static final int DATA_EFFECT_ID = 3;
 	public static final int DATA_ACTIVE = 4;
@@ -38,7 +46,19 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 	public static final int DATA_CYCLE = 9;
 	public static final int DATA_CAPACITOR = 10;
 	public static final int DATA_BEAM = 11;
-	public static final int DATA_COUNT = 12;
+	/** Max health in whole HP, capped at 32767. */
+	public static final int DATA_MAX_HEALTH = 12;
+	/** Current regeneration rate in HP per minute x10 (0 when tier 0, ECO or inactive). */
+	public static final int DATA_REGEN_PER_MIN_X10 = 13;
+	/** Current passive fuel drain in fuel-seconds per minute x10 (0 when inactive). */
+	public static final int DATA_DRAIN_PER_MIN_X10 = 14;
+	/** Whitelist entry count, 0..{@link com.bubbleshield.shield.ShieldState#MAX_WHITELIST_SIZE}. */
+	public static final int DATA_WHITELIST_COUNT = 15;
+	/** Shield strength percent; constant 100 until a gamerule is wired up by a later WP. */
+	public static final int DATA_STRENGTH_PERCENT = 16;
+	/** Threats currently engaging the shield; constant 0 until a later WP fills it. */
+	public static final int DATA_THREAT_COUNT = 17;
+	public static final int DATA_COUNT = 18;
 
 	public static final int FUEL_SLOT = 0;
 	public static final int CORE_SLOT = 1;
@@ -123,8 +143,44 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 		return this.data.get(DATA_FUEL_SECONDS);
 	}
 
-	public float health() {
-		return this.data.get(DATA_HEALTH_TIMES_10) / 10.0F;
+	/** @return the synced health as permille (0..1000) of max health. */
+	public int healthPermille() {
+		return this.data.get(DATA_HEALTH_PERMILLE);
+	}
+
+	/** @return the synced max health in whole HP (capped at 32767). */
+	public int maxHealth() {
+		return this.data.get(DATA_MAX_HEALTH);
+	}
+
+	/** @return the current health in whole HP, reconstructed from permille x max. */
+	public int currentHealth() {
+		return Math.round(this.healthPermille() * this.maxHealth() / 1000.0F);
+	}
+
+	/** @return the synced regeneration rate in HP per minute x10 (0 when none). */
+	public int regenPerMinuteTimes10() {
+		return this.data.get(DATA_REGEN_PER_MIN_X10);
+	}
+
+	/** @return the synced passive fuel drain in fuel-seconds per minute x10 (0 when inactive). */
+	public int drainPerMinuteTimes10() {
+		return this.data.get(DATA_DRAIN_PER_MIN_X10);
+	}
+
+	/** @return the synced whitelist entry count. */
+	public int whitelistCount() {
+		return this.data.get(DATA_WHITELIST_COUNT);
+	}
+
+	/** @return the synced shield strength percent (constant 100 for now). */
+	public int strengthPercent() {
+		return this.data.get(DATA_STRENGTH_PERCENT);
+	}
+
+	/** @return the synced threat count (constant 0 for now). */
+	public int threatCount() {
+		return this.data.get(DATA_THREAT_COUNT);
 	}
 
 	public int diameter() {
