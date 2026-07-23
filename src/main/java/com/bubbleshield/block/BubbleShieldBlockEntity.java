@@ -7,6 +7,7 @@ import com.bubbleshield.net.ServerNet;
 import com.bubbleshield.net.ShieldPayloads;
 import com.bubbleshield.registry.ModBlockEntities;
 import com.bubbleshield.registry.ModItems;
+import com.bubbleshield.registry.ModTicketTypes;
 import com.bubbleshield.shield.BeamStyle;
 import com.bubbleshield.shield.FuelMap;
 import com.bubbleshield.shield.ShieldGeometry;
@@ -47,6 +48,7 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ContainerData;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ItemStackTemplate;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -139,6 +141,32 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 
 	/** Last replicated snapshot; a new sync payload is only broadcast when this changes. */
 	private @Nullable ReplicatedState lastSentState;
+
+	/**
+	 * D7c: set by {@link #markUpdated} on every replicable mutation and drained by
+	 * {@link #flushSync()} at the end of this shield's {@link #serverTick}, so no
+	 * matter how many mutations land in one tick, at most ONE ShieldSyncS2C
+	 * broadcast (plus one block-entity data update) goes out per shield per tick.
+	 * Mutations arriving outside the tick (e.g. C2S handlers) flush on the next
+	 * serverTick — at most one tick of added latency.
+	 */
+	private boolean syncDirty;
+
+	/**
+	 * D5: true while this projector holds a {@link ModTicketTypes#SHIELD_PROJECTOR}
+	 * chunk ticket (armed on activation, re-armed each active tick, released on
+	 * deactivate/break/removal). Transient runtime state, never persisted: the
+	 * ticket type is non-persistent and times out on its own if every release path
+	 * is missed (e.g. an unclean shutdown).
+	 */
+	private boolean chunkTicketArmed;
+
+	/**
+	 * D7b: per-tick memo for {@link #linkedShields}. {@code linkedCacheTime} is the
+	 * game time the cached list was resolved at; a lookup on a later tick recomputes.
+	 */
+	private long linkedCacheTime = Long.MIN_VALUE;
+	private @Nullable List<BubbleShieldBlockEntity> linkedCache;
 
 	/**
 	 * Boss bar shown to every player inside the active shield. Transient runtime state
@@ -302,6 +330,54 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 			if (this.shieldState.active && serverLevel.getGameTime() % LINK_TETHER_PERIOD_TICKS == 0L) {
 				this.sendLinkTethers(serverLevel);
 			}
+
+			// D5: keep the projector chunk ticking while active (release when not).
+			this.updateChunkTicket(serverLevel);
+			// D7c: at most one sync broadcast per shield per tick.
+			this.flushSync();
+		}
+	}
+
+	/**
+	 * D7b: the shields resonance-linked to this one (including this one; see
+	 * {@link ShieldLinking#findLinked}), resolved at most ONCE per server tick and
+	 * memoized for the rest of that tick. All same-tick users — the projectile damage
+	 * split (which used to re-resolve PER INTERCEPTED PROJECTILE), the linked regen
+	 * bonus and the tether renderer — share the one resolution. Mid-tick staleness
+	 * (e.g. a partner shrinking below overlap during the same tick's volley) is
+	 * accepted by design; the next tick recomputes.
+	 */
+	public List<BubbleShieldBlockEntity> linkedShields(ServerLevel level) {
+		long gameTime = level.getGameTime();
+		if (this.linkedCache == null || this.linkedCacheTime != gameTime) {
+			this.linkedCacheTime = gameTime;
+			this.linkedCache = ShieldLinking.findLinked(this, ServerNet.loadedShields(level));
+		}
+
+		return this.linkedCache;
+	}
+
+	/** D5: chunk-ticket radius; level 33 - 1 = 32 keeps the projector chunk itself block-ticking. */
+	private static final int CHUNK_TICKET_RADIUS = 1;
+
+	/**
+	 * D5: arms/releases the projector's chunk ticket to match the active flag. While
+	 * active, the ticket is re-added every tick — {@code TicketStorage.addTicket}
+	 * dedups on (type, level) and RESETS the remaining timeout, so the re-arm keeps
+	 * the ticket alive indefinitely while the {@link ModTicketTypes#SHIELD_PROJECTOR}
+	 * timeout still self-releases it if every explicit release path is missed. Kept
+	 * radius-1/block-ticking: that is exactly what keeps this block entity's own
+	 * ticker (and with it the whole shield enforcement, e.g. a diameter-200 bubble's
+	 * far edge) running when no player is near the projector chunk.
+	 */
+	private void updateChunkTicket(ServerLevel level) {
+		ChunkPos chunkPos = ChunkPos.containing(this.worldPosition);
+		if (this.shieldState.active) {
+			level.getChunkSource().addTicketWithRadius(ModTicketTypes.SHIELD_PROJECTOR, chunkPos, CHUNK_TICKET_RADIUS);
+			this.chunkTicketArmed = true;
+		} else if (this.chunkTicketArmed) {
+			this.chunkTicketArmed = false;
+			level.getChunkSource().removeTicketWithRadius(ModTicketTypes.SHIELD_PROJECTOR, chunkPos, CHUNK_TICKET_RADIUS);
 		}
 	}
 
@@ -312,7 +388,7 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	 * segment. Both linked projectors tick this, so the tether pulses from either end.
 	 */
 	private void sendLinkTethers(ServerLevel level) {
-		List<BubbleShieldBlockEntity> linked = ShieldLinking.findLinked(this, ServerNet.loadedShields(level));
+		List<BubbleShieldBlockEntity> linked = this.linkedShields(level);
 		if (linked.size() <= 1) {
 			return;
 		}
@@ -541,6 +617,8 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 			// Expel non-whitelisted players already standing inside the freshly raised barrier.
 			if (this.level instanceof ServerLevel serverLevel) {
 				ShieldLogic.expelBlockedPlayers(serverLevel, this.worldPosition, this.shieldState);
+				// D5: arm the chunk ticket right on activation (re-armed each tick).
+				this.updateChunkTicket(serverLevel);
 			}
 
 			// Only a real inactive->active transition counts as an activation; a no-op
@@ -583,6 +661,9 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 			if (wasActive) {
 				serverLevel.gameEvent(GameEvent.BLOCK_DEACTIVATE, this.worldPosition, GameEvent.Context.of(this.getBlockState()));
 			}
+
+			// D5: a break deactivates; release the chunk ticket immediately.
+			this.updateChunkTicket(serverLevel);
 		}
 
 		this.markUpdated();
@@ -651,6 +732,11 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 			// Empty the boss bar immediately instead of waiting for the next tick.
 			if (this.bossEvent != null) {
 				this.bossEvent.removeAllPlayers();
+			}
+
+			// D5: release the chunk ticket immediately instead of on the next tick.
+			if (this.level instanceof ServerLevel serverLevel) {
+				this.updateChunkTicket(serverLevel);
 			}
 
 			this.markUpdated();
@@ -756,11 +842,13 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	}
 
 	/**
-	 * Marks the shield dirty for persistence, refreshes comparators, and, if any
-	 * replicated field changed since the last broadcast, replicates the new state to
-	 * clients. Only the NETWORK broadcast is gated on the snapshot: fuelSeconds is not
-	 * part of the replicated snapshot, yet comparators read it while the shield is
-	 * inactive, so the comparator refresh must run unconditionally.
+	 * Marks the shield dirty for persistence, refreshes comparators, and flags the
+	 * state for client replication. The persistence mark and the comparator refresh
+	 * stay immediate and unconditional (fuelSeconds is not part of the replicated
+	 * snapshot, yet comparators read it while the shield is inactive); the network
+	 * broadcast is COALESCED (D7c): however many mutations mark in one tick, the
+	 * next {@link #flushSync()} — end of this shield's serverTick — sends at most
+	 * one snapshot, and only when a replicated field actually changed.
 	 */
 	public void markUpdated() {
 		// setChanged() also calls level.updateNeighbourForOutputSignal in 26.2, but the
@@ -772,13 +860,28 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 
 		BlockState state = this.getBlockState();
 		this.level.updateNeighbourForOutputSignal(this.worldPosition, state.getBlock());
+		this.syncDirty = true;
+	}
 
+	/**
+	 * D7c: flushes a pending {@link #markUpdated} into (at most) one client
+	 * replication — the block-entity data update plus the ShieldSyncS2C broadcast —
+	 * still gated on the replicated snapshot actually differing from the last one
+	 * sent. Called once at the end of {@link #serverTick}.
+	 */
+	private void flushSync() {
+		if (!this.syncDirty || !(this.level instanceof ServerLevel)) {
+			return;
+		}
+
+		this.syncDirty = false;
 		ReplicatedState snapshot = this.buildReplicatedState();
 		if (snapshot.equals(this.lastSentState)) {
 			return;
 		}
 
 		this.lastSentState = snapshot;
+		BlockState state = this.getBlockState();
 		this.level.sendBlockUpdated(this.worldPosition, state, state, Block.UPDATE_CLIENTS);
 		ServerNet.syncShield(this);
 	}
@@ -834,9 +937,18 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 
 	@Override
 	public void setRemoved() {
-		if (this.level instanceof ServerLevel) {
+		if (this.level instanceof ServerLevel serverLevel) {
 			ServerNet.untrackShield(this);
 			ServerNet.broadcastRemove(this);
+
+			// D5: never leak the chunk ticket past this block entity's removal
+			// (block broken, chunk discarded, ...). The ticket type's timeout would
+			// eventually drop it anyway; this releases it deterministically.
+			if (this.chunkTicketArmed) {
+				this.chunkTicketArmed = false;
+				serverLevel.getChunkSource().removeTicketWithRadius(
+						ModTicketTypes.SHIELD_PROJECTOR, ChunkPos.containing(this.worldPosition), CHUNK_TICKET_RADIUS);
+			}
 		}
 
 		if (this.bossEvent != null) {

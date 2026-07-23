@@ -1,12 +1,17 @@
 package com.bubbleshield.gametest;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 import com.bubbleshield.block.BubbleShieldBlockEntity;
 import com.bubbleshield.command.BubbleShieldCommand;
 import com.bubbleshield.effect.EffectRegistry;
+import com.bubbleshield.net.ServerNet;
+import com.bubbleshield.net.ShieldPayloads;
 import com.bubbleshield.registry.ModBlocks;
 import com.bubbleshield.registry.ModItems;
+import com.bubbleshield.registry.ModTicketTypes;
 import com.bubbleshield.shield.ShieldMode;
 import com.bubbleshield.shield.ShieldShape;
 import com.bubbleshield.shield.ShieldState;
@@ -19,9 +24,14 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.level.Ticket;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.TicketStorage;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.SculkSensorBlock;
 import net.minecraft.world.level.block.state.properties.SculkSensorPhase;
@@ -347,6 +357,148 @@ public class WorldIntegrationGameTests {
 		helper.assertTrue(countCoreDraws(level, untouched, origin, 50) == 0,
 				"the untouched simple dungeon table must never yield a resonant core");
 		helper.succeed();
+	}
+
+	/**
+	 * (d) D5: an ACTIVE projector holds a {@code bubbleshield:shield_projector}
+	 * chunk ticket on its own chunk (so a far-flung shield edge stays enforced when
+	 * no player keeps the chunk ticking), re-armed while active, re-registered on
+	 * re-activation, and released immediately on deactivation and on block removal.
+	 * Asserted directly against the level's TicketStorage (the same store
+	 * {@code ServerChunkCache.addTicketWithRadius} writes to): the gametest
+	 * framework force-loads the structure's chunks with its own tickets, so
+	 * "chunk is ticking" alone would prove nothing here — ticket presence is the
+	 * headless-robust signal.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 200, padding = 16)
+	public void activeShieldHoldsChunkTicket(GameTestHelper helper) {
+		BubbleShieldBlockEntity be = placeProjector(helper);
+		be.addFuelSeconds(PLENTY_OF_FUEL);
+		BlockPos absPos = helper.absolutePos(PROJECTOR_POS);
+
+		helper.assertTrue(!hasProjectorTicket(helper, absPos), "an inactive projector must hold no chunk ticket");
+		helper.assertTrue(be.tryActivate(), "the fueled shield should activate");
+		helper.assertTrue(hasProjectorTicket(helper, absPos), "activation should register the projector chunk ticket");
+
+		helper.startSequence()
+				// A few ticks of runtime: the per-tick re-arm must keep it present.
+				.thenExecuteAfter(10, () -> {
+					helper.assertTrue(hasProjectorTicket(helper, absPos), "the ticket should stay armed while active");
+					be.setActive(false);
+					helper.assertTrue(!hasProjectorTicket(helper, absPos), "deactivation should release the ticket immediately");
+					helper.assertTrue(be.tryActivate(), "the shield should re-activate");
+					helper.assertTrue(hasProjectorTicket(helper, absPos), "re-activation should re-register the ticket");
+					// Break the projector: setRemoved must release the ticket too.
+					helper.setBlock(PROJECTOR_POS, Blocks.AIR);
+				})
+				.thenExecuteAfter(2, () -> helper.assertTrue(
+						!hasProjectorTicket(helper, absPos),
+						"removing the projector block must release the ticket"))
+				.thenSucceed();
+	}
+
+	/** @return true when the chunk holding {@code absPos} has a shield-projector ticket. */
+	private static boolean hasProjectorTicket(GameTestHelper helper, BlockPos absPos) {
+		TicketStorage tickets = helper.getLevel().getChunkSource().getDataStorage().computeIfAbsent(TicketStorage.TYPE);
+		for (Ticket ticket : tickets.getTickets(ChunkPos.containing(absPos).pack())) {
+			if (ticket.getType() == ModTicketTypes.SHIELD_PROJECTOR) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * (e) D7c broadcast coalescing, asserted end-to-end on the wire: several
+	 * replicable mutations landing on the SAME tick must flush as exactly ONE
+	 * ShieldSyncS2C broadcast (carrying the final combined state), not one per
+	 * mutation. The capturing mock player's embedded channel records every packet
+	 * the server actually sent it; payloads are filtered by projector position
+	 * because concurrent tests' shields broadcast to every player in the level.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 200, padding = 16)
+	public void sameTickMutationsCoalesceIntoOneSync(GameTestHelper helper) {
+		BubbleShieldBlockEntity be = placeProjector(helper);
+		MockPlayers.CapturingMockPlayer capture = MockPlayers.createCapturingMockPlayer(helper, GameType.CREATIVE);
+		BlockPos absPos = helper.absolutePos(PROJECTOR_POS);
+
+		helper.startSequence()
+				// Let the placement/join syncs flush, then drop them as setup noise.
+				.thenExecuteAfter(5, () -> drainSyncPayloads(capture, absPos))
+				.thenExecute(() -> {
+					// Four distinct replicable mutations in ONE tick.
+					be.setCustomName("Coalesced");
+					be.setColorOverride(0xFFC81414);
+					be.whitelistAdd(helper.getLevel().getServer(), "SomeFriend");
+					be.setSettings(12, 7, 0, 0, false, 0);
+				})
+				.thenExecuteAfter(5, () -> {
+					List<ShieldPayloads.ShieldSyncS2C> syncs = drainSyncPayloads(capture, absPos);
+					helper.assertTrue(
+							syncs.size() == 1,
+							"4 same-tick mutations should coalesce into exactly 1 ShieldSyncS2C, got " + syncs.size());
+					helper.assertTrue(
+							"Coalesced".equals(syncs.get(0).customName()) && syncs.get(0).visual().effectId() == 7,
+							"the one coalesced sync should carry the final combined state");
+					MockPlayers.removeMockPlayer(helper, capture.player());
+				})
+				.thenSucceed();
+	}
+
+	/** Drains the capture channel, returning the ShieldSyncS2C payloads for the given projector. */
+	private static List<ShieldPayloads.ShieldSyncS2C> drainSyncPayloads(MockPlayers.CapturingMockPlayer capture, BlockPos absPos) {
+		List<ShieldPayloads.ShieldSyncS2C> syncs = new ArrayList<>();
+		Object message;
+		while ((message = capture.channel().readOutbound()) != null) {
+			if (message instanceof ClientboundCustomPayloadPacket packet
+					&& packet.payload() instanceof ShieldPayloads.ShieldSyncS2C sync
+					&& sync.pos().equals(absPos)) {
+				syncs.add(sync);
+			}
+		}
+
+		return syncs;
+	}
+
+	/**
+	 * (e') The per-player C2S token bucket gating the custom shield payloads:
+	 * a same-tick flood gets exactly the burst capacity through, refills at
+	 * 1 token per tick, and keeps dropping whatever exceeds the refill.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 200, padding = 16)
+	public void c2sRateLimitDropsFlood(GameTestHelper helper) {
+		ServerPlayer player = MockPlayers.createUniqueMockPlayer(helper);
+		// A fresh bucket passes exactly the burst capacity in one tick, then drops.
+		for (int i = 0; i < ServerNet.C2S_TOKENS_PER_SECOND; i++) {
+			helper.assertTrue(ServerNet.tryConsumeC2S(player, "gametest-flood"),
+					"burst packet " + i + " should pass the rate limit");
+		}
+
+		helper.assertTrue(!ServerNet.tryConsumeC2S(player, "gametest-flood"),
+				"the packet beyond the burst capacity must be dropped");
+		long drainedAtTick = helper.getLevel().getServer().getTickCount();
+
+		helper.runAfterDelay(5, () -> {
+			try {
+				// The refill is exactly 1 token per elapsed tick (capped at capacity).
+				int refilled = (int) Math.min(
+						ServerNet.C2S_TOKENS_PER_SECOND,
+						helper.getLevel().getServer().getTickCount() - drainedAtTick);
+				helper.assertTrue(refilled > 0, "the delayed check should run on a later tick");
+				for (int i = 0; i < refilled; i++) {
+					helper.assertTrue(ServerNet.tryConsumeC2S(player, "gametest-flood"),
+							"the bucket should refill 1 token per tick (token " + i + " of " + refilled + ")");
+				}
+
+				helper.assertTrue(!ServerNet.tryConsumeC2S(player, "gametest-flood"),
+						"packets beyond the per-tick refill must keep dropping");
+			} finally {
+				MockPlayers.removeMockPlayer(helper, player);
+			}
+
+			helper.succeed();
+		});
 	}
 
 	/** Draws the table {@code draws} times with fresh chest-context params, counting resonant cores. */

@@ -12,6 +12,7 @@ import com.bubbleshield.registry.ModBlockEntities;
 import com.bubbleshield.registry.ModBlocks;
 import com.bubbleshield.registry.ModItems;
 import com.bubbleshield.registry.ModMenus;
+import com.bubbleshield.registry.ModTicketTypes;
 
 import net.fabricmc.api.ModInitializer;
 
@@ -33,6 +34,7 @@ public class BubbleShield implements ModInitializer {
 		ModItems.init();
 		ModBlockEntities.init();
 		ModMenus.init();
+		ModTicketTypes.init();
 		ModCriteria.init();
 
 		ShieldPayloads.registerTypes();

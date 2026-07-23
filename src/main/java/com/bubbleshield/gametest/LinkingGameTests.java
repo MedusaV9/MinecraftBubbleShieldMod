@@ -5,6 +5,7 @@ import java.util.UUID;
 
 import com.bubbleshield.block.BubbleShieldBlockEntity;
 import com.bubbleshield.registry.ModBlocks;
+import com.bubbleshield.registry.ModItems;
 import com.bubbleshield.shield.ShieldLinking;
 import com.bubbleshield.shield.ShieldLogic;
 import com.bubbleshield.shield.ShieldShape;
@@ -17,6 +18,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.projectile.arrow.Arrow;
 import net.minecraft.world.entity.projectile.hurtingprojectile.SmallFireball;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -215,6 +217,126 @@ public class LinkingGameTests {
 					helper.assertTrue(
 							fireball.getDeltaMovement().y > 0.0,
 							"the fireball must be neutralized outbound (single REVERSE deflection), not re-reversed inward");
+				})
+				.thenSucceed();
+	}
+
+	/**
+	 * (a'') D7b cache consistency: a 10-arrow SAME-TICK volley into shield A of a
+	 * linked pair must split the total damage exactly evenly. The per-tick link
+	 * cache resolves the partner set once per shield tick (instead of once per
+	 * intercepted projectile), so every hit of the volley must use the same
+	 * partner set: 10 arrows x {@link ShieldLogic#PROJECTILE_DAMAGE} = 50 total,
+	 * exactly 25 per shield.
+	 *
+	 * <p>Geometry: the whole volley must land within ONE interception loop, because
+	 * the framework's barrier ceiling caps the arena at the structure top — an arrow
+	 * that gets stuck on that ceiling BETWEEN two boundary radii (prev and current
+	 * both inside/both outside) would never register as crossing in. Shield A is
+	 * widened to radius 12 (final post-volley boundary 12 x 75/100 = 9.0) and the
+	 * arrows fall a whole 6 blocks on their first move tick: prev sits at distance
+	 * ~12.3 (outside even the full boundary) and current sticks on the ceiling at
+	 * distance ~6.5 (inside even the final shrunk boundary), so every arrow of the
+	 * volley crosses in on the same shield tick regardless of the per-hit shrink.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, structure = ARENA_STRUCTURE, maxTicks = 200, padding = 16)
+	public void linkedVolleySplitsEvenly(GameTestHelper helper) {
+		UUID owner = UUID.randomUUID();
+		BubbleShieldBlockEntity shieldA = placeProjector(helper, SHIELD_A_POS, owner);
+		BubbleShieldBlockEntity shieldB = placeProjector(helper, SHIELD_B_NEAR_POS, owner);
+		// Widen A so the boundary stays above the ceiling-stuck arrow positions for
+		// the whole volley (see the geometry note in the javadoc). Still linked to B
+		// throughout: worst case 9.0 + 6.0 > 10 (both at health 75).
+		shieldA.getShieldState().targetRadius = 12.0F;
+		helper.assertTrue(shieldA.tryActivate(), "shield A should activate");
+		helper.assertTrue(shieldB.tryActivate(), "shield B should activate");
+
+		// x-fanned around the column so the arrows are distinct entities; all spawn
+		// just above A's radius-12 top (center y 2.5 + 12 = 14.5) and dive 6 blocks
+		// on their first move tick, landing stuck on the barrier ceiling INSIDE the
+		// final boundary, so the whole volley intercepts in one loop.
+		int volley = 10;
+		for (int i = 0; i < volley; i++) {
+			Arrow arrow = helper.spawn(EntityTypes.ARROW, new Vec3(4.05 + 0.1 * i, 14.8, 4.5));
+			arrow.setDeltaMovement(0.0, -6.0, 0.0);
+		}
+
+		ShieldState stateA = shieldA.getShieldState();
+		ShieldState stateB = shieldB.getShieldState();
+		float expected = ShieldState.DEFAULT_MAX_HEALTH - volley * ShieldLogic.PROJECTILE_DAMAGE / 2.0F;
+		helper.startSequence()
+				.thenWaitUntil(() -> helper.assertTrue(
+						stateA.health <= expected + TOLERANCE,
+						"all 10 arrows should be absorbed by shield A, health is " + stateA.health))
+				// Extra ticks so a stray un-discarded arrow or an uneven split would
+				// be caught by the exact-value asserts.
+				.thenExecuteAfter(10, () -> {
+					helper.assertTrue(
+							Math.abs(stateA.health - expected) <= TOLERANCE,
+							"shield A should lose exactly half the volley damage (25), health is " + stateA.health);
+					helper.assertTrue(
+							Math.abs(stateB.health - expected) <= TOLERANCE,
+							"shield B should lose the other half (25), health is " + stateB.health);
+					helper.assertTrue(
+							stateA.health == stateB.health,
+							"the volley split must stay exactly even, A=" + stateA.health + " B=" + stateB.health);
+				})
+				.thenSucceed();
+	}
+
+	/**
+	 * (a''') The linked regen bonus: a tier-1 shield with at least one resonance-linked
+	 * partner heals {@link ShieldLogic#TIER_1_REGEN_PER_PULSE} x
+	 * {@link ShieldLogic#LINKED_REGEN_MULTIPLIER} = 1.25 per pulse; after the partner
+	 * deactivates (link gone) the very next pulse is back to the base 1.0.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, structure = ARENA_STRUCTURE, maxTicks = 200, padding = 16)
+	public void linkedRegenHealsFaster(GameTestHelper helper) {
+		UUID owner = UUID.randomUUID();
+		BubbleShieldBlockEntity shieldA = placeProjector(helper, SHIELD_A_POS, owner);
+		BubbleShieldBlockEntity shieldB = placeProjector(helper, SHIELD_B_NEAR_POS, owner);
+		shieldA.getCoreContainer().setItem(0, new ItemStack(ModItems.RESONANT_CORE));
+		helper.assertTrue(shieldA.tryActivate(), "shield A should activate");
+		helper.assertTrue(shieldB.tryActivate(), "shield B should activate");
+
+		ShieldState stateA = shieldA.getShieldState();
+		float[] healthBefore = new float[1];
+		float linkedPulse = ShieldLogic.TIER_1_REGEN_PER_PULSE * ShieldLogic.LINKED_REGEN_MULTIPLIER;
+		helper.startSequence()
+				// Let the core refresh land (maxHealth 200), then damage A. The shrunk
+				// radius (8 * 140/200 = 5.6) still overlaps B (5.6 + 8 > 10): linked.
+				.thenExecuteAfter(2, () -> {
+					helper.assertTrue(stateA.maxHealth == 200.0F,
+							"the resonant core should raise max health to 200, got " + stateA.maxHealth);
+					shieldA.applyShieldDamage(60.0F);
+					healthBefore[0] = stateA.health;
+					helper.assertTrue(
+							ShieldLinking.findLinked(shieldA, List.of(shieldA, shieldB)).size() == 2,
+							"the damaged shield should still be linked to its partner");
+				})
+				// The poll runs every tick and pulses are 40 ticks apart, so the first
+				// passing check observes exactly ONE pulse.
+				.thenWaitUntil(() -> helper.assertTrue(
+						stateA.health > healthBefore[0], "the linked tier-1 shield should regenerate"))
+				.thenExecute(() -> {
+					float healed = stateA.health - healthBefore[0];
+					helper.assertTrue(
+							Math.abs(healed - linkedPulse) <= TOLERANCE,
+							"a linked regen pulse should heal " + linkedPulse + ", got " + healed);
+
+					// Unlink: with the partner inactive, the next pulse (next tick's
+					// cache resolution) drops back to the base rate.
+					shieldB.setActive(false);
+					healthBefore[0] = stateA.health;
+				})
+				.thenWaitUntil(() -> helper.assertTrue(
+						stateA.health > healthBefore[0], "the unlinked shield should keep regenerating"))
+				.thenExecute(() -> {
+					float healed = stateA.health - healthBefore[0];
+					helper.assertTrue(
+							Math.abs(healed - ShieldLogic.TIER_1_REGEN_PER_PULSE) <= TOLERANCE,
+							"an unlinked regen pulse should heal the base " + ShieldLogic.TIER_1_REGEN_PER_PULSE
+									+ ", got " + healed);
 				})
 				.thenSucceed();
 	}

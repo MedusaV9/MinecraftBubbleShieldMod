@@ -1,6 +1,7 @@
 package com.bubbleshield.net;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -8,6 +9,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import com.bubbleshield.BubbleShield;
 import com.bubbleshield.advancements.ModCriteria;
 import com.bubbleshield.block.BubbleShieldBlockEntity;
 import com.bubbleshield.effect.EffectRegistry;
@@ -52,6 +54,13 @@ public final class ServerNet {
 	public static final int MAX_WHITELIST_SIZE = ShieldState.MAX_WHITELIST_SIZE;
 	/** Hard cap on the custom shield name, matching the SetNameC2S/ShieldSyncS2C codecs. */
 	public static final int MAX_SHIELD_NAME_LENGTH = ShieldState.MAX_NAME_LENGTH;
+	/**
+	 * D7c: per-player token bucket for the CUSTOM C2S payloads (settings, whitelist,
+	 * name, color, active): burst capacity and sustained rate of 20 packets per
+	 * second (refilled 1 token per server tick). Vanilla container flows (menu
+	 * open, slot clicks) are deliberately NOT rate-limited here.
+	 */
+	public static final int C2S_TOKENS_PER_SECOND = 20;
 
 	/**
 	 * Loaded shield projectors per level, used to sync existing shields to joining players.
@@ -59,11 +68,54 @@ public final class ServerNet {
 	 */
 	private static final Map<ServerLevel, Set<BubbleShieldBlockEntity>> LOADED_SHIELDS = new IdentityHashMap<>();
 
+	/** Per-player C2S token buckets, keyed by player UUID. Only touched from the server thread. */
+	private static final Map<UUID, TokenBucket> C2S_BUCKETS = new HashMap<>();
+
+	/** Mutable token-bucket state: remaining tokens plus the tick they were last refilled at. */
+	private static final class TokenBucket {
+		int tokens = C2S_TOKENS_PER_SECOND;
+		long lastRefillTick;
+	}
+
+	/**
+	 * Takes one token from the sender's C2S bucket (refill 1/tick, capacity
+	 * {@link #C2S_TOKENS_PER_SECOND}).
+	 *
+	 * @param kind payload name used in the drop log line.
+	 * @return true when the packet is within budget; false means "drop it" (already
+	 * logged). Public only so gametests can exercise the bucket directly.
+	 */
+	public static boolean tryConsumeC2S(ServerPlayer player, String kind) {
+		long tick = player.level().getServer().getTickCount();
+		TokenBucket bucket = C2S_BUCKETS.computeIfAbsent(player.getUUID(), uuid -> {
+			TokenBucket fresh = new TokenBucket();
+			fresh.lastRefillTick = tick;
+			return fresh;
+		});
+
+		// Refill 1 token per elapsed tick, capped at the burst capacity. max(0, ...)
+		// guards a tick counter regression (integrated-server restart reuses UUIDs).
+		bucket.tokens = (int) Math.min(C2S_TOKENS_PER_SECOND, bucket.tokens + Math.max(0L, tick - bucket.lastRefillTick));
+		bucket.lastRefillTick = tick;
+		if (bucket.tokens <= 0) {
+			BubbleShield.LOGGER.warn("Dropping {} from {}: shield C2S rate limit ({}/s) exceeded",
+					kind, player.getGameProfile().name(), C2S_TOKENS_PER_SECOND);
+			return false;
+		}
+
+		bucket.tokens--;
+		return true;
+	}
+
 	private ServerNet() {
 	}
 
 	public static void register() {
 		ServerPlayNetworking.registerGlobalReceiver(ShieldPayloads.SetSettingsC2S.TYPE, (payload, ctx) -> {
+			if (!tryConsumeC2S(ctx.player(), "SetSettingsC2S")) {
+				return;
+			}
+
 			BubbleShieldBlockEntity shield = validatedShield(ctx.player(), payload.pos());
 			if (shield == null || !isOwner(ctx.player(), shield)) {
 				return;
@@ -78,6 +130,10 @@ public final class ServerNet {
 		});
 
 		ServerPlayNetworking.registerGlobalReceiver(ShieldPayloads.WhitelistModifyC2S.TYPE, (payload, ctx) -> {
+			if (!tryConsumeC2S(ctx.player(), "WhitelistModifyC2S")) {
+				return;
+			}
+
 			BubbleShieldBlockEntity shield = validatedShield(ctx.player(), payload.pos());
 			if (shield == null || !isOwner(ctx.player(), shield)) {
 				return;
@@ -100,6 +156,10 @@ public final class ServerNet {
 		});
 
 		ServerPlayNetworking.registerGlobalReceiver(ShieldPayloads.SetNameC2S.TYPE, (payload, ctx) -> {
+			if (!tryConsumeC2S(ctx.player(), "SetNameC2S")) {
+				return;
+			}
+
 			BubbleShieldBlockEntity shield = validatedShield(ctx.player(), payload.pos());
 			if (shield == null || !isOwner(ctx.player(), shield)) {
 				return;
@@ -117,6 +177,10 @@ public final class ServerNet {
 		});
 
 		ServerPlayNetworking.registerGlobalReceiver(ShieldPayloads.SetColorC2S.TYPE, (payload, ctx) -> {
+			if (!tryConsumeC2S(ctx.player(), "SetColorC2S")) {
+				return;
+			}
+
 			BubbleShieldBlockEntity shield = validatedShield(ctx.player(), payload.pos());
 			if (shield == null || !isOwner(ctx.player(), shield)) {
 				return;
@@ -135,6 +199,10 @@ public final class ServerNet {
 		});
 
 		ServerPlayNetworking.registerGlobalReceiver(ShieldPayloads.SetActiveC2S.TYPE, (payload, ctx) -> {
+			if (!tryConsumeC2S(ctx.player(), "SetActiveC2S")) {
+				return;
+			}
+
 			BubbleShieldBlockEntity shield = validatedShield(ctx.player(), payload.pos());
 			if (shield == null || !isOwner(ctx.player(), shield)) {
 				return;
@@ -157,7 +225,10 @@ public final class ServerNet {
 		// only when the projector chunk ticks, so a logged-out player's ServerPlayer ref
 		// would otherwise be held (and packets attempted) until the next projector tick.
 		// Sweep the player out of every loaded shield's boss event immediately.
-		ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> removeFromBossEvents(handler.player));
+		ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
+			removeFromBossEvents(handler.player);
+			C2S_BUCKETS.remove(handler.player.getUUID());
+		});
 
 		// The client clears its shield replica whenever it gets a new ClientLevel, so every
 		// server-side path that moves a player to a (new) level must re-send the snapshots.
@@ -173,7 +244,10 @@ public final class ServerNet {
 		// LOADED_SHIELDS holds ServerLevel keys; clear on unload/stop so integrated-server
 		// restarts do not leak levels or stale block entities.
 		ServerLevelEvents.UNLOAD.register((server, level) -> LOADED_SHIELDS.remove(level));
-		ServerLifecycleEvents.SERVER_STOPPED.register(server -> LOADED_SHIELDS.clear());
+		ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
+			LOADED_SHIELDS.clear();
+			C2S_BUCKETS.clear();
+		});
 	}
 
 	/**

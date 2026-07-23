@@ -1,5 +1,6 @@
 package com.bubbleshield.shield;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -12,7 +13,6 @@ import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.EffectRegistry;
 import com.bubbleshield.effect.InsideEffectBehavior;
 import com.bubbleshield.effect.behaviors.BehaviorSupport;
-import com.bubbleshield.net.ServerNet;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.DustParticleOptions;
@@ -65,6 +65,8 @@ public final class ShieldLogic {
 	public static final int REGEN_PERIOD_TICKS = 40;
 	public static final float TIER_1_REGEN_PER_PULSE = 1.0F;
 	public static final float TIER_2_REGEN_PER_PULSE = 2.5F;
+	/** Regen pulses heal this much more while the shield has at least one resonance-linked partner. */
+	public static final float LINKED_REGEN_MULTIPLIER = 1.25F;
 	/** PULSE mode zaps hostile mobs inside the bubble once per this many ticks. */
 	public static final int PULSE_PERIOD_TICKS = 60;
 	/** Magic damage dealt to each monster inside the bubble by a PULSE zap. */
@@ -224,7 +226,16 @@ public final class ShieldLogic {
 		if (state.regenAccum >= REGEN_PERIOD_TICKS) {
 			state.regenAccum = 0;
 			if (tier >= 1 && state.mode != ShieldMode.ECO && state.health < state.maxHealth && state.fuelSeconds > 0) {
-				state.health = Math.min(state.maxHealth, state.health + (tier == 1 ? TIER_1_REGEN_PER_PULSE : TIER_2_REGEN_PER_PULSE));
+				float perPulse = tier == 1 ? TIER_1_REGEN_PER_PULSE : TIER_2_REGEN_PER_PULSE;
+				// Resonance bonus: a shield with at least one linked partner (same
+				// owner, active, overlapping — resolved through the per-tick link
+				// cache, see BubbleShieldBlockEntity#linkedShields) heals x1.25 per
+				// pulse. Applied only at this pulse site for now.
+				if (self.linkedShields(level).size() > 1) {
+					perPulse *= LINKED_REGEN_MULTIPLIER;
+				}
+
+				state.health = Math.min(state.maxHealth, state.health + perPulse);
 				changed = true;
 				if (!capacitor) {
 					state.fuelSeconds = Math.max(0, state.fuelSeconds - 1);
@@ -247,13 +258,38 @@ public final class ShieldLogic {
 		double areaSize = 2.0 * radius + 8.0;
 		AABB area = AABB.ofSize(center, areaSize, areaSize, areaSize);
 
-		if (interceptProjectiles(level, pos, center, radius, state, area, breakCooldownTicks(tier), self)) {
+		// D7a: ONE entity pass over the search AABB per shield tick, partitioned into
+		// the per-consumer lists. This replaces the up-to-four separate scans of the
+		// same volume the consumers below used to run (projectile interception, PULSE
+		// monsters, the player barrier and the CROWD_SCALE context count). Semantics
+		// are unchanged: getEntitiesOfClass(clazz, box) is getEntities(typeTest, box,
+		// EntitySelector.NO_SPECTATORS) and getEntities(null, box) applies the exact
+		// same NO_SPECTATORS default, so instanceof partitioning yields the same sets
+		// (Projectile/Player/Monster are hierarchy-disjoint classes). Entities do not
+		// move within this shield's tick, so one snapshot serves every consumer; the
+		// per-consumer geometry filters (crossedInto, isInside) still run per use
+		// against the CURRENT radius. The CROWD_SCALE count used a radius*2 box, a
+		// subset of this area; its isInside filter keeps the result identical.
+		List<Projectile> projectiles = new ArrayList<>();
+		List<Player> players = new ArrayList<>();
+		List<Monster> monsters = new ArrayList<>();
+		for (Entity entity : level.getEntities((Entity) null, area)) {
+			if (entity instanceof Projectile projectile) {
+				projectiles.add(projectile);
+			} else if (entity instanceof Player player) {
+				players.add(player);
+			} else if (entity instanceof Monster monster) {
+				monsters.add(monster);
+			}
+		}
+
+		if (interceptProjectiles(level, pos, center, radius, state, projectiles, breakCooldownTicks(tier), self)) {
 			changed = true;
 		}
 
 		// PULSE mode: periodically zap every monster inside the (possibly shrunk) bubble.
 		if (state.active && state.mode == ShieldMode.PULSE && gameTime % PULSE_PERIOD_TICKS == 0L) {
-			if (pulseMonsters(level, center, currentRadius(state), state, area)) {
+			if (pulseMonsters(level, center, currentRadius(state), state, monsters)) {
 				changed = true;
 				if (!state.active) {
 					return true;
@@ -264,14 +300,14 @@ public final class ShieldLogic {
 		if (state.active) {
 			// Recompute: interceptions may have shrunk the shield.
 			double barrierRadius = currentRadius(state);
-			for (Player player : level.getEntitiesOfClass(Player.class, area)) {
+			for (Player player : players) {
 				if (applyPlayerBarrier(center, barrierRadius, state, player)) {
 					GuardEnforcer.apply(level, center, state, player);
 					changed = true;
 				}
 			}
 
-			tickInsideEffect(level, center, currentRadius(state), state, gameTime);
+			tickInsideEffect(level, center, currentRadius(state), state, gameTime, players);
 		}
 
 		return changed;
@@ -285,9 +321,9 @@ public final class ShieldLogic {
 	 *
 	 * @return true if at least one monster was hit (state changed).
 	 */
-	private static boolean pulseMonsters(ServerLevel level, Vec3 center, double radius, ShieldState state, AABB area) {
+	private static boolean pulseMonsters(ServerLevel level, Vec3 center, double radius, ShieldState state, List<Monster> monsters) {
 		boolean hitAny = false;
-		for (Monster mob : level.getEntitiesOfClass(Monster.class, area)) {
+		for (Monster mob : monsters) {
 			if (!ShieldGeometry.isInside(state.shape, center, radius, mob.position())) {
 				continue;
 			}
@@ -341,14 +377,17 @@ public final class ShieldLogic {
 	/**
 	 * Runs the selected effect's ambient inside behaviour (particles, auras, sounds)
 	 * and its looping ambient sound, modulated by the effect's context profile.
+	 *
+	 * @param nearbyPlayers players found by the tick's combined area scan (D7a); only
+	 * consulted by the CROWD_SCALE context count.
 	 */
-	private static void tickInsideEffect(ServerLevel level, Vec3 center, float radius, ShieldState state, long gameTime) {
+	private static void tickInsideEffect(ServerLevel level, Vec3 center, float radius, ShieldState state, long gameTime, List<Player> nearbyPlayers) {
 		EffectDefinition def = EffectRegistry.get(state.effectId);
 		if (def == null) {
 			return;
 		}
 
-		ContextState ctx = computeContext(level, center, radius, state, def);
+		ContextState ctx = computeContext(level, center, radius, state, def, nearbyPlayers);
 		InsideEffectBehavior behavior = InsideEffectBehavior.get(def.insideBehaviorId());
 		if (behavior != null) {
 			behavior.tick(level, center, radius, state.shape, def, gameTime, ctx);
@@ -388,12 +427,15 @@ public final class ShieldLogic {
 	 * set a color override, the computed state is wrapped with it so every behavior's
 	 * {@code pickColor} call resolves to the override pair.
 	 */
-	private static ContextState computeContext(ServerLevel level, Vec3 center, float radius, ShieldState state, EffectDefinition def) {
+	private static ContextState computeContext(ServerLevel level, Vec3 center, float radius, ShieldState state, EffectDefinition def, List<Player> nearbyPlayers) {
 		float healthFrac = state.maxHealth > 0.0F ? state.health / state.maxHealth : 0.0F;
 		int playersInside = 0;
 		if (def.context() == ContextProfile.CROWD_SCALE) {
-			AABB box = AABB.ofSize(center, radius * 2.0, radius * 2.0, radius * 2.0);
-			for (Player player : level.getEntitiesOfClass(Player.class, box)) {
+			// D7a: fed from the tick's single combined scan instead of a dedicated
+			// radius*2-box scan. That box was a subset of the combined 2r+8 area, and
+			// every shape is a subset of the radius-r ball (see ShieldGeometry), so
+			// the isInside filter yields the exact same count.
+			for (Player player : nearbyPlayers) {
 				if (ShieldGeometry.isInside(state.shape, center, radius, player.position())) {
 					playersInside++;
 				}
@@ -424,7 +466,7 @@ public final class ShieldLogic {
 		level.playSound(null, center.x, center.y, center.z, sound, SoundSource.AMBIENT, volume, def.ambientPitch());
 	}
 
-	private static boolean interceptProjectiles(ServerLevel level, BlockPos pos, Vec3 center, double radius, ShieldState state, AABB area, long breakCooldownTicks, BubbleShieldBlockEntity self) {
+	private static boolean interceptProjectiles(ServerLevel level, BlockPos pos, Vec3 center, double radius, ShieldState state, List<Projectile> projectiles, long breakCooldownTicks, BubbleShieldBlockEntity self) {
 		boolean changed = false;
 
 		// The boundary shrinks as hits land, so it is recomputed after every applied
@@ -432,7 +474,7 @@ public final class ShieldLogic {
 		// POST-shrink radius, not the stale one cached before the loop (a projectile
 		// now sitting between the old and the new boundary is no longer crossing in).
 		double boundary = radius;
-		for (Projectile projectile : level.getEntitiesOfClass(Projectile.class, area)) {
+		for (Projectile projectile : projectiles) {
 			if (!state.active) {
 				break;
 			}
@@ -502,7 +544,10 @@ public final class ShieldLogic {
 			// Partners take their share through applyShieldDamage (their own tier's
 			// break cooldown, break sound and criteria); the hit shield keeps the local
 			// applyDamage path so this loop's state/broke handling stays authoritative.
-			List<BubbleShieldBlockEntity> linked = ShieldLinking.findLinked(self, ServerNet.loadedShields(level));
+			// D7b: linkedShields memoizes the findLinked resolution per shield tick, so
+			// a same-tick volley resolves the partner set ONCE (first hit) instead of
+			// re-running findLinked + a LOADED_SHIELDS copy per intercepted projectile.
+			List<BubbleShieldBlockEntity> linked = self.linkedShields(level);
 			boolean broke;
 			if (linked.size() > 1) {
 				// A real damage split across resonance-linked shields awards shields_linked
