@@ -57,7 +57,10 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 	public static final int DATA_WHITELIST_COUNT = 15;
 	/** Shield strength percent from the {@code bubbleshield:strength} gamerule (10..500). */
 	public static final int DATA_STRENGTH_PERCENT = 16;
-	/** Threats currently engaging the shield; constant 0 until a later WP fills it. */
+	/**
+	 * Threats currently engaging the shield (B6): non-whitelisted players plus
+	 * hostile monsters within radius + 8, censused once per second while active.
+	 */
 	public static final int DATA_THREAT_COUNT = 17;
 	public static final int DATA_COUNT = 18;
 
@@ -199,7 +202,7 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 		return this.data.get(DATA_STRENGTH_PERCENT);
 	}
 
-	/** @return the synced threat count (constant 0 for now). */
+	/** @return the synced threat count (see {@link #DATA_THREAT_COUNT}). */
 	public int threatCount() {
 		return this.data.get(DATA_THREAT_COUNT);
 	}

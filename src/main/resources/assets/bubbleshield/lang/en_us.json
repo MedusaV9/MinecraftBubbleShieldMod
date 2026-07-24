@@ -67,6 +67,7 @@
   "gui.bubbleshield.color.title": "Shield Color",
   "gui.bubbleshield.color.default": "Effect default",
   "gui.bubbleshield.color.note": "Recolors the bubble, HUD bar, particles and boss bar. The in-bubble screen effect keeps the effect's own colors.",
+  "gui.bubbleshield.bossbar.alarm": " — UNDER ATTACK!",
   "command.bubbleshield.list.header": "Shield effects (page %s/%s):",
   "command.bubbleshield.list.entry": "%s: %s",
   "command.bubbleshield.info.header": "Effect %s: %s",

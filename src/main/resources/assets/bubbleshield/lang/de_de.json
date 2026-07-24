@@ -67,6 +67,7 @@
   "gui.bubbleshield.color.title": "Schildfarbe",
   "gui.bubbleshield.color.default": "Effekt-Standard",
   "gui.bubbleshield.color.note": "Färbt Blase, HUD-Leiste, Partikel und Bossleiste um. Der Bildschirmeffekt in der Blase behält die eigenen Farben des Effekts.",
+  "gui.bubbleshield.bossbar.alarm": " — WIRD ANGEGRIFFEN!",
   "command.bubbleshield.list.header": "Schild-Effekte (Seite %s/%s):",
   "command.bubbleshield.list.entry": "%s: %s",
   "command.bubbleshield.info.header": "Effekt %s: %s",

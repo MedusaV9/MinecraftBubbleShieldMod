@@ -1,7 +1,9 @@
 package com.bubbleshield.shield;
 
+import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -9,6 +11,7 @@ import java.util.UUID;
 
 import com.bubbleshield.effect.EffectRegistry;
 import com.mojang.serialization.Codec;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
 
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.util.StringUtil;
@@ -57,6 +60,25 @@ public class ShieldState {
 	 * value that later arithmetic (top-ups, comparator math) could overflow.
 	 */
 	public static final int MAX_LOADED_FUEL_SECONDS = 100000;
+	/** B6 threat log: at most this many entries are kept (ring buffer, oldest dropped). */
+	public static final int THREAT_LOG_MAX = 8;
+	/** B6 threat log: attacker names are hard-capped at vanilla's 16-char player-name limit. */
+	public static final int MAX_ATTACKER_NAME_LENGTH = 16;
+
+	/**
+	 * One B6 threat-log entry: the sanitized name of a projectile shooter whose shot
+	 * this shield intercepted, the POST-DR damage the shield actually took from that
+	 * hit (the linked-split share when resonance-linked), and the game time of the
+	 * interception. Persisted via {@link #CODEC}; a later WP exposes the log through
+	 * a command — for now it is only stored and readable via {@link #threatLog()}.
+	 */
+	public record ThreatLogEntry(String attackerName, float damage, long gameTime) {
+		public static final Codec<ThreatLogEntry> CODEC = RecordCodecBuilder.create(instance -> instance.group(
+				Codec.STRING.fieldOf("name").forGetter(ThreatLogEntry::attackerName),
+				Codec.FLOAT.fieldOf("damage").forGetter(ThreatLogEntry::damage),
+				Codec.LONG.fieldOf("game_time").forGetter(ThreatLogEntry::gameTime)
+		).apply(instance, ThreatLogEntry::new));
+	}
 
 	public boolean active;
 	public int effectId;
@@ -115,8 +137,66 @@ public class ShieldState {
 	 * fire exactly once. Defaults to true (nothing to announce).
 	 */
 	public boolean readyAnnounced = true;
+	/**
+	 * B6 siege alarm: game time until which the shield counts as "alarmed" — set to
+	 * {@code gameTime + }{@link ShieldLogic#ALARM_WINDOW_TICKS} by
+	 * {@link ShieldLogic#triggerAlarm}. While alarmed the comparator output is
+	 * overridden to 15 and the boss bar name carries the UNDER ATTACK suffix.
+	 * 0 means "never alarmed". Persisted (clamped &ge; 0 on load; the block entity
+	 * additionally caps a tampered far-future value against the level clock on the
+	 * first tick after load, same pattern as cooldown_until).
+	 */
+	public long alarmUntilGameTime;
+	/** B6 threat log ring buffer (newest last); see {@link ThreatLogEntry}. */
+	private final ArrayDeque<ThreatLogEntry> threatLog = new ArrayDeque<>();
 
 	private static final Codec<Map<String, UUID>> NAME_TO_UUID_CODEC = Codec.unboundedMap(Codec.STRING, UUIDUtil.CODEC);
+
+	/** @return true while the B6 siege alarm window is open at the given game time. */
+	public boolean isAlarmed(long gameTime) {
+		return gameTime < this.alarmUntilGameTime;
+	}
+
+	/**
+	 * Appends one B6 threat-log entry (sanitizing every field), dropping the oldest
+	 * entry beyond {@link #THREAT_LOG_MAX}. Applied identically on the live append
+	 * path (projectile interception) and on NBT load, so edited NBT can never park
+	 * an oversized/poisoned entry that a later command exposure would render.
+	 */
+	public void recordThreat(String attackerName, float damage, long gameTime) {
+		String name = sanitizeAttackerName(attackerName);
+		if (name.isEmpty()) {
+			return;
+		}
+
+		this.threatLog.addLast(new ThreatLogEntry(
+				name,
+				sanitizeLoadedFloat(damage, 0.0F, Float.MAX_VALUE, 0.0F),
+				Math.max(0L, gameTime)));
+		while (this.threatLog.size() > THREAT_LOG_MAX) {
+			this.threatLog.removeFirst();
+		}
+	}
+
+	/** An immutable snapshot of the B6 threat log, oldest entry first (at most {@link #THREAT_LOG_MAX}). */
+	public List<ThreatLogEntry> threatLog() {
+		return List.copyOf(this.threatLog);
+	}
+
+	/**
+	 * Sanitizes a threat-log attacker name: control/formatting characters stripped,
+	 * trimmed, capped at {@link #MAX_ATTACKER_NAME_LENGTH} (the vanilla player-name
+	 * limit). Same spirit as {@link #sanitizeName}; may return an empty string,
+	 * which {@link #recordThreat} treats as "no resolvable attacker" and drops.
+	 */
+	public static String sanitizeAttackerName(String raw) {
+		String name = StringUtil.filterText(raw).trim();
+		if (name.length() > MAX_ATTACKER_NAME_LENGTH) {
+			name = name.substring(0, MAX_ATTACKER_NAME_LENGTH).trim();
+		}
+
+		return name;
+	}
 
 	/**
 	 * Sanitizes a custom shield name: control/formatting characters are stripped
@@ -208,6 +288,12 @@ public class ShieldState {
 		output.putLong("last_hit_game_time", this.lastHitGameTime);
 		output.putFloat("absorbed_total", this.absorbedTotal);
 		output.putBoolean("ready_announced", this.readyAnnounced);
+		output.putLong("alarm_until", this.alarmUntilGameTime);
+
+		ValueOutput.TypedOutputList<ThreatLogEntry> threats = output.list("threat_log", ThreatLogEntry.CODEC);
+		for (ThreatLogEntry entry : this.threatLog) {
+			threats.add(entry);
+		}
 	}
 
 	public void load(ValueInput input) {
@@ -289,5 +375,17 @@ public class ShieldState {
 		this.lastHitGameTime = Math.max(0L, input.getLongOr("last_hit_game_time", 0L));
 		this.absorbedTotal = sanitizeLoadedFloat(input.getFloatOr("absorbed_total", 0.0F), 0.0F, Float.MAX_VALUE, 0.0F);
 		this.readyAnnounced = input.getBooleanOr("ready_announced", true);
+		// Clamp >= 0 here; the block entity caps a tampered far-future value against
+		// the level clock on the first tick after load (like cooldown_until above).
+		this.alarmUntilGameTime = Math.max(0L, input.getLongOr("alarm_until", 0L));
+
+		// Threat log hardening: recordThreat re-sanitizes every field (name filter +
+		// 16-char cap, damage NaN/negative clamp, game time >= 0) and the ring buffer
+		// keeps only the LAST (most recent) THREAT_LOG_MAX entries, so an oversized
+		// or poisoned list edited into the NBT can never survive the load.
+		this.threatLog.clear();
+		for (ThreatLogEntry entry : input.listOrEmpty("threat_log", ThreatLogEntry.CODEC)) {
+			this.recordThreat(entry.attackerName(), entry.damage(), entry.gameTime());
+		}
 	}
 }

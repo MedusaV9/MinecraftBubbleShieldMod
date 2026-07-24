@@ -122,6 +122,11 @@ public class BubbleShieldBlock extends BaseEntityBlock {
 	/**
 	 * Comparator output: while active, the shield's health fraction on a 1..15 scale;
 	 * while inactive, the stored fuel (1 signal step per 200 fuel-seconds, capped at 15).
+	 * B6: while the siege-alarm window is open (100 ticks after an alarm EVENT —
+	 * a real projectile interception or the threat count's 0-to-positive edge,
+	 * never direct {@code applyShieldDamage}), the output is overridden to
+	 * full-scale 15 regardless of health/fuel, so a comparator line can drive a
+	 * base-wide alert.
 	 */
 	@Override
 	protected int getAnalogOutputSignal(BlockState state, Level level, BlockPos pos, Direction direction) {
@@ -130,6 +135,10 @@ public class BubbleShieldBlock extends BaseEntityBlock {
 		}
 
 		ShieldState shield = blockEntity.getShieldState();
+		if (shield.isAlarmed(level.getGameTime())) {
+			return 15;
+		}
+
 		if (shield.active) {
 			return Math.max(1, Math.round(15.0F * shield.health / shield.maxHealth));
 		}

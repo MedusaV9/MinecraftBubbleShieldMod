@@ -27,11 +27,14 @@ import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityReference;
+import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
+import net.minecraft.world.entity.boss.wither.WitherBoss;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.entity.projectile.ProjectileDeflection;
 import net.minecraft.world.entity.projectile.ShulkerBullet;
+import net.minecraft.world.entity.projectile.arrow.AbstractArrow;
 import net.minecraft.world.entity.projectile.arrow.ThrownTrident;
 import net.minecraft.world.entity.projectile.hurtingprojectile.AbstractHurtingProjectile;
 import net.minecraft.world.entity.projectile.throwableitemprojectile.ThrowableItemProjectile;
@@ -110,6 +113,32 @@ public final class ShieldLogic {
 	public static final int PULSE_PERIOD_TICKS = 60;
 	/** Magic damage dealt to each monster inside the bubble by a PULSE zap. */
 	public static final float PULSE_DAMAGE = 2.0F;
+	/**
+	 * B3 last stand: below this health fraction the shield fights harder — applied
+	 * damage is halved AFTER the DR cap ({@link #appliedDamage}) and the passive
+	 * drain burns double units ({@link #drainUnits(float, boolean)}). The shrink
+	 * behaviour is unchanged (the {@link #SHRINK_PLATEAU_FRACTION} plateau already
+	 * governs the radius).
+	 */
+	public static final float LAST_STAND_FRACTION = 0.25F;
+	/** B3: while in last stand, a heartbeat cue plays at the projector once per this many ticks. */
+	public static final int LAST_STAND_HEARTBEAT_PERIOD_TICKS = 40;
+	/** B2 arrow riposte: speed (blocks/tick) of the reflected arrow aimed back at its shooter. */
+	public static final double RIPOSTE_SPEED = 0.9;
+	/** B5 break shockwave: magic damage dealt to every hostile monster inside the pre-break radius. */
+	public static final float NOVA_DAMAGE = 8.0F;
+	/** B5 nova knockback: strong outward horizontal scale (cf. the pulse zap's 0.4). */
+	private static final double NOVA_KNOCKBACK_SCALE = 1.2;
+	/** B5 nova knockback: upward component (cf. the pulse zap's 0.1). */
+	private static final double NOVA_KNOCKBACK_UP = 0.5;
+	/** B6 siege alarm: the comparator override / boss-bar suffix window after an alarm event. */
+	public static final int ALARM_WINDOW_TICKS = 100;
+	/** B6 siege alarm: at most one alarm EVENT per this many ticks (15 s). */
+	public static final int ALARM_REARM_TICKS = 300;
+	/** B6: the threat census (DATA_THREAT_COUNT + the 0-to-positive alarm edge) runs once per second. */
+	public static final int THREAT_CENSUS_PERIOD_TICKS = 20;
+	/** B6: threats are counted within {@code currentRadius + THREAT_RING_MARGIN} of the projector. */
+	public static final double THREAT_RING_MARGIN = 8.0;
 	/** ECO mode caps the current radius at this fraction of the normal value. */
 	public static final float ECO_RADIUS_FACTOR = 0.75F;
 	/** An active shield with cycleEffect enabled re-rolls its effect once per this many ticks. */
@@ -168,12 +197,24 @@ public final class ShieldLogic {
 	 * appliedDamage(effective, tier, platingDr, lastStand)}.
 	 *
 	 * @param platingDr additional plating damage resistance in [0, 1); {@link #PLATING_DR} or 0.
-	 * @param lastStand halves the applied damage when true; always false until a later WP.
+	 * @param lastStand halves the applied damage when true; wired from
+	 * {@link #isLastStand} (evaluated against the health BEFORE the hit) at every
+	 * call site (B3).
 	 */
 	public static float appliedDamage(float raw, int tier, float platingDr, boolean lastStand) {
 		float tierDr = TIER_DR_BY_TIER[Math.clamp(tier, 0, TIER_DR_BY_TIER.length - 1)];
 		float combinedDr = Math.min(MAX_COMBINED_DR, 1.0F - (1.0F - tierDr) * (1.0F - platingDr));
 		return raw * (1.0F - combinedDr) * (lastStand ? 0.5F : 1.0F);
+	}
+
+	/**
+	 * B3 last stand: true while the shield's health fraction is strictly below
+	 * {@link #LAST_STAND_FRACTION} (25%). Damage call sites evaluate this BEFORE
+	 * applying the hit, so the hit that drops the shield below the threshold is
+	 * itself still full-priced.
+	 */
+	public static boolean isLastStand(ShieldState state) {
+		return state.maxHealth > 0.0F && state.health / state.maxHealth < LAST_STAND_FRACTION;
 	}
 
 	/**
@@ -205,6 +246,17 @@ public final class ShieldLogic {
 	 */
 	public static int drainUnits(float targetRadius) {
 		return Math.max(1, Math.round(targetRadius * 2.0F / 50.0F));
+	}
+
+	/**
+	 * B3 last-stand variant of {@link #drainUnits(float)}: while the shield is in
+	 * last stand ({@link #isLastStand}) every passive-drain event burns DOUBLE the
+	 * diameter-scaled units. The drain interval is unchanged; only the per-event
+	 * cost doubles. The menu's baseline drain readout intentionally keeps the
+	 * un-doubled rate (it shows the steady, healthy-shield baseline).
+	 */
+	public static int drainUnits(float targetRadius, boolean lastStand) {
+		return drainUnits(targetRadius) * (lastStand ? 2 : 1);
 	}
 
 	/**
@@ -341,7 +393,8 @@ public final class ShieldLogic {
 		state.drainAccum++;
 		if (state.drainAccum >= drainIntervalTicks(state.mode == ShieldMode.ECO, capacitor)) {
 			state.drainAccum = 0;
-			state.fuelSeconds -= drainUnits(state.targetRadius);
+			// B3: a last-stand shield burns double units per drain event.
+			state.fuelSeconds -= drainUnits(state.targetRadius, isLastStand(state));
 			changed = true;
 			if (state.fuelSeconds <= 0) {
 				state.fuelSeconds = 0;
@@ -397,23 +450,36 @@ public final class ShieldLogic {
 			changed = true;
 		}
 
+		// B3 heartbeat cue: a last-stand shield thumps at the projector every
+		// 40 ticks of active runtime, radius-scaled like the ambient sounds
+		// (volume > 1 extends the audible range ~16 * volume blocks).
+		if (isLastStand(state) && gameTime % LAST_STAND_HEARTBEAT_PERIOD_TICKS == 0L) {
+			float volume = Mth.clamp(currentRadius(state) / 12.0F, 0.6F, 4.0F);
+			level.playSound(null, pos, SoundEvents.WARDEN_HEARTBEAT, SoundSource.BLOCKS, volume, 1.0F);
+		}
+
 		Vec3 center = Vec3.atCenterOf(pos);
 		double radius = currentRadius(state);
-		double areaSize = 2.0 * radius + 8.0;
+		// Half-extent radius + THREAT_RING_MARGIN: the ONE combined scan must also
+		// cover the B6 threat census ring (radius + 8), which is wider than the
+		// legacy 2r + 8 box (half-extent r + 4). Every geometry-filtered consumer
+		// (crossedInto, isInside) is unaffected by the larger superset box.
+		double areaSize = 2.0 * (radius + THREAT_RING_MARGIN);
 		AABB area = AABB.ofSize(center, areaSize, areaSize, areaSize);
 
 		// D7a: ONE entity pass over the search AABB per shield tick, partitioned into
 		// the per-consumer lists. This replaces the up-to-four separate scans of the
 		// same volume the consumers below used to run (projectile interception, PULSE
-		// monsters, the player barrier and the CROWD_SCALE context count). Semantics
-		// are unchanged: getEntitiesOfClass(clazz, box) is getEntities(typeTest, box,
-		// EntitySelector.NO_SPECTATORS) and getEntities(null, box) applies the exact
-		// same NO_SPECTATORS default, so instanceof partitioning yields the same sets
-		// (Projectile/Player/Monster are hierarchy-disjoint classes). Entities do not
-		// move within this shield's tick, so one snapshot serves every consumer; the
-		// per-consumer geometry filters (crossedInto, isInside) still run per use
-		// against the CURRENT radius. The CROWD_SCALE count used a radius*2 box, a
-		// subset of this area; its isInside filter keeps the result identical.
+		// monsters, the player/mob barrier, the CROWD_SCALE context count and the B6
+		// threat census). Semantics are unchanged: getEntitiesOfClass(clazz, box) is
+		// getEntities(typeTest, box, EntitySelector.NO_SPECTATORS) and
+		// getEntities(null, box) applies the exact same NO_SPECTATORS default, so
+		// instanceof partitioning yields the same sets (Projectile/Player/Monster are
+		// hierarchy-disjoint classes). Entities do not move within this shield's
+		// tick, so one snapshot serves every consumer; the per-consumer geometry
+		// filters (crossedInto, isInside) still run per use against the CURRENT
+		// radius. The CROWD_SCALE count used a radius*2 box, a subset of this area;
+		// its isInside filter keeps the result identical.
 		List<Projectile> projectiles = new ArrayList<>();
 		List<Player> players = new ArrayList<>();
 		List<Monster> monsters = new ArrayList<>();
@@ -424,6 +490,20 @@ public final class ShieldLogic {
 				players.add(player);
 			} else if (entity instanceof Monster monster) {
 				monsters.add(monster);
+			}
+		}
+
+		// B6 threat census (once per second, fed from the combined scan — no extra
+		// scan): non-whitelisted players plus hostile monsters within radius + 8 of
+		// the center (plain distance, deliberately NOT shape-aware: a sapper digging
+		// under a dome is still a threat). Exposed via DATA_THREAT_COUNT; a
+		// 0-to-positive edge fires the siege alarm (rate-limited in triggerAlarm).
+		if (gameTime % THREAT_CENSUS_PERIOD_TICKS == 0L) {
+			int threats = countThreats(center, radius + THREAT_RING_MARGIN, state, players, monsters);
+			int previous = self.threatCount();
+			self.setThreatCount(threats);
+			if (previous == 0 && threats > 0 && triggerAlarm(level, pos, state, gameTime, radius)) {
+				changed = true;
 			}
 		}
 
@@ -451,10 +531,80 @@ public final class ShieldLogic {
 				}
 			}
 
+			// A5 hostile-mob barrier, from the same combined-scan partition (no
+			// extra scan; the push itself allocates no more than the player path).
+			// Mode matrix: DEFENSE expels any monster inside (like the player
+			// barrier); PULSE only blocks NEW entry at the boundary — monsters
+			// already inside are the pulse zap's prey, not expelled; ECO repels
+			// nothing (efficiency trade-off). Bosses are exempt (see
+			// isBarrierExemptBoss). No 'changed': the barrier moves mobs, never
+			// shield state.
+			if (mobBarrierBlocksEntry(state.mode)) {
+				boolean expelInside = mobBarrierExpelsInside(state.mode);
+				for (Monster monster : monsters) {
+					applyMobBarrier(center, barrierRadius, state, monster, expelInside);
+				}
+			}
+
 			tickInsideEffect(level, center, currentRadius(state), state, gameTime, players);
 		}
 
 		return changed;
+	}
+
+	/**
+	 * B6: counts the threats currently engaging the shield — non-whitelisted,
+	 * non-owner players ({@link #shouldBlock}) plus ALL hostile monsters (bosses
+	 * included; the barrier's teleport exemption does not make a Wither less of a
+	 * threat) — within {@code ringRadius} of the center. Plain center distance,
+	 * not shape-aware. Pure over the given scan partitions.
+	 */
+	public static int countThreats(Vec3 center, double ringRadius, ShieldState state, List<Player> players, List<Monster> monsters) {
+		int threats = 0;
+		for (Player player : players) {
+			if (player.position().distanceTo(center) > ringRadius) {
+				continue;
+			}
+
+			UUID uuid = player.getUUID();
+			if (shouldBlock(state, player.getGameProfile().name(), uuid, uuid.equals(state.ownerUuid))) {
+				threats++;
+			}
+		}
+
+		for (Monster monster : monsters) {
+			if (monster.position().distanceTo(center) <= ringRadius) {
+				threats++;
+			}
+		}
+
+		return threats;
+	}
+
+	/**
+	 * B6 siege alarm event: fires when no alarm happened within the last
+	 * {@link #ALARM_REARM_TICKS} (15 s) — plays {@code BELL_RESONATE} at the
+	 * projector (radius-scaled volume like the heartbeat) and opens the
+	 * {@link #ALARM_WINDOW_TICKS} window during which the comparator reads 15 and
+	 * the boss bar carries the UNDER ATTACK suffix. Triggered ONLY by a real
+	 * projectile interception or by the threat count's 0-to-positive edge —
+	 * deliberately NOT by the direct {@code applyShieldDamage} path (linked-split
+	 * shares, commands, tests), whose comparator behaviour stays purely
+	 * health-based.
+	 *
+	 * @return true if the alarm actually fired (state changed).
+	 */
+	public static boolean triggerAlarm(ServerLevel level, BlockPos pos, ShieldState state, long gameTime, double radius) {
+		// The last alarm EVENT was at (alarmUntilGameTime - window); 0 = never.
+		if (state.alarmUntilGameTime != 0L
+				&& gameTime < state.alarmUntilGameTime - ALARM_WINDOW_TICKS + ALARM_REARM_TICKS) {
+			return false;
+		}
+
+		state.alarmUntilGameTime = gameTime + ALARM_WINDOW_TICKS;
+		float volume = Mth.clamp((float) radius / 12.0F, 0.6F, 4.0F);
+		level.playSound(null, pos, SoundEvents.BELL_RESONATE, SoundSource.BLOCKS, volume, 1.0F);
+		return true;
 	}
 
 	/**
@@ -477,12 +627,8 @@ public final class ShieldLogic {
 			}
 
 			// Small outward knockback, mostly horizontal (same direction convention as
-			// the player barrier). hurtMarked forces the velocity to replicate to clients.
-			Vec3 direction = mob.position().subtract(center);
-			Vec3 horizontal = new Vec3(direction.x, 0.0, direction.z);
-			horizontal = horizontal.lengthSqr() < 1.0E-6 ? new Vec3(1.0, 0.0, 0.0) : horizontal.normalize();
-			mob.setDeltaMovement(horizontal.scale(0.4).add(0.0, 0.1, 0.0));
-			mob.hurtMarked = true;
+			// the player barrier).
+			knockbackOutward(mob, center, 0.4, 0.1);
 
 			// overrideLimiter=true lifts the 32-block send limit on large bubbles.
 			level.sendParticles(ParticleTypes.CRIT, true, false, mob.getX(), mob.getY(0.5), mob.getZ(), 12, 0.3, 0.3, 0.3, 0.1);
@@ -497,6 +643,58 @@ public final class ShieldLogic {
 		}
 
 		return hitAny;
+	}
+
+	/**
+	 * Mostly-horizontal outward knockback away from the shield center (same
+	 * direction convention as the player barrier), shared by the PULSE zap (0.4 /
+	 * 0.1) and the B5 break nova (strong: 1.2 / 0.5). {@code hurtMarked} forces the
+	 * velocity to replicate to clients.
+	 */
+	private static void knockbackOutward(Monster mob, Vec3 center, double horizontalScale, double up) {
+		Vec3 direction = mob.position().subtract(center);
+		Vec3 horizontal = new Vec3(direction.x, 0.0, direction.z);
+		horizontal = horizontal.lengthSqr() < 1.0E-6 ? new Vec3(1.0, 0.0, 0.0) : horizontal.normalize();
+		mob.setDeltaMovement(horizontal.scale(horizontalScale).add(0.0, up, 0.0));
+		mob.hurtMarked = true;
+	}
+
+	/**
+	 * B5: the ONE shared shield-break routine — both break paths (projectile
+	 * interception inside {@link #serverTick} and the direct
+	 * {@code BubbleShieldBlockEntity.applyShieldDamage} path, which linked-split
+	 * partner shares also take) route through here, so the break sound, the
+	 * {@code shield_broken} criterion and the shockwave nova can never drift apart.
+	 *
+	 * <p>The nova: every hostile {@link Monster} inside the PRE-break current
+	 * radius (shape-aware, like the pulse zap) takes {@link #NOVA_DAMAGE} magic
+	 * damage plus a strong outward knockback, and {@code RESPAWN_ANCHOR_DEPLETE}
+	 * (1.2, 0.7) marks the collapse. Players and pets are unaffected by
+	 * construction (only Monsters are targeted); bosses are hit too — damage,
+	 * unlike the barrier's teleport, is boss-safe. Plain {@code magic()} damage
+	 * (unattributed) keeps the nova deterministic whether or not the owner is
+	 * online. The one-shot entity scan here is fine: a break happens at most once
+	 * per activation, not per tick.
+	 */
+	public static void onShieldBreak(ServerLevel level, BlockPos pos, ShieldState state, double preBreakRadius) {
+		level.playSound(null, pos, SoundEvents.SHIELD_BREAK.value(), SoundSource.BLOCKS, 1.0F, 1.0F);
+		ModCriteria.fireShieldBroken(level, state.ownerUuid);
+		if (preBreakRadius <= 0.0) {
+			return;
+		}
+
+		Vec3 center = Vec3.atCenterOf(pos);
+		AABB area = AABB.ofSize(center, 2.0 * preBreakRadius, 2.0 * preBreakRadius, 2.0 * preBreakRadius);
+		for (Monster mob : level.getEntitiesOfClass(Monster.class, area)) {
+			if (!ShieldGeometry.isInside(state.shape, center, preBreakRadius, mob.position())) {
+				continue;
+			}
+
+			mob.hurtServer(level, level.damageSources().magic(), NOVA_DAMAGE);
+			knockbackOutward(mob, center, NOVA_KNOCKBACK_SCALE, NOVA_KNOCKBACK_UP);
+		}
+
+		level.playSound(null, pos, SoundEvents.RESPAWN_ANCHOR_DEPLETE.value(), SoundSource.BLOCKS, 1.2F, 0.7F);
 	}
 
 	/**
@@ -613,6 +811,7 @@ public final class ShieldLogic {
 	private static boolean interceptProjectiles(ServerLevel level, BlockPos pos, Vec3 center, double radius, ShieldState state, List<Projectile> projectiles, int tier, BubbleShieldBlockEntity self) {
 		boolean changed = false;
 		long breakCooldownTicks = breakCooldownTicks(tier);
+		long gameTime = level.getGameTime();
 
 		// The boundary shrinks as hits land, so it is recomputed after every applied
 		// hit below: a later projectile in the same tick's volley must test the
@@ -666,8 +865,15 @@ public final class ShieldLogic {
 			} else if (projectile instanceof ThrowableItemProjectile || projectile instanceof ShulkerBullet) {
 				projectile.discard();
 				damage = THROWN_DAMAGE;
+			} else if (projectile instanceof AbstractArrow arrow && tier >= 1 && owner != null) {
+				// B2 riposte (tier >= 1, resolvable shooter): thrown back at the
+				// shooter instead of absorbed. Ownerless arrows (dispensers) and
+				// tier 0 keep the plain absorb below.
+				riposteArrow(arrow, owner, state);
+				damage = PROJECTILE_DAMAGE;
 			} else {
-				// AbstractArrow (non-trident) and any other projectile: absorb.
+				// AbstractArrow at tier 0 / without a shooter, and any other
+				// projectile: absorb.
 				projectile.discard();
 				damage = PROJECTILE_DAMAGE;
 			}
@@ -699,8 +905,13 @@ public final class ShieldLogic {
 			// D7b: linkedShields memoizes the findLinked resolution per shield tick, so
 			// a same-tick volley resolves the partner set ONCE (first hit) instead of
 			// re-running findLinked + a LOADED_SHIELDS copy per intercepted projectile.
+			// B3: last stand is evaluated against the health BEFORE this hit, and B5
+			// needs the PRE-break radius for the nova, so both snapshot here.
 			List<BubbleShieldBlockEntity> linked = self.linkedShields(level);
+			boolean lastStand = isLastStand(state);
+			double preHitRadius = boundary;
 			boolean broke;
+			float applied;
 			if (linked.size() > 1) {
 				// A real damage split across resonance-linked shields awards shields_linked
 				// to the (online) owner; the criterion is idempotent, so re-firing on later
@@ -708,15 +919,26 @@ public final class ShieldLogic {
 				ModCriteria.fireShieldsLinked(level, state.ownerUuid);
 
 				float split = damage / linked.size();
-				broke = applyDamage(state, appliedDamage(split, tier, self.platingDr(), false), level.getGameTime(), breakCooldownTicks);
+				applied = appliedDamage(split, tier, self.platingDr(), lastStand);
+				broke = applyDamage(state, applied, gameTime, breakCooldownTicks);
 				for (BubbleShieldBlockEntity partner : linked) {
 					if (partner != self) {
 						partner.applyShieldDamage(split);
 					}
 				}
 			} else {
-				broke = applyDamage(state, appliedDamage(damage, tier, self.platingDr(), false), level.getGameTime(), breakCooldownTicks);
+				applied = appliedDamage(damage, tier, self.platingDr(), lastStand);
+				broke = applyDamage(state, applied, gameTime, breakCooldownTicks);
 			}
+
+			// B6: every interception with a resolvable shooter lands in the threat
+			// log (this shield's own post-DR share), and every interception is an
+			// alarm event (rate-limited inside triggerAlarm).
+			if (owner != null) {
+				state.recordThreat(owner.getName().getString(), applied, gameTime);
+			}
+
+			triggerAlarm(level, pos, state, gameTime, preHitRadius);
 
 			changed = true;
 			// The hit shrank the shield: later projectiles in this same volley must
@@ -728,12 +950,42 @@ public final class ShieldLogic {
 			level.sendParticles(ParticleTypes.CRIT, true, false, current.x, current.y, current.z, 20, 0.3, 0.3, 0.3, 0.1);
 			level.playSound(null, pos, SoundEvents.SHIELD_BLOCK.value(), SoundSource.BLOCKS, 1.0F, 1.0F);
 			if (broke) {
-				level.playSound(null, pos, SoundEvents.SHIELD_BREAK.value(), SoundSource.BLOCKS, 1.0F, 1.0F);
-				ModCriteria.fireShieldBroken(level, state.ownerUuid);
+				onShieldBreak(level, pos, state, preHitRadius);
 			}
 		}
 
 		return changed;
+	}
+
+	/**
+	 * B2 arrow riposte (tier &ge; 1): the intercepted arrow is thrown back at its
+	 * shooter instead of absorbed. Ownership decision: vanilla arrows can never
+	 * hurt their own owner while inside its collision range, and keeping the
+	 * shooter as owner would make the riposte's damage attribution self-inflicted
+	 * anyway — so the reflected arrow is RE-OWNED to the SHIELD's owner (a plain
+	 * UUID {@link EntityReference}, resolvable even while the owner is offline):
+	 * the original shooter becomes a fully valid target and any kill credit goes
+	 * to the shield owner. Pickup is disallowed so the riposte is not a free
+	 * arrow fountain at the shooter's feet. A refused deflect falls back to plain
+	 * absorption (discard), like the trident path; the shield takes the same
+	 * post-DR damage either way.
+	 */
+	private static void riposteArrow(AbstractArrow arrow, Entity shooter, ShieldState state) {
+		EntityReference<Entity> shieldOwner = state.ownerUuid != null ? EntityReference.of(state.ownerUuid) : null;
+		if (!arrow.deflect(ProjectileDeflection.REVERSE, null, shieldOwner, false)) {
+			arrow.discard();
+			return;
+		}
+
+		arrow.pickup = AbstractArrow.Pickup.DISALLOWED;
+		// REVERSE only flips the momentum (with jitter); re-aim straight at the
+		// shooter with a modest, deterministic speed.
+		Vec3 toShooter = shooter.getEyePosition().subtract(arrow.position());
+		if (toShooter.lengthSqr() > 1.0E-6) {
+			arrow.setDeltaMovement(toShooter.normalize().scale(RIPOSTE_SPEED));
+			// Forces the velocity to replicate to clients (same as the pulse knockback).
+			arrow.hurtMarked = true;
+		}
 	}
 
 	/**
@@ -823,6 +1075,114 @@ public final class ShieldLogic {
 		for (Player player : level.getEntitiesOfClass(Player.class, area)) {
 			if (applyPlayerBarrier(center, radius, state, player)) {
 				GuardEnforcer.apply(level, center, state, player);
+				pushed = true;
+			}
+		}
+
+		return pushed;
+	}
+
+	/**
+	 * A5 mob-barrier mode matrix, entry half: DEFENSE and PULSE block hostile
+	 * monsters at the boundary; ECO deliberately repels nothing (its efficiency
+	 * trade-off, mirroring the suppressed regen and the capped radius).
+	 */
+	public static boolean mobBarrierBlocksEntry(ShieldMode mode) {
+		return mode != ShieldMode.ECO;
+	}
+
+	/**
+	 * A5 mob-barrier mode matrix, inside half: only DEFENSE expels monsters
+	 * already INSIDE (every tick, plus once on activation via
+	 * {@link #expelBlockedMonsters}) — the full player-barrier treatment. PULSE
+	 * deliberately leaves inside monsters where they are: they are the pulse
+	 * zap's prey, and expelling them would make the zap unreachable; its barrier
+	 * only blocks NEW entry (outside-to-inside crossings).
+	 */
+	public static boolean mobBarrierExpelsInside(ShieldMode mode) {
+		return mode == ShieldMode.DEFENSE;
+	}
+
+	/**
+	 * A5: bosses are exempt from the barrier's teleport-expulsion — the wither's
+	 * phase logic and the dragon's multi-part body/flight controller react badly
+	 * to being {@code teleportTo}'d by external code (teleport-fragile), and a
+	 * bubble should not trivially cheese a boss fight anyway. They still take
+	 * pulse-zap and break-nova DAMAGE; only the teleport is skipped. The dragon
+	 * is not a {@link Monster} and never reaches the barrier through the scan
+	 * partition — it is matched here defensively for any direct caller.
+	 */
+	public static boolean isBarrierExemptBoss(Entity entity) {
+		return entity instanceof WitherBoss || entity instanceof EnderDragon;
+	}
+
+	/**
+	 * A5: blocks one hostile monster at the barrier, reusing the player barrier's
+	 * geometry (mostly-horizontal push to {@code radius + PUSHBACK_MARGIN}), its
+	 * collision-safe placement ({@link #findExpulsionSpot}) and its root-vehicle
+	 * handling — and allocating nothing beyond what the player path does. With
+	 * {@code expelInside} (DEFENSE) any monster inside is expelled, however it
+	 * got there; without it (PULSE) only an outside-to-inside CROSSING since the
+	 * previous tick is pushed back, so monsters already inside stay. Mobs have
+	 * no whitelist identity (no owner), so unlike players there is no
+	 * {@link #shouldBlock} exemption — only the boss exemption applies.
+	 *
+	 * @return true if the monster was pushed back.
+	 */
+	public static boolean applyMobBarrier(Vec3 center, double radius, ShieldState state, Monster monster, boolean expelInside) {
+		if (isBarrierExemptBoss(monster)) {
+			return false;
+		}
+
+		Vec3 current = monster.position();
+		if (!ShieldGeometry.isInside(state.shape, center, radius, current)) {
+			return false;
+		}
+
+		if (!expelInside) {
+			// PULSE: block NEW entry only — a mob whose previous position was
+			// already inside (spawned there, or parked no-AI) is left alone.
+			Vec3 prev = new Vec3(monster.xo, monster.yo, monster.zo);
+			if (ShieldGeometry.isInside(state.shape, center, radius, prev)) {
+				return false;
+			}
+		}
+
+		Vec3 direction = current.subtract(center);
+		Vec3 horizontal = new Vec3(direction.x, 0.0, direction.z);
+		horizontal = horizontal.lengthSqr() < 1.0E-6 ? new Vec3(1.0, 0.0, 0.0) : horizontal.normalize();
+		Vec3 target = center.add(horizontal.scale(radius + PUSHBACK_MARGIN));
+
+		Entity mover = monster.getRootVehicle();
+		double targetY = Mth.clamp(mover.getY(), monster.level().getMinY(), monster.level().getMaxY());
+		Vec3 spot = findExpulsionSpot(monster.level(), mover, new Vec3(target.x, targetY, target.z), horizontal);
+		mover.teleportTo(spot.x, spot.y, spot.z);
+		mover.setDeltaMovement(Vec3.ZERO);
+		monster.setDeltaMovement(Vec3.ZERO);
+		return true;
+	}
+
+	/**
+	 * A5: one expulsion pass over all monsters near the projector, used right
+	 * after activation (the monster counterpart of {@link #expelBlockedPlayers}).
+	 * Only DEFENSE expels monsters already inside when the shield rises
+	 * ({@link #mobBarrierExpelsInside}); PULSE and ECO leave them.
+	 *
+	 * @return true if at least one monster was pushed out.
+	 */
+	public static boolean expelBlockedMonsters(ServerLevel level, BlockPos pos, ShieldState state) {
+		if (!mobBarrierExpelsInside(state.mode)) {
+			return false;
+		}
+
+		Vec3 center = Vec3.atCenterOf(pos);
+		double radius = currentRadius(state);
+		double areaSize = 2.0 * radius + 8.0;
+		AABB area = AABB.ofSize(center, areaSize, areaSize, areaSize);
+
+		boolean pushed = false;
+		for (Monster monster : level.getEntitiesOfClass(Monster.class, area)) {
+			if (applyMobBarrier(center, radius, state, monster, true)) {
 				pushed = true;
 			}
 		}

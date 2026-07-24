@@ -134,8 +134,8 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 				case BubbleShieldMenu.DATA_DRAIN_PER_MIN_X10 -> BubbleShieldBlockEntity.this.drainPerMinuteTimes10();
 				case BubbleShieldMenu.DATA_WHITELIST_COUNT -> Mth.clamp(state.whitelistNames.size(), 0, ShieldState.MAX_WHITELIST_SIZE);
 				case BubbleShieldMenu.DATA_STRENGTH_PERCENT -> BubbleShieldBlockEntity.this.strengthPercent();
-				// Placeholder until a later WP counts engaging threats.
-				case BubbleShieldMenu.DATA_THREAT_COUNT -> 0;
+				// B6: the once-per-second threat census (0 while inactive).
+				case BubbleShieldMenu.DATA_THREAT_COUNT -> Mth.clamp(BubbleShieldBlockEntity.this.threatCount, 0, Short.MAX_VALUE);
 				default -> 0;
 			};
 		}
@@ -186,6 +186,24 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	 * active server tick and emptied on deactivation/removal.
 	 */
 	private @Nullable ServerBossEvent bossEvent;
+
+	/**
+	 * B6: the last threat census result (non-whitelisted players + hostile
+	 * monsters within radius + 8; see {@link ShieldLogic#countThreats}), updated
+	 * once per second by the active tick and exposed through
+	 * {@code DATA_THREAT_COUNT}. Transient runtime state, never persisted; reset
+	 * to 0 whenever the shield is not active. The 0-to-positive edge between two
+	 * censuses is one of the two siege-alarm triggers.
+	 */
+	private int threatCount;
+
+	/**
+	 * B6: whether the last {@link #serverTick} observed an OPEN alarm window.
+	 * Only used to refresh the comparator when the window expires — the alarm
+	 * TRIGGER already refreshes through {@link #markUpdated}, but the expiry is
+	 * pure clock passage that no mutation path would otherwise notice.
+	 */
+	private boolean lastAlarmed;
 
 	public BubbleShieldBlockEntity(BlockPos worldPosition, BlockState blockState) {
 		super(ModBlockEntities.BUBBLE_SHIELD_PROJECTOR, worldPosition, blockState);
@@ -384,6 +402,15 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 					this.shieldState.cooldownUntil = maxCooldownUntil;
 					this.markUpdated();
 				}
+
+				// B6: same hardening for alarm_until — a tampered far-future value
+				// would otherwise pin the comparator at 15 (and the boss-bar suffix
+				// on) indefinitely.
+				long maxAlarmUntil = serverLevel.getGameTime() + ShieldLogic.ALARM_WINDOW_TICKS;
+				if (this.shieldState.alarmUntilGameTime > maxAlarmUntil) {
+					this.shieldState.alarmUntilGameTime = maxAlarmUntil;
+					this.markUpdated();
+				}
 			}
 
 			// ShieldLogic flips state.active directly on fuel-out and break-by-damage;
@@ -395,6 +422,22 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 
 			if (wasActive && !this.shieldState.active) {
 				serverLevel.gameEvent(GameEvent.BLOCK_DEACTIVATE, this.worldPosition, GameEvent.Context.of(this.getBlockState()));
+			}
+
+			// B6: the census only runs while active; a stale count must not linger
+			// in the menu's threat slot after any deactivation path.
+			if (!this.shieldState.active) {
+				this.threatCount = 0;
+			}
+
+			// B6: refresh the comparator when the alarm window EXPIRES. The trigger
+			// side already refreshes through markUpdated; the expiry is pure clock
+			// passage that no mutation path would otherwise notice, leaving a stale
+			// 15 on the comparator until the next unrelated update.
+			boolean alarmed = this.shieldState.isAlarmed(serverLevel.getGameTime());
+			if (alarmed != this.lastAlarmed) {
+				this.lastAlarmed = alarmed;
+				serverLevel.updateNeighbourForOutputSignal(this.worldPosition, this.getBlockState().getBlock());
 			}
 
 			// Runs even when the shield logic reported no change: deactivations from any
@@ -536,12 +579,23 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		}
 	}
 
-	/** The boss bar display name: the owner-set custom name, or the effect name when unset. */
+	/**
+	 * The boss bar display name: the owner-set custom name, or the effect name when
+	 * unset. While the B6 siege-alarm window is open, the localized UNDER ATTACK
+	 * suffix is appended; {@code updateBossBar} recomputes this every tick and
+	 * {@link ServerBossEvent#setName} only broadcasts when the computed component
+	 * actually differs (WP2 coalescing pattern), so the suffix appearing/reverting
+	 * costs exactly one packet each.
+	 */
 	private Component bossBarName() {
 		String customName = this.shieldState.customName;
-		return customName.isEmpty()
+		Component base = customName.isEmpty()
 				? Component.translatable(EffectRegistry.get(this.shieldState.effectId).nameKey())
 				: Component.literal(customName);
+		long gameTime = this.level != null ? this.level.getGameTime() : 0L;
+		return this.shieldState.isAlarmed(gameTime)
+				? Component.empty().append(base).append(Component.translatable("gui.bubbleshield.bossbar.alarm"))
+				: base;
 	}
 
 	/**
@@ -594,6 +648,16 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	 */
 	public @Nullable ServerBossEvent getBossEvent() {
 		return this.bossEvent;
+	}
+
+	/** B6: the last threat-census result (0 while inactive); backs {@code DATA_THREAT_COUNT}. */
+	public int threatCount() {
+		return this.threatCount;
+	}
+
+	/** B6: stores a fresh threat-census result; called by {@link ShieldLogic#serverTick} once per second. */
+	public void setThreatCount(int threats) {
+		this.threatCount = threats;
 	}
 
 	/**
@@ -694,9 +758,12 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 			// Only a REAL inactive->active transition is a sculk-audible activation;
 			// re-activating an already-active shield never reaches this branch.
 			this.level.gameEvent(GameEvent.BLOCK_ACTIVATE, this.worldPosition, GameEvent.Context.of(this.getBlockState()));
-			// Expel non-whitelisted players already standing inside the freshly raised barrier.
+			// Expel non-whitelisted players already standing inside the freshly raised
+			// barrier — and, in DEFENSE mode, hostile monsters as well (A5;
+			// expelBlockedMonsters is a no-op for PULSE/ECO).
 			if (this.level instanceof ServerLevel serverLevel) {
 				ShieldLogic.expelBlockedPlayers(serverLevel, this.worldPosition, this.shieldState);
+				ShieldLogic.expelBlockedMonsters(serverLevel, this.worldPosition, this.shieldState);
 				// D5: arm the chunk ticket right on activation (re-armed each tick).
 				this.updateChunkTicket(serverLevel);
 			}
@@ -840,20 +907,27 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	/**
 	 * Applies RAW damage to the shield through the single damage pipeline
 	 * ({@link ShieldLogic#appliedDamage}: this shield's own tier DR, its own plating
-	 * DR when reinforced plating is socketed, future last-stand hook), breaking it
-	 * (deactivate + tier-scaled cooldown) when health is depleted. Linked-split
-	 * shares also arrive here raw: the split happens first, then each receiving
-	 * shield discounts its share by its own DR.
+	 * DR when reinforced plating is socketed, and the B3 last-stand halving
+	 * evaluated against the health BEFORE the hit), breaking it (deactivate +
+	 * tier-scaled cooldown) when health is depleted. Linked-split shares also
+	 * arrive here raw: the split happens first, then each receiving shield
+	 * discounts its share by its own DR. A break routes through the ONE shared
+	 * break routine ({@link ShieldLogic#onShieldBreak}: break sound, criterion,
+	 * B5 nova) like the interception path. This direct path deliberately never
+	 * fires the B6 siege alarm — only real projectile interceptions and the
+	 * threat count's 0-to-positive edge do — so command/test/linked-share damage
+	 * keeps the comparator purely health-based.
 	 */
 	public void applyShieldDamage(float amount) {
 		long gameTime = this.level != null ? this.level.getGameTime() : 0L;
 		boolean wasActive = this.shieldState.active;
 		int tier = this.tier();
-		float applied = ShieldLogic.appliedDamage(amount, tier, this.platingDr(), false);
+		// B5: the nova targets the PRE-break radius; snapshot before the hit.
+		double preBreakRadius = ShieldLogic.currentRadius(this.shieldState);
+		float applied = ShieldLogic.appliedDamage(amount, tier, this.platingDr(), ShieldLogic.isLastStand(this.shieldState));
 		boolean broke = ShieldLogic.applyDamage(this.shieldState, applied, gameTime, ShieldLogic.breakCooldownTicks(tier));
 		if (broke && this.level instanceof ServerLevel serverLevel) {
-			serverLevel.playSound(null, this.worldPosition, SoundEvents.SHIELD_BREAK.value(), SoundSource.BLOCKS, 1.0F, 1.0F);
-			ModCriteria.fireShieldBroken(serverLevel, this.shieldState.ownerUuid);
+			ShieldLogic.onShieldBreak(serverLevel, this.worldPosition, this.shieldState, preBreakRadius);
 			// A break here is a real active->inactive transition and must stay
 			// sculk-audible: this path covers linked-partner damage applied from
 			// ANOTHER shield's tick, which this shield's own serverTick snapshot
