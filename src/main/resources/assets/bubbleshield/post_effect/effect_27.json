@@ -5,7 +5,7 @@
     "passes": [
         {
             "vertex_shader": "minecraft:core/screenquad",
-            "fragment_shader": "bubbleshield:screenfx/tint",
+            "fragment_shader": "bubbleshield:screenfx/sfx_027",
             "inputs": [
                 {
                     "sampler_name": "In",
@@ -14,14 +14,14 @@
             ],
             "output": "swap",
             "uniforms": {
-                "TintConfig": [
+                "FxConfig": [
                     {
                         "name": "Primary",
                         "type": "vec4",
                         "value": [
-                            1.0,
-                            0.8235,
-                            0.302,
+                            0.9608,
+                            0.7725,
+                            0.0941,
                             1.0
                         ]
                     },
@@ -29,16 +29,31 @@
                         "name": "Secondary",
                         "type": "vec4",
                         "value": [
-                            0.7216,
-                            0.5255,
-                            0.0431,
+                            0.5412,
+                            0.4275,
+                            0.0,
                             1.0
                         ]
                     },
                     {
-                        "name": "Intensity",
-                        "type": "float",
-                        "value": 0.4
+                        "name": "ParamsA",
+                        "type": "vec4",
+                        "value": [
+                            0.624,
+                            0.648,
+                            0.0,
+                            0.0
+                        ]
+                    },
+                    {
+                        "name": "ParamsB",
+                        "type": "vec4",
+                        "value": [
+                            0.6869,
+                            0.8505,
+                            0.12,
+                            0.35
+                        ]
                     }
                 ]
             }

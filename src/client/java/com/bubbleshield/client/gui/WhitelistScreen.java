@@ -4,6 +4,7 @@ import java.util.List;
 
 import com.bubbleshield.client.ClientShieldManager;
 import com.bubbleshield.net.ShieldPayloads;
+import com.bubbleshield.shield.ShieldState;
 
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 
@@ -78,6 +79,13 @@ public class WhitelistScreen extends Screen {
 		graphics.text(this.font, this.title, centerX - this.font.width(this.title) / 2, 16, -1, true);
 
 		List<String> names = this.whitelistNames().stream().sorted().toList();
+
+		// E11: the "N/64" occupancy readout under the title, fed from the same
+		// synced replica the list below renders (so the two can never disagree).
+		String count = Component.translatable("gui.bubbleshield.whitelist.count",
+				names.size(), ShieldState.MAX_WHITELIST_SIZE).getString();
+		graphics.text(this.font, count, centerX - this.font.width(count) / 2, 28, -1, true);
+
 		int y = LIST_TOP;
 		for (String name : names.subList(0, Math.min(names.size(), MAX_VISIBLE_NAMES))) {
 			graphics.text(this.font, name, centerX - this.font.width(name) / 2, y, -1, true);

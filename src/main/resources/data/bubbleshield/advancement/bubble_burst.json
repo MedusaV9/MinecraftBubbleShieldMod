@@ -1,0 +1,25 @@
+{
+  "parent": "bubbleshield:shield_raised",
+  "criteria": {
+    "shield_broken": {
+      "trigger": "bubbleshield:shield_broken"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancements.bubbleshield.bubble_burst.description"
+    },
+    "icon": {
+      "id": "minecraft:tnt"
+    },
+    "title": {
+      "translate": "advancements.bubbleshield.bubble_burst.title"
+    }
+  },
+  "requirements": [
+    [
+      "shield_broken"
+    ]
+  ],
+  "sends_telemetry_event": false
+}

@@ -5,7 +5,7 @@
     "passes": [
         {
             "vertex_shader": "minecraft:core/screenquad",
-            "fragment_shader": "bubbleshield:screenfx/chroma",
+            "fragment_shader": "bubbleshield:screenfx/sfx_029",
             "inputs": [
                 {
                     "sampler_name": "In",
@@ -14,21 +14,46 @@
             ],
             "output": "swap",
             "uniforms": {
-                "ChromaConfig": [
+                "FxConfig": [
                     {
                         "name": "Primary",
                         "type": "vec4",
                         "value": [
-                            1.0,
-                            0.8235,
-                            0.302,
+                            0.9176,
+                            0.7098,
+                            0.1882,
                             1.0
                         ]
                     },
                     {
-                        "name": "OffsetAmount",
-                        "type": "float",
-                        "value": 0.012
+                        "name": "Secondary",
+                        "type": "vec4",
+                        "value": [
+                            0.4196,
+                            0.3059,
+                            0.0,
+                            1.0
+                        ]
+                    },
+                    {
+                        "name": "ParamsA",
+                        "type": "vec4",
+                        "value": [
+                            0.648,
+                            3.41333,
+                            24.0,
+                            0.0
+                        ]
+                    },
+                    {
+                        "name": "ParamsB",
+                        "type": "vec4",
+                        "value": [
+                            0.923,
+                            0.6616,
+                            0.15,
+                            0.35
+                        ]
                     }
                 ]
             }

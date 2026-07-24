@@ -1,43 +1,73 @@
 package com.bubbleshield.client.render;
 
-import java.util.EnumMap;
 import java.util.Locale;
-import java.util.Map;
 
 import com.bubbleshield.BubbleShield;
-import com.bubbleshield.effect.SurfaceTemplate;
+import com.bubbleshield.effect.EffectDefinition;
+import com.bubbleshield.effect.EffectRegistry;
+import com.bubbleshield.shield.BeamStyle;
 import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.pipeline.BlendFunction;
 import com.mojang.blaze3d.pipeline.ColorTargetState;
 import com.mojang.blaze3d.pipeline.DepthStencilState;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.platform.CompareOp;
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 
 import net.minecraft.client.renderer.BindGroupLayouts;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.rendertype.RenderSetup;
 import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.resources.Identifier;
 
 /**
- * One {@link RenderPipeline} + {@link RenderType} per {@link SurfaceTemplate}.
+ * One {@link RenderPipeline} + {@link RenderType} per effect id: pipeline
+ * {@code bubbleshield:pipeline/bubble_fx_NNN} with fragment shader
+ * {@code bubbleshield:bubble/fx_NNN.fsh} for every entry in {@link EffectRegistry#ALL}
+ * ({@link EffectRegistry#COUNT} pipelines — 840 today, grows automatically with COUNT).
  *
  * <p>The snippet is modeled on vanilla's {@code RenderPipelines.END_PORTAL_SNIPPET}
- * (GLOBALS + MATRICES_PROJECTION + FOG bind groups, QUADS), with the sampler layouts
- * dropped (the bubble shaders are purely procedural), the vertex binding switched to
- * {@code POSITION_TEX_COLOR} and the translucent blend + no-cull + non-depth-writing
- * depth state copied from vanilla's translucent pipelines (e.g.
- * {@code BEACON_BEAM_TRANSLUCENT}).
+ * (GLOBALS + MATRICES_PROJECTION + FOG bind groups, QUADS), plus the
+ * {@code SAMPLER0_SAMPLER1_SAMPLER2} bind group: every bubble fragment shader
+ * samples the shipped surface texture atlas ({@link #SURFACE_ATLAS}, an 8x4 grid of
+ * 32 seamless grayscale structure tiles whose A channel is an emission mask) through
+ * the {@code Sampler0} uniform, layered onto its procedural pattern, plus the
+ * {@link SceneCopy} scene color/depth ({@code Sampler1}/{@code Sampler2}) for the
+ * refraction composite. The vertex
+ * binding is {@code POSITION_TEX_COLOR} and the translucent blend + no-cull +
+ * non-depth-writing depth state are copied from vanilla's translucent pipelines
+ * (e.g. {@code BEACON_BEAM_TRANSLUCENT}).
  *
- * <p>All five pipelines share one vertex shader ({@code bubbleshield:bubble/surface});
+ * <p>All pipelines share one vertex shader ({@code bubbleshield:bubble/surface});
  * only the fragment shader differs. They are registered through
  * {@link RenderPipelines#register} (access-widened by Fabric) during client init so the
  * shader manager precompiles them with the vanilla static pipelines on resource load.
+ * That precompilation is the cost of this design: every registered pipeline is compiled
+ * on every resource load/reload (first load and each F3+T), so COUNT extra GLSL
+ * compile+links land there — estimated in the sub-second range per hundred pipelines on
+ * typical drivers, and any single invalid fragment shader fails the whole resource load
+ * ({@code tools/validate_shaders.py} is the pre-commit gate for that).
  */
 public final class ShieldPipelines {
+	/**
+	 * The generated surface texture atlas every bubble fragment shader samples via
+	 * {@code Sampler0}: 4096x2048 RGBA, an 8x4 grid of 32 seamless 512px tiles.
+	 * Per texel: R = coarse structural layer, G = mid-scale detail, B = fine grain,
+	 * A = emission mask (glow, NOT transparency). All channels are neutral grayscale
+	 * data — the shaders tint them with the live per-effect palette (recolor-safe).
+	 */
+	private static final Identifier SURFACE_ATLAS = BubbleShield.id("textures/effect/surface_atlas.png");
+
 	private static final RenderPipeline.Snippet BUBBLE_SNIPPET = RenderPipeline.builder(RenderPipelines.GLOBALS_SNIPPET)
 			.withBindGroupLayout(BindGroupLayouts.MATRICES_PROJECTION)
 			.withBindGroupLayout(BindGroupLayouts.FOG)
+			// SAMPLER0 = the surface atlas; SAMPLER1/SAMPLER2 = the SceneCopy scene
+			// color/depth for refraction. The 3-sampler layout is shared by every
+			// bubble pipeline (a shader that does not declare Sampler1/Sampler2 just
+			// logs a one-time "does not use sampler" line at resource load).
+			.withBindGroupLayout(BindGroupLayouts.SAMPLER0_SAMPLER1_SAMPLER2)
 			.withVertexShader(BubbleShield.id("bubble/surface"))
 			.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX_COLOR)
 			.withPrimitiveTopology(PrimitiveTopology.QUADS)
@@ -49,30 +79,107 @@ public final class ShieldPipelines {
 			.withDepthStencilState(new DepthStencilState(CompareOp.GREATER_THAN_OR_EQUAL, false))
 			.buildSnippet();
 
-	private static final Map<SurfaceTemplate, RenderType> RENDER_TYPES = buildRenderTypes();
+	/**
+	 * The projector-beam pipelines: identical bind groups / vertex shader / vertex
+	 * binding / depth state to the bubble snippet, but with vanilla's
+	 * {@code BlendFunction.LIGHTNING} (SRC_ALPHA, ONE — verified in the decompiled
+	 * 26.2 {@code BlendFunction}): additive-scaled-by-alpha, so the CPU-side vertex
+	 * alpha profile IS the beam's intensity profile and the crossed planes simply add
+	 * up. Additive output is order-independent against itself, so no
+	 * {@code sortOnUpload} is needed.
+	 *
+	 * <p>Unlike the bubble, the beam back-face CULLS: additive blending gains nothing
+	 * from back faces (they only double the brightness budget and the overdraw), and
+	 * {@link BeamMesh} re-orients its crossed planes toward the camera every frame
+	 * with front-facing (counter-clockwise) winding, so the front faces are always
+	 * the visible ones.
+	 */
+	private static final RenderPipeline.Snippet BEAM_SNIPPET = RenderPipeline.builder(RenderPipelines.GLOBALS_SNIPPET)
+			.withBindGroupLayout(BindGroupLayouts.MATRICES_PROJECTION)
+			.withBindGroupLayout(BindGroupLayouts.FOG)
+			// The bubble vertex shader is a pure POSITION_TEX_COLOR passthrough and
+			// provides exactly the varyings the frozen fragment contract needs; the
+			// beam fragment shaders follow the same contract, so it is reused as-is.
+			.withVertexShader(BubbleShield.id("bubble/surface"))
+			.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX_COLOR)
+			.withPrimitiveTopology(PrimitiveTopology.QUADS)
+			.withColorTargetState(new ColorTargetState(BlendFunction.LIGHTNING))
+			.withCull(true)
+			.withDepthStencilState(new DepthStencilState(CompareOp.GREATER_THAN_OR_EQUAL, false))
+			.buildSnippet();
+
+	/**
+	 * The rendered beam styles, in {@link BeamStyle#RENDERED} order (STORM, PULSE,
+	 * HELIX, PRISM, VOID, EMBER, RUNIC, FROST). A small fixed NAMED set — one
+	 * hand-written shader per style under
+	 * {@code assets/bubbleshield/shaders/beam/beam_<name>.fsh} — unlike the per-effect
+	 * fx_* set, so their registration cost is negligible.
+	 */
+	private static final String[] BEAM_STYLE_NAMES = {"storm", "pulse", "helix", "prism", "void", "ember", "runic", "frost"};
+
+	private static final RenderType[] RENDER_TYPES = buildRenderTypes();
+	private static final RenderType[] BEAM_RENDER_TYPES = buildBeamRenderTypes();
 
 	private ShieldPipelines() {
 	}
 
-	private static Map<SurfaceTemplate, RenderType> buildRenderTypes() {
-		Map<SurfaceTemplate, RenderType> types = new EnumMap<>(SurfaceTemplate.class);
-		for (SurfaceTemplate surface : SurfaceTemplate.values()) {
-			String name = surface.name().toLowerCase(Locale.ROOT);
+	private static RenderType[] buildRenderTypes() {
+		RenderType[] types = new RenderType[EffectRegistry.COUNT];
+		for (EffectDefinition def : EffectRegistry.ALL) {
+			String name = String.format(Locale.ROOT, "bubble_fx_%03d", def.id());
 			RenderPipeline pipeline = RenderPipelines.register(
 					RenderPipeline.builder(BUBBLE_SNIPPET)
-							.withLocation(BubbleShield.id("pipeline/bubble_" + name))
-							.withFragmentShader(BubbleShield.id("bubble/" + name))
+							.withLocation(BubbleShield.id("pipeline/" + name))
+							.withFragmentShader(BubbleShield.id(def.surfaceShaderId()))
 							.build()
 			);
-			// sortOnUpload matches vanilla translucent render types (e.g. item_translucent).
-			types.put(surface, RenderType.create("bubble_" + name, RenderSetup.builder(pipeline).sortOnUpload().createRenderSetup()));
+			// sortOnUpload matches vanilla translucent render types (e.g. item_translucent);
+			// the atlas is bound to the snippet's SAMPLER0 group on every bubble draw.
+			// Sampler1/Sampler2 resolve the SceneCopy targets through the TextureManager
+			// on EVERY prepare() (so resizes are picked up): scene color clamped +
+			// LINEAR for the smooth refraction taps, scene depth clamped + NEAREST
+			// (filtering depth values would blend across geometry edges).
+			types[def.id()] = RenderType.create(name, RenderSetup.builder(pipeline)
+					.withTexture("Sampler0", SURFACE_ATLAS)
+					.withTexture("Sampler1", SceneCopy.SCENE_COLOR_ID,
+							() -> RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR))
+					.withTexture("Sampler2", SceneCopy.SCENE_DEPTH_ID,
+							() -> RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST))
+					.sortOnUpload()
+					.createRenderSetup());
 		}
 
 		return types;
 	}
 
-	public static RenderType renderType(SurfaceTemplate surface) {
-		return RENDER_TYPES.get(surface);
+	private static RenderType[] buildBeamRenderTypes() {
+		RenderType[] types = new RenderType[BEAM_STYLE_NAMES.length];
+		for (int i = 0; i < BEAM_STYLE_NAMES.length; i++) {
+			String name = "beam_" + BEAM_STYLE_NAMES[i];
+			RenderPipeline pipeline = RenderPipelines.register(
+					RenderPipeline.builder(BEAM_SNIPPET)
+							.withLocation(BubbleShield.id("pipeline/" + name))
+							.withFragmentShader(BubbleShield.id("beam/" + name))
+							.build()
+			);
+			types[i] = RenderType.create(name, RenderSetup.builder(pipeline).createRenderSetup());
+		}
+
+		return types;
+	}
+
+	/** The effect's dedicated render type; ids are clamped like {@link EffectRegistry#get}. */
+	public static RenderType renderType(int effectId) {
+		return RENDER_TYPES[Math.clamp(effectId, 0, RENDER_TYPES.length - 1)];
+	}
+
+	/**
+	 * The render type for a rendered beam style, by {@code BeamStyle.renderIndex()}
+	 * (0 = STORM .. 7 = FROST). Indices are clamped defensively so a stale/foreign
+	 * synced ordinal can never index out of bounds.
+	 */
+	public static RenderType beamRenderType(int styleIndex) {
+		return BEAM_RENDER_TYPES[Math.clamp(styleIndex, 0, BEAM_RENDER_TYPES.length - 1)];
 	}
 
 	/** Forces static init; must run during client init, before the first resource (shader) load. */

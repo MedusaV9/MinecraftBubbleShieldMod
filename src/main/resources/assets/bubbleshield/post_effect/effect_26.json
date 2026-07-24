@@ -5,7 +5,7 @@
     "passes": [
         {
             "vertex_shader": "minecraft:core/screenquad",
-            "fragment_shader": "bubbleshield:screenfx/pixelate",
+            "fragment_shader": "bubbleshield:screenfx/sfx_026",
             "inputs": [
                 {
                     "sampler_name": "In",
@@ -14,26 +14,46 @@
             ],
             "output": "swap",
             "uniforms": {
-                "PixelateConfig": [
+                "FxConfig": [
                     {
                         "name": "Primary",
                         "type": "vec4",
                         "value": [
                             1.0,
-                            0.8235,
-                            0.302,
+                            0.8784,
+                            0.4,
                             1.0
                         ]
                     },
                     {
-                        "name": "Resolution",
-                        "type": "float",
-                        "value": 24.0
+                        "name": "Secondary",
+                        "type": "vec4",
+                        "value": [
+                            0.8,
+                            0.6039,
+                            0.0235,
+                            1.0
+                        ]
                     },
                     {
-                        "name": "MosaicSize",
-                        "type": "float",
-                        "value": 3.4
+                        "name": "ParamsA",
+                        "type": "vec4",
+                        "value": [
+                            0.612,
+                            0.61333,
+                            0.0,
+                            0.0
+                        ]
+                    },
+                    {
+                        "name": "ParamsB",
+                        "type": "vec4",
+                        "value": [
+                            0.0689,
+                            1.3449,
+                            0.5,
+                            0.35
+                        ]
                     }
                 ]
             }

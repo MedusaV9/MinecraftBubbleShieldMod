@@ -1,0 +1,25 @@
+{
+  "parent": "bubbleshield:shield_raised",
+  "criteria": {
+    "shield_named": {
+      "trigger": "bubbleshield:shield_named"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancements.bubbleshield.christened.description"
+    },
+    "icon": {
+      "id": "minecraft:name_tag"
+    },
+    "title": {
+      "translate": "advancements.bubbleshield.christened.title"
+    }
+  },
+  "requirements": [
+    [
+      "shield_named"
+    ]
+  ],
+  "sends_telemetry_event": false
+}

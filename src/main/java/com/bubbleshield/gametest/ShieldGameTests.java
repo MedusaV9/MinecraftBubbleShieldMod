@@ -7,7 +7,6 @@ import java.util.UUID;
 
 import com.bubbleshield.block.BubbleShieldBlockEntity;
 import com.bubbleshield.effect.EffectRegistry;
-import com.bubbleshield.effect.InsideEffectBehavior;
 import com.bubbleshield.menu.BubbleShieldMenu;
 import com.bubbleshield.registry.ModBlocks;
 import com.bubbleshield.shield.ShieldLogic;
@@ -22,11 +21,14 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.UUIDUtil;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.arrow.Arrow;
@@ -59,8 +61,13 @@ public class ShieldGameTests {
 		helper.succeed();
 	}
 
+	/**
+	 * An intercepted arrow damages the shield (3 raw, tier 0: no DR), but a single
+	 * arrow leaves the health fraction far above the 60% shrink plateau, so the
+	 * bubble must hold its FULL radius — shields no longer shrink on every scratch.
+	 */
 	@GameTest(maxTicks = 200, padding = 16)
-	public void arrowShrinksShield(GameTestHelper helper) {
+	public void arrowDamagesShield(GameTestHelper helper) {
 		BubbleShieldBlockEntity be = placeProjector(helper, 8.0F);
 		be.addFuelSeconds(PLENTY_OF_FUEL);
 		helper.assertTrue(be.tryActivate(), "shield should activate");
@@ -74,7 +81,15 @@ public class ShieldGameTests {
 		arrow.setDeltaMovement(0.0, -1.5, 0.0);
 
 		ShieldState state = be.getShieldState();
-		helper.succeedWhen(() -> helper.assertTrue(state.health < state.maxHealth, "shield should take damage from the intercepted arrow"));
+		helper.succeedWhen(() -> {
+			helper.assertTrue(state.health < state.maxHealth, "shield should take damage from the intercepted arrow");
+			helper.assertTrue(
+					state.health == state.maxHealth - ShieldLogic.PROJECTILE_DAMAGE,
+					"a tier-0 shield should take the full arrow damage, health is " + state.health);
+			helper.assertTrue(
+					be.currentRadius() == 8.0F,
+					"above the 60% shrink plateau the radius must stay at 8, got " + be.currentRadius());
+		});
 	}
 
 	@GameTest(padding = 16)
@@ -175,7 +190,7 @@ public class ShieldGameTests {
 		ShieldState state = be.getShieldState();
 
 		// An online (PlayerList-registered) player so whitelistAdd/Remove can resolve name -> UUID.
-		ServerPlayer player = helper.makeMockServerPlayerInLevel();
+		ServerPlayer player = MockPlayers.createUniqueMockPlayer(helper);
 		try {
 			UUID uuid = player.getUUID();
 			String name = player.getGameProfile().name();
@@ -190,9 +205,40 @@ public class ShieldGameTests {
 			helper.assertTrue(ShieldLogic.shouldBlock(state, null, uuid, false), "the removed player's UUID should no longer be admitted");
 			helper.assertTrue(ShieldLogic.shouldBlock(state, name, uuid, false), "the removed player should be blocked by name and UUID");
 		} finally {
-			helper.getLevel().getServer().getPlayerList().remove(player);
+			MockPlayers.removeMockPlayer(helper, player);
 		}
 
+		helper.succeed();
+	}
+
+	/**
+	 * Removing a name that never resolved to a UUID (offline, unknown) must succeed
+	 * purely locally: the name-to-id cache (whose misses trigger a blocking remote
+	 * lookup + usercache write on the server thread) must never be consulted. The
+	 * canary UUID is exactly what the cache WOULD resolve for the name (offline
+	 * resolution is deterministic), so it survives only when no lookup happened.
+	 */
+	@GameTest(padding = 16)
+	public void whitelistRemoveOfflineNameNoLookup(GameTestHelper helper) {
+		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
+		ShieldState state = be.getShieldState();
+		MinecraftServer server = helper.getLevel().getServer();
+
+		String unknown = "OfflineStranger";
+		be.whitelistAdd(server, unknown);
+		helper.assertTrue(state.whitelistNames.contains(unknown), "the offline name should be whitelisted by name");
+		helper.assertTrue(state.whitelistUuids.isEmpty(), "adding an offline unknown name must not record any UUID");
+
+		UUID canary = UUIDUtil.createOfflinePlayerUUID(unknown);
+		state.whitelistUuids.add(canary);
+
+		be.whitelistRemove(server, unknown);
+		helper.assertTrue(
+				state.whitelistNames.stream().noneMatch(existing -> existing.equalsIgnoreCase(unknown)),
+				"removing an offline unknown name should still remove the name");
+		helper.assertTrue(
+				state.whitelistUuids.contains(canary),
+				"whitelistRemove must not resolve unknown names through the name-to-id cache");
 		helper.succeed();
 	}
 
@@ -203,7 +249,7 @@ public class ShieldGameTests {
 		// makeMockPlayer(GameType) returns a bare Player whose openMenu() is a no-op, so a
 		// ServerPlayer placed in the level (with a working connection) is required to observe
 		// containerMenu changing when the block is used.
-		ServerPlayer player = helper.makeMockServerPlayerInLevel();
+		ServerPlayer player = MockPlayers.createUniqueMockPlayer(helper);
 		try {
 			Vec3 center = Vec3.atCenterOf(helper.absolutePos(PROJECTOR_POS));
 			player.snapTo(center.x + 1.5, center.y - 0.5, center.z);
@@ -215,23 +261,29 @@ public class ShieldGameTests {
 			helper.assertTrue(menu.pos().equals(helper.absolutePos(PROJECTOR_POS)), "the menu should know the projector position");
 			helper.assertTrue(menu.stillValid(player), "the menu should be valid for a player next to the projector");
 		} finally {
-			helper.getLevel().getServer().getPlayerList().remove(player);
+			MockPlayers.removeMockPlayer(helper, player);
 		}
 
 		helper.succeed();
 	}
 
-	@GameTest(padding = 16)
-	public void allFiftyEffectsValid(GameTestHelper helper) {
-		EffectRegistry.validate();
-		helper.assertTrue(EffectRegistry.ALL.size() == EffectRegistry.COUNT, "registry should expose exactly 50 effect definitions");
-		helper.assertTrue(InsideEffectBehavior.REGISTRY.size() == 10, "exactly 10 inside behaviors should be registered");
-		helper.succeed();
-	}
-
+	/**
+	 * Every effect id must ship its own generated screen shader
+	 * ({@code screenfx/sfx_NNN.fsh}) plus a post_effect JSON whose first pass
+	 * references exactly that shader. The 16 legacy shared screenfx templates
+	 * were deleted in the final cleanup milestone (git history preserves them).
+	 */
 	@GameTest
 	public void postEffectAssetsExist(GameTestHelper helper) {
 		for (int i = 0; i < EffectRegistry.COUNT; i++) {
+			// Per-id existence: the effect's own generated screen shader.
+			String sfxPath = String.format(java.util.Locale.ROOT, "/assets/bubbleshield/shaders/screenfx/sfx_%03d.fsh", i);
+			try (InputStream shader = ShieldGameTests.class.getResourceAsStream(sfxPath)) {
+				helper.assertTrue(shader != null, "missing generated screen shader: " + sfxPath);
+			} catch (Exception e) {
+				throw helper.assertionException("failed to read " + sfxPath + ": " + e);
+			}
+
 			String jsonPath = String.format(java.util.Locale.ROOT, "/assets/bubbleshield/post_effect/effect_%02d.json", i);
 			JsonObject config;
 			try (InputStream in = ShieldGameTests.class.getResourceAsStream(jsonPath)) {
@@ -243,6 +295,13 @@ public class ShieldGameTests {
 
 			JsonArray passes = config.getAsJsonArray("passes");
 			helper.assertTrue(passes != null && !passes.isEmpty(), jsonPath + " should declare at least one pass");
+
+			// Pass 1 must reference this effect's OWN generated screen shader.
+			String expected = "bubbleshield:" + EffectRegistry.get(i).screenShaderId();
+			String firstShader = passes.get(0).getAsJsonObject().get("fragment_shader").getAsString();
+			helper.assertTrue(
+					expected.equals(firstShader),
+					jsonPath + " first pass should use " + expected + " but uses " + firstShader);
 
 			for (var passElement : passes) {
 				String fragmentShader = passElement.getAsJsonObject().get("fragment_shader").getAsString();
@@ -261,6 +320,38 @@ public class ShieldGameTests {
 				}
 			}
 		}
+
+		helper.succeed();
+	}
+
+	/**
+	 * The shared surface atlas every bubble fragment shader samples via
+	 * {@code Sampler0} must ship on the classpath: ShieldPipelines binds
+	 * {@code textures/effect/surface_atlas.png} through
+	 * {@code RenderSetup.withTexture("Sampler0", ...)}, and a missing/corrupt
+	 * texture fails only at real client resource load — which the headless CI
+	 * VM cannot run, so this (with tools/validate_shaders.py's binding-contract
+	 * check) is the CI-visible guard. Asserts the PNG exists and starts with
+	 * the 8-byte PNG signature, and the .mcmeta sibling exists and parses as
+	 * JSON. The asset lives under src/main resources (like the post_effect
+	 * assets) exactly so this headless server-side test can see it.
+	 */
+	@GameTest
+	public void surfaceAtlasAssetShips(GameTestHelper helper) {
+		String atlasPath = "/assets/bubbleshield/textures/effect/surface_atlas.png";
+		byte[] pngSignature = {(byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
+		try (InputStream in = ShieldGameTests.class.getResourceAsStream(atlasPath)) {
+			helper.assertTrue(in != null, "missing surface atlas: " + atlasPath);
+			byte[] header = in.readNBytes(pngSignature.length);
+			helper.assertTrue(
+					java.util.Arrays.equals(header, pngSignature),
+					atlasPath + " does not start with the 8-byte PNG signature");
+		} catch (Exception e) {
+			throw helper.assertionException("failed to read " + atlasPath + ": " + e);
+		}
+
+		// readJsonResource asserts existence + JSON-parses the animation metadata.
+		readJsonResource(helper, atlasPath + ".mcmeta");
 
 		helper.succeed();
 	}
@@ -328,11 +419,48 @@ public class ShieldGameTests {
 		});
 	}
 
+	@GameTest(maxTicks = 200, padding = 16)
+	public void behaviorEffectsApply(GameTestHelper helper) {
+		helper.assertTrue("regen_aura".equals(EffectRegistry.get(11).insideBehaviorId()), "effect 11 should be regen_aura");
+		helper.assertTrue("haste_aura".equals(EffectRegistry.get(9).insideBehaviorId()), "effect 9 should be haste_aura");
+
+		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
+		be.addFuelSeconds(PLENTY_OF_FUEL);
+		be.getShieldState().effectId = 11; // regen_aura@0
+
+		// An in-level ServerPlayer so the aura's level.getEntitiesOfClass query finds it.
+		// Whitelist it (by its unique per-call mock name) so the barrier does not expel
+		// it, then park it inside the radius-4 bubble.
+		ServerPlayer player = MockPlayers.createUniqueMockPlayer(helper);
+		be.whitelistAdd(helper.getLevel().getServer(), player.getGameProfile().name());
+		helper.assertTrue(be.tryActivate(), "shield should activate");
+
+		Vec3 center = Vec3.atCenterOf(helper.absolutePos(PROJECTOR_POS));
+		player.snapTo(center.x + 1.5, center.y, center.z);
+
+		helper.runAfterDelay(30, () -> {
+			boolean hasRegen = player.hasEffect(MobEffects.REGENERATION);
+			if (!hasRegen) {
+				MockPlayers.removeMockPlayer(helper, player);
+			}
+			helper.assertTrue(hasRegen, "a player inside a regen_aura shield should have Regeneration");
+
+			be.getShieldState().effectId = 9; // haste_aura@0
+			helper.runAfterDelay(30, () -> {
+				boolean hasHaste = player.hasEffect(MobEffects.HASTE);
+				MockPlayers.removeMockPlayer(helper, player);
+				helper.assertTrue(hasHaste, "a player inside a haste_aura shield should have Haste");
+				helper.succeed();
+			});
+		});
+	}
+
 	@GameTest
 	public void persistenceRoundTrip(GameTestHelper helper) {
 		ShieldState original = new ShieldState();
 		original.active = true;
 		original.effectId = 3;
+		original.shape = com.bubbleshield.shield.ShieldShape.DOME;
 		original.targetRadius = 12.5F;
 		original.health = 42.0F;
 		original.maxHealth = 120.0F;
@@ -341,6 +469,7 @@ public class ShieldGameTests {
 		original.whitelistNames.add("Bob");
 		original.whitelistUuids.add(UUID.randomUUID());
 		original.whitelistUuids.add(UUID.randomUUID());
+		original.rememberWhitelistUuid("Alice", UUID.randomUUID());
 		original.fuelSeconds = 77;
 		original.cooldownUntil = 123456L;
 
@@ -354,12 +483,14 @@ public class ShieldGameTests {
 
 		helper.assertTrue(loaded.active == original.active, "active should round-trip");
 		helper.assertTrue(loaded.effectId == original.effectId, "effectId should round-trip");
+		helper.assertTrue(loaded.shape == original.shape, "shape should round-trip");
 		helper.assertTrue(loaded.targetRadius == original.targetRadius, "targetRadius should round-trip");
 		helper.assertTrue(loaded.health == original.health, "health should round-trip");
 		helper.assertTrue(loaded.maxHealth == original.maxHealth, "maxHealth should round-trip");
 		helper.assertTrue(original.ownerUuid.equals(loaded.ownerUuid), "ownerUuid should round-trip");
 		helper.assertTrue(loaded.whitelistNames.equals(original.whitelistNames), "whitelistNames should round-trip");
 		helper.assertTrue(loaded.whitelistUuids.equals(original.whitelistUuids), "whitelistUuids should round-trip");
+		helper.assertTrue(loaded.whitelistNameToUuid.equals(original.whitelistNameToUuid), "whitelistNameToUuid should round-trip");
 		helper.assertTrue(loaded.fuelSeconds == original.fuelSeconds, "fuelSeconds should round-trip");
 		helper.assertTrue(loaded.cooldownUntil == original.cooldownUntil, "cooldownUntil should round-trip");
 		helper.succeed();

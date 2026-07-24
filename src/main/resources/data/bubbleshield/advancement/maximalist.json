@@ -1,0 +1,31 @@
+{
+  "parent": "bubbleshield:shield_raised",
+  "criteria": {
+    "max_diameter_shield": {
+      "conditions": {
+        "diameter": {
+          "min": 200
+        }
+      },
+      "trigger": "bubbleshield:shield_activated"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancements.bubbleshield.maximalist.description"
+    },
+    "frame": "challenge",
+    "icon": {
+      "id": "bubbleshield:prismatic_core"
+    },
+    "title": {
+      "translate": "advancements.bubbleshield.maximalist.title"
+    }
+  },
+  "requirements": [
+    [
+      "max_diameter_shield"
+    ]
+  ],
+  "sends_telemetry_event": false
+}

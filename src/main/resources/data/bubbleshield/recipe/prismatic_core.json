@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "key": {
+    "D": "minecraft:diamond",
+    "B": "minecraft:amethyst_block",
+    "C": "bubbleshield:resonant_core"
+  },
+  "pattern": [
+    "DBD",
+    "BCB",
+    "DBD"
+  ],
+  "result": {
+    "count": 1,
+    "id": "bubbleshield:prismatic_core"
+  }
+}

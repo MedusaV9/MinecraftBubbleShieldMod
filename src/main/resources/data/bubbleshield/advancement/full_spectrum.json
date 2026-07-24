@@ -1,0 +1,25 @@
+{
+  "parent": "bubbleshield:shield_raised",
+  "criteria": {
+    "shield_recolored": {
+      "trigger": "bubbleshield:shield_recolored"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancements.bubbleshield.full_spectrum.description"
+    },
+    "icon": {
+      "id": "minecraft:magenta_dye"
+    },
+    "title": {
+      "translate": "advancements.bubbleshield.full_spectrum.title"
+    }
+  },
+  "requirements": [
+    [
+      "shield_recolored"
+    ]
+  ],
+  "sends_telemetry_event": false
+}

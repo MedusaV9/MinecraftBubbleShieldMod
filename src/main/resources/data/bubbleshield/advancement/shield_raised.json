@@ -1,0 +1,25 @@
+{
+  "parent": "bubbleshield:root",
+  "criteria": {
+    "shield_activated": {
+      "trigger": "bubbleshield:shield_activated"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancements.bubbleshield.shield_raised.description"
+    },
+    "icon": {
+      "id": "minecraft:shield"
+    },
+    "title": {
+      "translate": "advancements.bubbleshield.shield_raised.title"
+    }
+  },
+  "requirements": [
+    [
+      "shield_activated"
+    ]
+  ],
+  "sends_telemetry_event": false
+}

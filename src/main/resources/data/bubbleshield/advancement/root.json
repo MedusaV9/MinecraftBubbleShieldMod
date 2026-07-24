@@ -1,0 +1,34 @@
+{
+  "criteria": {
+    "has_projector": {
+      "conditions": {
+        "items": [
+          {
+            "items": "bubbleshield:bubble_shield_projector"
+          }
+        ]
+      },
+      "trigger": "minecraft:inventory_changed"
+    }
+  },
+  "display": {
+    "announce_to_chat": false,
+    "background": "minecraft:gui/advancements/backgrounds/stone",
+    "description": {
+      "translate": "advancements.bubbleshield.root.description"
+    },
+    "icon": {
+      "id": "bubbleshield:bubble_shield_projector"
+    },
+    "show_toast": false,
+    "title": {
+      "translate": "advancements.bubbleshield.root.title"
+    }
+  },
+  "requirements": [
+    [
+      "has_projector"
+    ]
+  ],
+  "sends_telemetry_event": false
+}

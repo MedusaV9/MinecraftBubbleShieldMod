@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "key": {
+    "O": "minecraft:obsidian",
+    "B": "minecraft:brick",
+    "N": "minecraft:netherite_scrap"
+  },
+  "pattern": [
+    "OBO",
+    "BNB",
+    "OBO"
+  ],
+  "result": {
+    "count": 1,
+    "id": "bubbleshield:blast_ward"
+  }
+}

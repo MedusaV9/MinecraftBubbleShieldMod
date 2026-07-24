@@ -5,7 +5,7 @@
     "passes": [
         {
             "vertex_shader": "minecraft:core/screenquad",
-            "fragment_shader": "bubbleshield:screenfx/tint",
+            "fragment_shader": "bubbleshield:screenfx/sfx_012",
             "inputs": [
                 {
                     "sampler_name": "In",
@@ -14,13 +14,13 @@
             ],
             "output": "swap",
             "uniforms": {
-                "TintConfig": [
+                "FxConfig": [
                     {
                         "name": "Primary",
                         "type": "vec4",
                         "value": [
-                            0.1804,
-                            0.4824,
+                            0.4,
+                            0.7216,
                             1.0,
                             1.0
                         ]
@@ -29,16 +29,31 @@
                         "name": "Secondary",
                         "type": "vec4",
                         "value": [
-                            0.0,
-                            0.8118,
-                            0.9176,
+                            0.0549,
+                            0.3098,
+                            0.6392,
                             1.0
                         ]
                     },
                     {
-                        "name": "Intensity",
-                        "type": "float",
-                        "value": 0.4
+                        "name": "ParamsA",
+                        "type": "vec4",
+                        "value": [
+                            0.444,
+                            0.99,
+                            18.88,
+                            0.0
+                        ]
+                    },
+                    {
+                        "name": "ParamsB",
+                        "type": "vec4",
+                        "value": [
+                            0.4164,
+                            1.0669,
+                            0.55,
+                            0.35
+                        ]
                     }
                 ]
             }

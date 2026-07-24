@@ -3,6 +3,7 @@
 	"package": "com.bubbleshield.client.mixin",
 	"compatibilityLevel": "JAVA_25",
 	"client": [
+		"BossHealthOverlayAccessor",
 		"GameRendererInvoker"
 	],
 	"injectors": {

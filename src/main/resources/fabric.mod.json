@@ -21,8 +21,35 @@
 		"client": [
 			"com.bubbleshield.client.BubbleShieldClient"
 		],
+		"fabric-client-gametest": [
+			"com.bubbleshield.clienttest.ShaderScreenshotTest",
+			"com.bubbleshield.clienttest.VideoCaptureTest",
+			"com.bubbleshield.clienttest.ScenarioCaptureTest"
+		],
 		"fabric-gametest": [
-			"com.bubbleshield.gametest.ShieldGameTests"
+			"com.bubbleshield.gametest.ShieldGameTests",
+			"com.bubbleshield.gametest.EffectCatalogGameTests",
+			"com.bubbleshield.gametest.GuardContextGameTests",
+			"com.bubbleshield.gametest.TierGameTests",
+			"com.bubbleshield.gametest.ControlShapeGameTests",
+			"com.bubbleshield.gametest.AdvancementGameTests",
+			"com.bubbleshield.gametest.BossBarNameGameTests",
+			"com.bubbleshield.gametest.ModeGameTests",
+			"com.bubbleshield.gametest.ColorGameTests",
+			"com.bubbleshield.gametest.LinkingGameTests",
+			"com.bubbleshield.gametest.CapacitorGameTests",
+			"com.bubbleshield.gametest.WorldIntegrationGameTests",
+			"com.bubbleshield.gametest.NbtHardeningGameTests",
+			"com.bubbleshield.gametest.BeamGameTests",
+			"com.bubbleshield.gametest.ShapeGameTests",
+			"com.bubbleshield.gametest.StrengthGameTests",
+			"com.bubbleshield.gametest.RecoveryGameTests",
+			"com.bubbleshield.gametest.AugmentGameTests",
+			"com.bubbleshield.gametest.CombatGameTests",
+			"com.bubbleshield.gametest.UxGameTests",
+			"com.bubbleshield.gametest.VisualEventsGameTests",
+			"com.bubbleshield.gametest.SurfaceDynamicsGameTests",
+			"com.bubbleshield.gametest.InteriorGameTests"
 		]
 	},
 	"mixins": [

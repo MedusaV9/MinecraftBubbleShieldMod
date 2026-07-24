@@ -1,0 +1,80 @@
+#version 330
+
+#moj_import <minecraft:globals.glsl>
+
+// GENERATED FILE -- do not edit by hand. Emitted by tools/gen_screen_shaders.py
+// for effect 783. Edit the generator and regenerate instead
+// (byte-stable, fixed seed).
+// [screen:gloom:heartbeat:drift:pulseglow]
+
+uniform sampler2D InSampler;
+
+in vec2 texCoord;
+
+layout(std140) uniform SamplerInfo {
+    vec2 OutSize;
+    vec2 InSize;
+};
+
+// Standardized per-effect config; member order is load-bearing (it must match
+// the uniform order in post_effect/effect_NN.json -- checked by the validator).
+// ParamsA = [Speed, Strength, Scale, Aux]; ParamsB = [Phase, Drift, TintMix, LumaFloor].
+layout(std140) uniform FxConfig {
+    vec4 Primary;
+    vec4 Secondary;
+    vec4 ParamsA;
+    vec4 ParamsB;
+};
+
+out vec4 fragColor;
+
+float luma(vec3 c) {
+    return dot(c, vec3(0.3, 0.59, 0.11));
+}
+
+void main() {
+    // Undisplaced scene sample: the gameplay-safety floor references this.
+    vec3 base = texture(InSampler, texCoord).rgb;
+    float baseLuma = luma(base);
+    // InSize is driver-fed; guard it so no divide below can hit zero.
+    vec2 safeInSize = max(InSize, vec2(1.0));
+    vec2 centered = texCoord - vec2(0.5);
+    vec2 aspectCentered = centered * vec2(safeInSize.x / safeInSize.y, 1.0);
+    float centerDist = length(aspectCentered);
+    // GameTime wraps once per day cycle (24000 ticks); scale to roughly seconds.
+    float animRaw = GameTime * 1200.0 * ParamsA.x + ParamsB.x * 61.8;
+    float anim = animRaw + 1.7426 * sin(animRaw * 0.1249) * ParamsB.y;
+    float animAmp = 1.0;
+    float strength = ParamsA.y * animAmp;
+
+    // Cold lift: the scene drains toward a Secondary-tinted grey.
+    vec3 coldGrey = vec3(baseLuma) * mix(vec3(1.0), Secondary.rgb, ParamsB.z);
+    vec3 chilled = mix(base, coldGrey, 0.4618 * clamp(strength, 0.0, 1.0));
+    // Double-lobed slow pulse (a sub-1 Hz heartbeat, never a strobe).
+    float beatPhase = anim * 0.4054 + ParamsB.x * 6.2831;
+    float lub = max(sin(beatPhase), 0.0);
+    float dub = max(sin(beatPhase + 2.3344), 0.0);
+    float beat = lub * lub + 0.4947 * dub * dub;
+    float swell = 1.0 - 0.1507 * beat;
+    float rim = smoothstep(0.3042, 0.7767, centerDist + beat * 0.0548);
+    vec3 dimmed = chilled * swell;
+    vec3 outColor = mix(dimmed, Primary.rgb * 0.0943, rim * clamp(strength, 0.0, 1.0) * 0.6611);
+
+    // Overlay: a faint breathing glow of the effect color at the rim.
+    float oBreath = 0.5 + 0.5 * sin(anim * 0.7459 + ParamsB.x * 6.2831);
+    float oRim = smoothstep(0.4252, 1.0, centerDist);
+    outColor += Primary.rgb * oRim * oBreath * 0.1493;
+
+    // Richness pass (v3): a bounded soft-contrast curve plus a vibrance
+    // lift deepen the effect's read (anti-washout). Both are bounded and
+    // hue-preserving, and the luma floor below still guarantees the world
+    // stays readable.
+    vec3 curved = clamp(outColor, 0.0, 1.0);
+    outColor = mix(outColor, curved * curved * (3.0 - 2.0 * curved), 0.1958);
+    outColor = clamp(mix(vec3(luma(outColor)), outColor, 1.1186), 0.0, 1.5);
+
+    // Gameplay-safety floor: never crush the world below ParamsB.w (~0.35x),
+    // and always output an opaque frame.
+    outColor = max(outColor, base * ParamsB.w);
+    fragColor = vec4(outColor, 1.0);
+}

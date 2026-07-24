@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "key": {
+    "I": "minecraft:iron_ingot",
+    "O": "minecraft:obsidian"
+  },
+  "pattern": [
+    "III",
+    "IOI",
+    "III"
+  ],
+  "result": {
+    "count": 1,
+    "id": "bubbleshield:reinforced_plating"
+  }
+}
