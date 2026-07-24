@@ -4,6 +4,7 @@ import com.bubbleshield.block.BubbleShieldBlockEntity;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.EffectRegistry;
 import com.bubbleshield.effect.SurfaceTemplate;
+import com.bubbleshield.net.ShieldPayloads;
 import com.bubbleshield.registry.ModBlocks;
 import com.bubbleshield.shield.BeamStyle;
 
@@ -29,6 +30,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.Vec3;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,8 +61,18 @@ import org.slf4j.LoggerFactory;
  *   <li>1 inside clip ({@value #INSIDE_FRAMES} frames, camera inside the bubble, HUD
  *       visible) showing the inside-behavior particles + screen post-effect;</li>
  *   <li>1 beam clip ({@value #BEAM_FRAMES} frames, pulled-back camera) of the STORM
- *       rendered beam style.</li>
+ *       rendered beam style;</li>
+ *   <li>1 {@code aperture_walkthrough} clip ({@value #WALKTHROUGH_FRAMES} frames):
+ *       the owner camera walks straight through the wall — the aperture parts the
+ *       mass ahead, the crossing rings the passage ripple;</li>
+ *   <li>1 {@code impact_volley} clip ({@value #VOLLEY_FRAMES} frames): three real
+ *       {@code queueImpact} + {@code applyShieldDamage} hits 0.5 s apart, each aimed
+ *       at the revolving camera, while it orbits the shield.</li>
  * </ul>
+ *
+ * <p>{@code BUBBLESHIELD_VIDEO_CLIPS} (optional, comma-separated name substrings)
+ * restricts the run to matching clips — unset captures everything, so existing
+ * full runs are unchanged.
  */
 public class VideoCaptureTest implements FabricClientGameTest {
 	private static final Logger LOGGER = LoggerFactory.getLogger("bubbleshield-video");
@@ -90,6 +102,25 @@ public class VideoCaptureTest implements FabricClientGameTest {
 	private static final int ORBIT_FRAMES = 40;
 	private static final int INSIDE_FRAMES = 48;
 	private static final int BEAM_FRAMES = 40;
+	private static final int WALKTHROUGH_FRAMES = 60;
+	private static final int VOLLEY_FRAMES = 60;
+
+	/**
+	 * Walkthrough path: due-east walk along z = 0.5 from x = {@value} (13 blocks
+	 * from the bubble center — past the aperture OPEN hysteresis of wall + 5.5, so
+	 * the clip starts on a sealed wall) crossing the west wall (x = 2.5) around
+	 * frame 36 and ending inside, short of the projector block.
+	 */
+	private static final double WALKTHROUGH_START_X = -4.0;
+	/** Walk speed: blocks per frame (~3.6 blocks/s at 20 fps, a brisk stroll). */
+	private static final double WALKTHROUGH_STEP_X = 0.18;
+
+	/** Volley clip: the frames on which one impact is queued (10 frames = 0.5 s apart). */
+	private static final int[] VOLLEY_IMPACT_FRAMES = {5, 15, 25};
+	/** Wire strength of each volley impact (byte-encoded x10, cap 25.5). */
+	private static final float VOLLEY_IMPACT_STRENGTH = 8.0F;
+	/** Raw shield damage applied alongside each volley impact (health state stays real). */
+	private static final float VOLLEY_IMPACT_DAMAGE = 10.0F;
 
 	/** Ticks waited after a server-side retune/camera move before a clip starts. */
 	private static final int SETTLE_TICKS = 40;
@@ -114,6 +145,11 @@ public class VideoCaptureTest implements FabricClientGameTest {
 	/** Effect for the beam clip: fx_006, the strongly-hued pink/purple arcs palette. */
 	private static final int BEAM_EFFECT_ID = 6;
 	private static final BeamStyle BEAM_CLIP_STYLE = BeamStyle.STORM;
+
+	/** Walkthrough family: stained glass — the parted mass + rim read against its panes. */
+	private static final SurfaceTemplate WALKTHROUGH_FAMILY = SurfaceTemplate.STAINEDGLASS;
+	/** Volley family: glassy refraction — traveling waves wiggle the refracted backdrop. */
+	private static final SurfaceTemplate VOLLEY_FAMILY = SurfaceTemplate.CRYSTALREFRACT;
 
 	/** One captured clip, as recorded into manifest.json. */
 	private record ClipRecord(String name, int effectId, String family, String screenTemplate,
@@ -193,6 +229,10 @@ public class VideoCaptureTest implements FabricClientGameTest {
 				EffectDefinition def = firstOfFamily(family);
 				String name = String.format(Locale.ROOT, "hero_fx%03d_%s",
 						def.id(), family.name().toLowerCase(Locale.ROOT));
+				if (!clipEnabled(name)) {
+					continue;
+				}
+
 				server.runCommand(OUTSIDE_CAMERA);
 				retune(server, def.id(), BeamStyle.NONE);
 				ctx.waitTicks(SETTLE_TICKS);
@@ -209,6 +249,10 @@ public class VideoCaptureTest implements FabricClientGameTest {
 				EffectDefinition def = firstOfFamily(family);
 				String name = String.format(Locale.ROOT, "orbit_fx%03d_%s",
 						def.id(), family.name().toLowerCase(Locale.ROOT));
+				if (!clipEnabled(name)) {
+					continue;
+				}
+
 				retune(server, def.id(), BeamStyle.NONE);
 				orbitCamera(server, ORBIT_START_DEGREES);
 				ctx.waitTicks(SETTLE_TICKS);
@@ -224,33 +268,77 @@ public class VideoCaptureTest implements FabricClientGameTest {
 			EffectDefinition insideDef = firstWithScreenTemplate(INSIDE_SCREEN_FAMILY);
 			String insideName = String.format(Locale.ROOT, "inside_fx%03d_%s",
 					insideDef.id(), insideDef.screenTemplate());
-			setHudHidden(ctx, false);
-			retune(server, insideDef.id(), BeamStyle.NONE);
-			server.runCommand(INSIDE_CAMERA);
-			ctx.waitTicks(SETTLE_TICKS);
-			if (captureFixedClip(ctx, videoDir, insideName, INSIDE_FRAMES)) {
-				clips.add(new ClipRecord(insideName, insideDef.id(),
-						insideDef.surface().name().toLowerCase(Locale.ROOT),
-						insideDef.screenTemplate(), "inside", INSIDE_FRAMES, "none"));
-			} else {
-				failed++;
+			if (clipEnabled(insideName)) {
+				setHudHidden(ctx, false);
+				retune(server, insideDef.id(), BeamStyle.NONE);
+				server.runCommand(INSIDE_CAMERA);
+				ctx.waitTicks(SETTLE_TICKS);
+				if (captureFixedClip(ctx, videoDir, insideName, INSIDE_FRAMES)) {
+					clips.add(new ClipRecord(insideName, insideDef.id(),
+							insideDef.surface().name().toLowerCase(Locale.ROOT),
+							insideDef.screenTemplate(), "inside", INSIDE_FRAMES, "none"));
+				} else {
+					failed++;
+				}
 			}
 
 			// --- Beam clip: pulled-back camera framing the whole energy column. ---
 			String beamName = "beam_" + BEAM_CLIP_STYLE.name().toLowerCase(Locale.ROOT)
 					+ String.format(Locale.ROOT, "_fx%03d", BEAM_EFFECT_ID);
-			setHudHidden(ctx, true);
-			retune(server, BEAM_EFFECT_ID, BEAM_CLIP_STYLE);
-			server.runCommand(BEAM_CAMERA);
-			ctx.waitTicks(SETTLE_TICKS);
-			if (captureFixedClip(ctx, videoDir, beamName, BEAM_FRAMES)) {
-				EffectDefinition beamDef = EffectRegistry.ALL.get(BEAM_EFFECT_ID);
-				clips.add(new ClipRecord(beamName, BEAM_EFFECT_ID,
-						beamDef.surface().name().toLowerCase(Locale.ROOT),
-						beamDef.screenTemplate(), "beam", BEAM_FRAMES,
-						BEAM_CLIP_STYLE.name().toLowerCase(Locale.ROOT)));
-			} else {
-				failed++;
+			if (clipEnabled(beamName)) {
+				setHudHidden(ctx, true);
+				retune(server, BEAM_EFFECT_ID, BEAM_CLIP_STYLE);
+				server.runCommand(BEAM_CAMERA);
+				ctx.waitTicks(SETTLE_TICKS);
+				if (captureFixedClip(ctx, videoDir, beamName, BEAM_FRAMES)) {
+					EffectDefinition beamDef = EffectRegistry.ALL.get(BEAM_EFFECT_ID);
+					clips.add(new ClipRecord(beamName, BEAM_EFFECT_ID,
+							beamDef.surface().name().toLowerCase(Locale.ROOT),
+							beamDef.screenTemplate(), "beam", BEAM_FRAMES,
+							BEAM_CLIP_STYLE.name().toLowerCase(Locale.ROOT)));
+				} else {
+					failed++;
+				}
+			}
+
+			// --- Aperture walkthrough: the owner camera walks due east through the
+			// west wall — sealed wall, aperture parting, passage-ripple crossing,
+			// interior — one continuous take (WP-Dyn's headline interaction).
+			EffectDefinition walkDef = firstOfFamily(WALKTHROUGH_FAMILY);
+			String walkName = String.format(Locale.ROOT, "aperture_walkthrough_fx%03d_%s",
+					walkDef.id(), WALKTHROUGH_FAMILY.name().toLowerCase(Locale.ROOT));
+			if (clipEnabled(walkName)) {
+				setHudHidden(ctx, true);
+				retune(server, walkDef.id(), BeamStyle.NONE);
+				walkthroughCamera(server, 0);
+				ctx.waitTicks(SETTLE_TICKS);
+				if (captureWalkthroughClip(ctx, server, videoDir, walkName, WALKTHROUGH_FRAMES)) {
+					clips.add(new ClipRecord(walkName, walkDef.id(),
+							WALKTHROUGH_FAMILY.name().toLowerCase(Locale.ROOT),
+							walkDef.screenTemplate(), "walkthrough", WALKTHROUGH_FRAMES, "none"));
+				} else {
+					failed++;
+				}
+			}
+
+			// --- Impact volley: three real impacts 0.5 s apart, each aimed at the
+			// orbiting camera, so waves + crest glow + health-weakened wobble show
+			// from a revolving viewpoint (WP-Evt + WP-Dyn together).
+			EffectDefinition volleyDef = firstOfFamily(VOLLEY_FAMILY);
+			String volleyName = String.format(Locale.ROOT, "impact_volley_fx%03d_%s",
+					volleyDef.id(), VOLLEY_FAMILY.name().toLowerCase(Locale.ROOT));
+			if (clipEnabled(volleyName)) {
+				setHudHidden(ctx, true);
+				retune(server, volleyDef.id(), BeamStyle.NONE);
+				orbitCamera(server, ORBIT_START_DEGREES);
+				ctx.waitTicks(SETTLE_TICKS);
+				if (captureVolleyClip(ctx, server, videoDir, volleyName, VOLLEY_FRAMES)) {
+					clips.add(new ClipRecord(volleyName, volleyDef.id(),
+							VOLLEY_FAMILY.name().toLowerCase(Locale.ROOT),
+							volleyDef.screenTemplate(), "orbit_volley", VOLLEY_FRAMES, "none"));
+				} else {
+					failed++;
+				}
 			}
 
 			// Leave the world with the shield lowered so the close-out save is quiet.
@@ -321,6 +409,80 @@ public class VideoCaptureTest implements FabricClientGameTest {
 	}
 
 	/**
+	 * Captures the walkthrough clip: each frame the camera is teleported
+	 * {@value #WALKTHROUGH_STEP_X} blocks further east along the fixed z = 0.5
+	 * walk line (eye level, facing east), one tick apart. The aperture tracker
+	 * reacts to the REAL synced player position, so the parting/crossing timing
+	 * in the clip is the genuine gameplay behavior.
+	 */
+	private boolean captureWalkthroughClip(ClientGameTestContext ctx, TestServerContext server,
+			Path videoDir, String clipName, int frames) {
+		Path clipDir = videoDir.resolve(clipName);
+		try {
+			Files.createDirectories(clipDir);
+			for (int f = 0; f < frames; f++) {
+				walkthroughCamera(server, f);
+				ctx.waitTicks(1);
+				ctx.takeScreenshot(TestScreenshotOptions.of(String.format(Locale.ROOT, "f_%04d", f))
+						.withDestinationDir(clipDir)
+						.disableCounterPrefix());
+			}
+			LOGGER.info("Captured walkthrough clip {} ({} frames) -> {}", clipName, frames, clipDir);
+			return true;
+		} catch (Exception e) {
+			LOGGER.error("Walkthrough clip {} failed", clipName, e);
+			return false;
+		}
+	}
+
+	/** Teleports the camera onto the walkthrough line at frame {@code f} (facing east). */
+	private static void walkthroughCamera(TestServerContext server, int f) {
+		server.runCommand(String.format(Locale.ROOT, "tp @a %.3f -60 0.5 -90 0",
+				WALKTHROUGH_START_X + f * WALKTHROUGH_STEP_X));
+	}
+
+	/**
+	 * Captures the volley clip: a normal orbit revolve, except that on each
+	 * {@link #VOLLEY_IMPACT_FRAMES} frame one IMPACT entry is queued aimed at the
+	 * camera's current orbit angle (plus {@value #VOLLEY_IMPACT_DAMAGE} raw shield
+	 * damage, so the health-scaled wave amplitude and boss-bar state are real).
+	 * The batch flushes on the next serverTick and animates for 2 s client-side,
+	 * so consecutive waves visibly superpose.
+	 */
+	private boolean captureVolleyClip(ClientGameTestContext ctx, TestServerContext server,
+			Path videoDir, String clipName, int frames) {
+		Path clipDir = videoDir.resolve(clipName);
+		try {
+			Files.createDirectories(clipDir);
+			int nextImpact = 0;
+			for (int f = 0; f < frames; f++) {
+				double angleDegrees = ORBIT_START_DEGREES + f * ORBIT_STEP_DEGREES;
+				orbitCamera(server, angleDegrees);
+				if (nextImpact < VOLLEY_IMPACT_FRAMES.length && f == VOLLEY_IMPACT_FRAMES[nextImpact]) {
+					nextImpact++;
+					double a = Math.toRadians(angleDegrees);
+					Vec3 towardCamera = new Vec3(Math.cos(a), 0.0, Math.sin(a));
+					server.runOnServer(mc -> {
+						BubbleShieldBlockEntity shield = (BubbleShieldBlockEntity) mc.overworld().getBlockEntity(PROJECTOR_POS);
+						shield.applyShieldDamage(VOLLEY_IMPACT_DAMAGE);
+						shield.queueImpact(ShieldPayloads.ImpactEntry.KIND_IMPACT, towardCamera, VOLLEY_IMPACT_STRENGTH);
+					});
+				}
+
+				ctx.waitTicks(1);
+				ctx.takeScreenshot(TestScreenshotOptions.of(String.format(Locale.ROOT, "f_%04d", f))
+						.withDestinationDir(clipDir)
+						.disableCounterPrefix());
+			}
+			LOGGER.info("Captured volley clip {} ({} frames) -> {}", clipName, frames, clipDir);
+			return true;
+		} catch (Exception e) {
+			LOGGER.error("Volley clip {} failed", clipName, e);
+			return false;
+		}
+	}
+
+	/**
 	 * Teleports the camera onto the orbit circle at {@code angleDegrees} (180° = due
 	 * west of the bubble center, the fixed camera's side), yawed to face the center.
 	 */
@@ -340,6 +502,26 @@ public class VideoCaptureTest implements FabricClientGameTest {
 			BubbleShieldBlockEntity shield = (BubbleShieldBlockEntity) mc.overworld().getBlockEntity(PROJECTOR_POS);
 			shield.setSettings(DIAMETER, effectId, 0, 0, false, beam.ordinal());
 		});
+	}
+
+	/**
+	 * True when {@code clipName} passes the optional {@code BUBBLESHIELD_VIDEO_CLIPS}
+	 * filter (comma-separated substrings); unset/blank enables every clip.
+	 */
+	private static boolean clipEnabled(String clipName) {
+		String filter = System.getenv("BUBBLESHIELD_VIDEO_CLIPS");
+		if (filter == null || filter.isBlank()) {
+			return true;
+		}
+
+		for (String token : filter.split(",")) {
+			if (!token.isBlank() && clipName.contains(token.trim())) {
+				return true;
+			}
+		}
+
+		LOGGER.info("Clip {} skipped by BUBBLESHIELD_VIDEO_CLIPS", clipName);
+		return false;
 	}
 
 	/** Shows/hides the HUD (26.2: F1 hiding lives on Gui/Hud, not Options). */

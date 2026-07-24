@@ -238,6 +238,86 @@ are emitted by deterministic, byte-stable generators — **never hand-edit gener
    byte-uniqueness + manifest/layer-marker + FxConfig-order invariants).
 4. `./gradlew build` and `./gradlew runGameTest` must both pass.
 
+## Living surface
+
+The membrane is CPU-deformed geometry that reacts to the world, not a static ball:
+
+- **Impact waves**: every hit wobbles the bubble — traveling damped waves (12 blocks/s along the
+  surface) radiate from the hit point with a crest glow riding each wavefront. Wave amplitude grows as
+  the shield weakens (up to 2.5x at low health), so a battered bubble visibly shudders.
+- **Last-stand tremble**: below 25% health the whole surface shivers (~1.8 Hz, spatially de-synced), on
+  top of the heartbeat.
+- **Whitelisted aperture**: the wall *parts* for the owner and whitelisted players — a hole eases open as
+  you approach (within 5.5 blocks of the wall) and seals when you leave (beyond 6.5 blocks; opening is
+  snappy, closing deliberately slower), with the displaced mass bulging into a lip around the hole, a
+  glowing rim ring, the surface pattern streaming aside (UV flow) and soft open/close chimes.
+- **Passage ripple**: actually crossing the wall rings a whoosh and sends a ripple out from the crossing
+  point — predicted instantly on the client, confirmed by the server's event batch a tick later.
+
+## Volumetric membrane
+
+The surfaces render as thick refractive matter rather than a screen-thin decal. Every generated fx
+shader bakes a per-family optical treatment from five material groups (energy / crystalline / organic /
+geo / celestial): a relative shell thickness that *chord-thickens toward the silhouette* (the limb
+visibly deepens at grazing angles), Beer–Lambert absorption tinting the refracted scene behind the
+membrane, parallax texture depth (two extra atlas taps), and a per-family **inner material** composited
+on the bubble's back face — energy currents, crystalline scaffolds, organic fog banks or celestial
+star depths.
+
+## Interior specials
+
+Every effect fills the bubble's interior with themed floating elements — billboarded sprites from two
+generated sheets (crisp pixel-art + soft tinted glows), animated (orbit, bob, drift, fall, swim, blink…),
+distance-LOD'd and budget-capped. Each of the 60 surface families maps to an interior treatment (embers,
+star fields, film petals, glyphs, ghost veils, cage rings, void shells…), and ten signature effects carry
+**novelty interiors**:
+
+- **Aquarium (442)** — swimming fish and rising bubbles.
+- **Rubber Duck Pond (526)** — rubber ducks bobbing on a waterline amid ripples.
+- **Matrix Rain (575)** — falling glyph code with bright streaks.
+- **Whispering Library (612)** — orbiting books and drifting runes.
+- **Taco Fiesta (633)** — tacos orbiting and bobbing through the dome.
+- **Lava Lamp (717)** — glowing blobs rising lazily from the floor.
+- **Cat Cloud (728)** — cats perched on drifting smoke wisps.
+- **Donut Drift (756)** — a slow ring-orbit of donuts with sprinkle motes.
+- **Disco Dome (809)** — a top-center disco ball, sweeping light shafts and blinking sparkles.
+- **Void Absolute (839)** — the maxed-out void: a dark inner dome shell, sparse stars and spiraling
+  tendrils.
+
+Interiors are visible from outside too, seen through the translucent membrane.
+
+## Contact feedback
+
+A blocked player pressing the barrier gets an instant full-screen edge flash in the shield's tint, its
+style matched to the effect's screen family (color grade, chromatic offset, expanding rings, scanlines
+or glow rims) and thickened on the screen side facing the wall, plus a personal slime squelch at the
+contact point. The flash is client-predicted (zero perceived latency) and reconciled against the
+server's confirmed CONTACT events. Photosensitivity guards: it is a pure 2D overlay (no scene
+distortion), peaks at 35% opacity, hard re-triggers are capped at 2 per second, and the
+`flashIntensity` client config scales it down or off entirely.
+
+## Impact audio
+
+A projectile hit layers three sounds at the actual hit point — a heavy-core thump whose pitch scales
+with the damage, the shield-block ring whose pitch rises as health falls, and the effect family's
+surface-material pair from five sound groups (energy crackle, crystal chime, organic squelch, tech
+click, void resonance) — rate-limited to one trio per shield per tick. The shockwave then "travels
+through" the bubble: a warden-sonic tail rings out at the antipode (the far side of the bubble)
+`2 + radius/8` ticks later, so bigger bubbles take audibly longer to traverse. Standing close to an
+active wall also plays a soft proximity hum, portal-flavored for the void families.
+
+## Client config
+
+Client-only visual options live in `config/bubbleshield-client.json` (written with defaults on first
+run; malformed values fall back per-field and are canonicalized):
+
+- `interiorDensity` (0..1, default 1) — global multiplier on the interior element budget; 0 disables
+  interiors entirely.
+- `volumetricMode` (`OFF` / `LOW` / `FULL`, default `FULL`) — thins the fog-flagged interior layers
+  (x0 / x0.5 / x1).
+- `flashIntensity` (0..1, default 1) — contact-flash overlay and interior blink-envelope multiplier;
+  0 disables the flashes.
+
 ## HUD, ambient sounds and advancements
 
 - **In-bubble HUD**: while you stand inside an active shield, a top-center HUD element shows the shield
@@ -271,7 +351,8 @@ Requires Java 25. All commands run from the repository root:
 # economy, comparator/redstone, dome geometry, guard/context, advancements, boss
 # bar/naming, shield modes/effect cycle, color override, resonance linking,
 # command/sculk/loot integration, effect catalogue invariants, lang parity,
-# post-effect assets, persistence)
+# post-effect assets, persistence, visual-event batches + impact audio, surface
+# dynamics math (waves/aperture/tremble), interior themes + sprite sheets)
 ./gradlew runGameTest
 
 # Compile-validate all bubble + screen-fx GLSL shaders with glslangValidator

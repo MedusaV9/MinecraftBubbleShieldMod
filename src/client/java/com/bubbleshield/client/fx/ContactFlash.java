@@ -154,7 +154,11 @@ public final class ContactFlash {
 	private static void trigger(long now, Vec3 outward, GlobalPos pos) {
 		normal = outward;
 		shieldPos = pos;
-		if (now - lastTriggerMillis >= RETRIGGER_MILLIS) {
+		// The sentinel must be checked explicitly: now - MIN_VALUE overflows
+		// negative, so the subtraction alone would rate-limit the FIRST flash
+		// (and, since lastTriggerMillis only updates in this branch, every
+		// flash after it) forever.
+		if (lastTriggerMillis == Long.MIN_VALUE || now - lastTriggerMillis >= RETRIGGER_MILLIS) {
 			lastTriggerMillis = now;
 			flashStartMillis = now;
 		}
