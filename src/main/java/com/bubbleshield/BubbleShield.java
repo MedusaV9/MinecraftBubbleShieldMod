@@ -10,6 +10,7 @@ import com.bubbleshield.net.ServerNet;
 import com.bubbleshield.net.ShieldPayloads;
 import com.bubbleshield.registry.ModBlockEntities;
 import com.bubbleshield.registry.ModBlocks;
+import com.bubbleshield.registry.ModGameRules;
 import com.bubbleshield.registry.ModItems;
 import com.bubbleshield.registry.ModMenus;
 import com.bubbleshield.registry.ModTicketTypes;
@@ -35,6 +36,7 @@ public class BubbleShield implements ModInitializer {
 		ModBlockEntities.init();
 		ModMenus.init();
 		ModTicketTypes.init();
+		ModGameRules.init();
 		ModCriteria.init();
 
 		ShieldPayloads.registerTypes();

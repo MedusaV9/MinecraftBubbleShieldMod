@@ -1,22 +1,48 @@
 package com.bubbleshield.registry;
 
+import java.util.function.Consumer;
+
 import com.bubbleshield.BubbleShield;
 
 import net.fabricmc.fabric.api.creativetab.v1.CreativeModeTabEvents;
 
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.world.item.component.TooltipDisplay;
 
 public final class ModItems {
 	public static final ResourceKey<Item> BUBBLE_SHIELD_PROJECTOR_KEY = ResourceKey.create(Registries.ITEM, BubbleShield.id("bubble_shield_projector"));
 	public static final ResourceKey<Item> RESONANT_CORE_KEY = ResourceKey.create(Registries.ITEM, BubbleShield.id("resonant_core"));
 	public static final ResourceKey<Item> PRISMATIC_CORE_KEY = ResourceKey.create(Registries.ITEM, BubbleShield.id("prismatic_core"));
+	public static final ResourceKey<Item> AEGIS_CORE_KEY = ResourceKey.create(Registries.ITEM, BubbleShield.id("aegis_core"));
 	public static final ResourceKey<Item> FLUX_CAPACITOR_KEY = ResourceKey.create(Registries.ITEM, BubbleShield.id("flux_capacitor"));
+
+	/**
+	 * An item whose hover tooltip carries one static translatable line —
+	 * {@code <descriptionId>.tooltip} in gray — used by the upgrade cores and the
+	 * flux capacitor to state their exact current numbers (HP base, regen/pulse,
+	 * cooldown, DR) right on the item. The EN+DE lang parity gametest covers the
+	 * {@code .tooltip} keys like every other key.
+	 */
+	private static final class TooltipItem extends Item {
+		TooltipItem(Item.Properties properties) {
+			super(properties);
+		}
+
+		@Override
+		public void appendHoverText(ItemStack stack, Item.TooltipContext context, TooltipDisplay display, Consumer<Component> builder, TooltipFlag flag) {
+			builder.accept(Component.translatable(this.getDescriptionId() + ".tooltip").withStyle(ChatFormatting.GRAY));
+		}
+	}
 
 	public static final Item BUBBLE_SHIELD_PROJECTOR = Registry.register(
 		BuiltInRegistries.ITEM,
@@ -29,25 +55,36 @@ public final class ModItems {
 		)
 	);
 
-	/** Tier-1 upgrade core: doubles shield max health and enables slow regeneration. */
+	/** Tier-1 upgrade core: 400 base HP, 25% damage resistance, faster regen, 10-min break cooldown. */
 	public static final Item RESONANT_CORE = Registry.register(
 		BuiltInRegistries.ITEM,
 		RESONANT_CORE_KEY,
-		new Item(
+		new TooltipItem(
 			new Item.Properties()
 				.stacksTo(1)
 				.setId(RESONANT_CORE_KEY)
 		)
 	);
 
-	/** Tier-2 upgrade core: triples shield max health, faster regeneration, halved break cooldown. */
+	/** Tier-2 upgrade core: 700 base HP, 40% damage resistance, faster regen, 6-min break cooldown. */
 	public static final Item PRISMATIC_CORE = Registry.register(
 		BuiltInRegistries.ITEM,
 		PRISMATIC_CORE_KEY,
-		new Item(
+		new TooltipItem(
 			new Item.Properties()
 				.stacksTo(1)
 				.setId(PRISMATIC_CORE_KEY)
+		)
+	);
+
+	/** Tier-3 upgrade core: 1200 base HP, 50% damage resistance, fastest regen, 3-min break cooldown. */
+	public static final Item AEGIS_CORE = Registry.register(
+		BuiltInRegistries.ITEM,
+		AEGIS_CORE_KEY,
+		new TooltipItem(
+			new Item.Properties()
+				.stacksTo(1)
+				.setId(AEGIS_CORE_KEY)
 		)
 	);
 
@@ -58,7 +95,7 @@ public final class ModItems {
 	public static final Item FLUX_CAPACITOR = Registry.register(
 		BuiltInRegistries.ITEM,
 		FLUX_CAPACITOR_KEY,
-		new Item(
+		new TooltipItem(
 			new Item.Properties()
 				.stacksTo(1)
 				.setId(FLUX_CAPACITOR_KEY)
@@ -74,6 +111,7 @@ public final class ModItems {
 				output.accept(BUBBLE_SHIELD_PROJECTOR);
 				output.accept(RESONANT_CORE);
 				output.accept(PRISMATIC_CORE);
+				output.accept(AEGIS_CORE);
 				output.accept(FLUX_CAPACITOR);
 			});
 	}

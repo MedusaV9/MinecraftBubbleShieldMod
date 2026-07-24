@@ -408,6 +408,7 @@ public final class ServerNet {
 				state.targetRadius,
 				ShieldLogic.currentRadius(state),
 				healthFrac,
+				state.maxHealth,
 				shield.tier(),
 				state.shape.ordinal(),
 				state.colorOverride,

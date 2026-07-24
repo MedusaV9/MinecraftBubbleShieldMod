@@ -50,18 +50,24 @@ public class ControlShapeGameTests {
 		be.addFuelSeconds(PLENTY_OF_FUEL);
 		helper.assertTrue(be.tryActivate(), "shield should activate");
 
-		helper.assertTrue(analogSignal(helper) == 15, "an active full-health shield should output 15, got " + analogSignal(helper));
+		// Let the first tick's max-health recompute land (tier 0 at diameter 8:
+		// 200 x 0.625 = 125) so the health fractions below are exact.
+		helper.runAfterDelay(2, () -> {
+			helper.assertTrue(state.maxHealth == 125.0F, "tier 0 at diameter 8 should have maxHealth 125, got " + state.maxHealth);
+			helper.assertTrue(analogSignal(helper) == 15, "an active full-health shield should output 15, got " + analogSignal(helper));
 
-		be.applyShieldDamage(50.0F);
-		helper.assertTrue(state.health == 50.0F, "damaged health should be 50, got " + state.health);
-		helper.assertTrue(analogSignal(helper) == 8, "an active half-health shield should output round(7.5) = 8, got " + analogSignal(helper));
+			// 50 raw at tier 0 (no DR): 75/125 = 60% -> round(9.0) = 9.
+			be.applyShieldDamage(50.0F);
+			helper.assertTrue(state.health == 75.0F, "damaged health should be 75, got " + state.health);
+			helper.assertTrue(analogSignal(helper) == 9, "an active 60%-health shield should output round(9.0) = 9, got " + analogSignal(helper));
 
-		be.setActive(false);
-		int expected = Math.min(15, state.fuelSeconds / 200);
-		helper.assertTrue(
-				analogSignal(helper) == expected,
-				"an inactive shield should output the fuel-based value " + expected + ", got " + analogSignal(helper));
-		helper.succeed();
+			be.setActive(false);
+			int expected = Math.min(15, state.fuelSeconds / 200);
+			helper.assertTrue(
+					analogSignal(helper) == expected,
+					"an inactive shield should output the fuel-based value " + expected + ", got " + analogSignal(helper));
+			helper.succeed();
+		});
 	}
 
 	@GameTest(maxTicks = 100, padding = 16)

@@ -149,13 +149,13 @@ public class BeamGameTests {
 		helper.succeed();
 	}
 
-	/** (d) ShieldVisual (9 fields) carries the synced beam ordinal through its stream codec. */
+	/** (d) ShieldVisual (10 fields) carries the synced beam ordinal through its stream codec. */
 	@GameTest(environment = ISOLATED_ENVIRONMENT)
 	public void beamVisualCodecRoundTrip(GameTestHelper helper) {
 		ByteBuf buffer = Unpooled.buffer();
 		try {
 			ShieldPayloads.ShieldVisual original = new ShieldPayloads.ShieldVisual(
-					true, 7, 8.0F, 6.5F, 0.75F, 2, 1, ShieldState.NO_COLOR_OVERRIDE, BeamStyle.HELIX.ordinal());
+					true, 7, 8.0F, 6.5F, 0.75F, 300.0F, 2, 1, ShieldState.NO_COLOR_OVERRIDE, BeamStyle.HELIX.ordinal());
 			ShieldPayloads.ShieldVisual.STREAM_CODEC.encode(buffer, original);
 			ShieldPayloads.ShieldVisual decoded = ShieldPayloads.ShieldVisual.STREAM_CODEC.decode(buffer);
 			helper.assertTrue(decoded.beamStyle() == BeamStyle.HELIX.ordinal(),
@@ -165,7 +165,7 @@ public class BeamGameTests {
 
 			// The NONE default round-trips too.
 			ShieldPayloads.ShieldVisual plain = new ShieldPayloads.ShieldVisual(
-					false, 0, 16.0F, 0.0F, 1.0F, 0, 0, ShieldState.NO_COLOR_OVERRIDE, BeamStyle.NONE.ordinal());
+					false, 0, 16.0F, 0.0F, 1.0F, 0.0F, 0, 0, ShieldState.NO_COLOR_OVERRIDE, BeamStyle.NONE.ordinal());
 			ShieldPayloads.ShieldVisual.STREAM_CODEC.encode(buffer, plain);
 			helper.assertTrue(plain.equals(ShieldPayloads.ShieldVisual.STREAM_CODEC.decode(buffer)),
 					"a visual with beam NONE should round-trip");

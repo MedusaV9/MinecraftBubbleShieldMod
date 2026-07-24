@@ -6,6 +6,7 @@ import com.bubbleshield.menu.BubbleShieldMenu;
 import com.bubbleshield.net.ServerNet;
 import com.bubbleshield.net.ShieldPayloads;
 import com.bubbleshield.registry.ModBlockEntities;
+import com.bubbleshield.registry.ModGameRules;
 import com.bubbleshield.registry.ModItems;
 import com.bubbleshield.registry.ModTicketTypes;
 import com.bubbleshield.shield.BeamStyle;
@@ -73,8 +74,14 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	private final SimpleContainer coreContainer = this.deviceContainer();
 	/** One-slot flux-capacitor inventory; its content drives {@link #hasCapacitor()}. */
 	private final SimpleContainer capacitorContainer = this.deviceContainer();
-	/** Tier applied by the last {@link #refreshTier()} pass; -1 forces a refresh on the first tick. */
+	/**
+	 * Inputs applied by the last {@link #refreshMaxHealth()} pass (tier, target radius,
+	 * strength percent); {@code lastTier = -1} forces a recompute on the first tick,
+	 * including the first tick after load (see {@code loadAdditional}).
+	 */
 	private int lastTier = -1;
+	private float lastTargetRadius = Float.NaN;
+	private int lastStrengthPercent = -1;
 	/** Last observed redstone level; persisted so chunk reloads do not fake an edge. */
 	private boolean powered;
 	/**
@@ -120,8 +127,7 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 				case BubbleShieldMenu.DATA_REGEN_PER_MIN_X10 -> BubbleShieldBlockEntity.this.regenPerMinuteTimes10();
 				case BubbleShieldMenu.DATA_DRAIN_PER_MIN_X10 -> BubbleShieldBlockEntity.this.drainPerMinuteTimes10();
 				case BubbleShieldMenu.DATA_WHITELIST_COUNT -> Mth.clamp(state.whitelistNames.size(), 0, ShieldState.MAX_WHITELIST_SIZE);
-				// Placeholder until a later WP wires a gamerule.
-				case BubbleShieldMenu.DATA_STRENGTH_PERCENT -> 100;
+				case BubbleShieldMenu.DATA_STRENGTH_PERCENT -> BubbleShieldBlockEntity.this.strengthPercent();
 				// Placeholder until a later WP counts engaging threats.
 				case BubbleShieldMenu.DATA_THREAT_COUNT -> 0;
 				default -> 0;
@@ -225,15 +231,34 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 
 	/**
 	 * @return the shield tier derived from the upgrade-core slot: 0 without a core,
-	 * 1 with a resonant core, 2 with a prismatic core.
+	 * 1 with a resonant core, 2 with a prismatic core, 3 with an aegis core.
 	 */
 	public int tier() {
 		ItemStack core = this.coreContainer.getItem(0);
+		if (core.is(ModItems.AEGIS_CORE)) {
+			return 3;
+		}
+
 		if (core.is(ModItems.PRISMATIC_CORE)) {
 			return 2;
 		}
 
 		return core.is(ModItems.RESONANT_CORE) ? 1 : 0;
+	}
+
+	/**
+	 * The {@code bubbleshield:strength} gamerule as a percent, clamped into
+	 * [{@link ModGameRules#MIN_STRENGTH_PERCENT}, {@link ModGameRules#MAX_STRENGTH_PERCENT}]
+	 * on read (defense in depth; the rule's own range already enforces it). Falls back
+	 * to the default off-server (client menus never query this authoritatively).
+	 */
+	public int strengthPercent() {
+		if (this.level instanceof ServerLevel serverLevel) {
+			return Mth.clamp(serverLevel.getGameRules().get(ModGameRules.STRENGTH),
+					ModGameRules.MIN_STRENGTH_PERCENT, ModGameRules.MAX_STRENGTH_PERCENT);
+		}
+
+		return ModGameRules.DEFAULT_STRENGTH_PERCENT;
 	}
 
 	public ContainerData getMenuData() {
@@ -252,27 +277,40 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 
 	/**
 	 * Current regeneration rate for the menu's {@code DATA_REGEN_PER_MIN_X10} slot:
-	 * HP per minute x10 from the tier regen logic (one pulse per
-	 * {@link ShieldLogic#REGEN_PERIOD_TICKS}), 0 when there is no regen (tier 0),
-	 * in ECO mode (which suppresses regen) or while inactive.
+	 * HP per minute x10 from the tier regen table (one {@link ShieldLogic#regenPerPulse}
+	 * pulse per {@link ShieldLogic#REGEN_PERIOD_TICKS}, x3 out of combat for tiers 1-3),
+	 * 0 while inactive, in ECO mode (which suppresses regen) or for a tier-0 shield in
+	 * combat (whose regen is combat-gated away entirely). The linked x1.25 bonus is
+	 * intentionally not counted: this is the shield's own baseline rate.
 	 */
 	private int regenPerMinuteTimes10() {
 		ShieldState state = this.shieldState;
 		int tier = this.tier();
-		if (!state.active || tier < 1 || state.mode == ShieldMode.ECO) {
+		if (!state.active || state.mode == ShieldMode.ECO) {
 			return 0;
 		}
 
-		float perPulse = tier == 1 ? ShieldLogic.TIER_1_REGEN_PER_PULSE : ShieldLogic.TIER_2_REGEN_PER_PULSE;
+		long gameTime = this.level != null ? this.level.getGameTime() : 0L;
+		boolean inCombat = ShieldLogic.inCombat(state, gameTime);
+		if (tier == 0 && inCombat) {
+			return 0;
+		}
+
+		float perPulse = ShieldLogic.regenPerPulse(tier);
+		if (tier >= 1 && !inCombat) {
+			perPulse *= ShieldLogic.OUT_OF_COMBAT_REGEN_MULTIPLIER;
+		}
+
 		int pulsesPerMinute = 1200 / ShieldLogic.REGEN_PERIOD_TICKS;
 		return Mth.clamp(Math.round(perPulse * pulsesPerMinute * 10.0F), 0, Short.MAX_VALUE);
 	}
 
 	/**
 	 * Current passive fuel drain for the menu's {@code DATA_DRAIN_PER_MIN_X10} slot:
-	 * fuel-seconds per minute x10 from {@link ShieldLogic#drainIntervalTicks}
-	 * (including the ECO/capacitor modifiers), 0 while inactive. Regen/pulse
-	 * surcharges are intentionally not counted: this is the steady baseline rate.
+	 * fuel-seconds per minute x10 — {@link ShieldLogic#drainUnits} (diameter-scaled,
+	 * 1..4) per {@link ShieldLogic#drainIntervalTicks} interval (including the
+	 * ECO/capacitor modifiers) — 0 while inactive. Regen/pulse surcharges are
+	 * intentionally not counted: this is the steady baseline rate.
 	 */
 	private int drainPerMinuteTimes10() {
 		ShieldState state = this.shieldState;
@@ -280,8 +318,9 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 			return 0;
 		}
 
-		// 1 fuel-second per interval ticks -> (1200 / interval) per minute, x10.
-		return Mth.clamp(12000 / ShieldLogic.drainIntervalTicks(state.mode == ShieldMode.ECO, this.hasCapacitor()), 0, Short.MAX_VALUE);
+		// drainUnits fuel-seconds per interval ticks -> units * (1200 / interval) per minute, x10.
+		int interval = ShieldLogic.drainIntervalTicks(state.mode == ShieldMode.ECO, this.hasCapacitor());
+		return Mth.clamp(12000 * ShieldLogic.drainUnits(state.targetRadius) / interval, 0, Short.MAX_VALUE);
 	}
 
 	public float currentRadius() {
@@ -298,11 +337,11 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		}
 
 		this.consumeFuelSlot();
-		this.refreshTier();
+		this.refreshMaxHealth();
 		if (this.level instanceof ServerLevel serverLevel) {
 			// Load hardening: cap a (possibly tampered) remaining cooldown at the
 			// maximum possible break cooldown; breakCooldownTicks(0) is the longest
-			// any tier can be assigned (tier 2 halves it).
+			// in the by-tier table (higher tiers only shorten it).
 			if (this.capLoadedCooldown) {
 				this.capLoadedCooldown = false;
 				long maxCooldownUntil = serverLevel.getGameTime() + ShieldLogic.breakCooldownTicks(0);
@@ -523,28 +562,34 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	}
 
 	/**
-	 * Applies the tier derived from the core slot to the shield's max health whenever the
-	 * slot content changed (including the first tick after load): {@code maxHealth = 100 * (1 + tier)}.
-	 * When max health rises (core inserted) the health FRACTION is preserved, so an
-	 * active shield keeps its current radius instead of instantly shrinking; when it
-	 * drops (core removed) current health is clamped down as before.
+	 * Recomputes the shield's max health ({@link ShieldLogic#maxHealthFor}: tier,
+	 * bubble diameter and the {@code bubbleshield:strength} gamerule) whenever any of
+	 * those inputs changed — including the first tick after load, where the recompute
+	 * also overrides whatever (possibly tampered or legacy) {@code max_health} the NBT
+	 * carried. The health FRACTION is always preserved across the recompute (clamped
+	 * into [0, 1] against the previous max first, so a huge loaded {@code health} maps
+	 * to full, not beyond), keeping the radius fraction stable through core swaps,
+	 * resizes and strength changes.
 	 */
-	private void refreshTier() {
+	private void refreshMaxHealth() {
 		int tier = this.tier();
-		if (tier == this.lastTier) {
+		float targetRadius = this.shieldState.targetRadius;
+		int strengthPercent = this.strengthPercent();
+		if (tier == this.lastTier && targetRadius == this.lastTargetRadius && strengthPercent == this.lastStrengthPercent) {
 			return;
 		}
 
 		this.lastTier = tier;
-		float newMaxHealth = ShieldState.DEFAULT_MAX_HEALTH * (1 + tier);
+		this.lastTargetRadius = targetRadius;
+		this.lastStrengthPercent = strengthPercent;
+		float newMaxHealth = ShieldLogic.maxHealthFor(tier, targetRadius, strengthPercent);
 		float oldMaxHealth = this.shieldState.maxHealth;
-		if (newMaxHealth > oldMaxHealth && oldMaxHealth > 0.0F) {
-			this.shieldState.health = this.shieldState.health / oldMaxHealth * newMaxHealth;
+		if (newMaxHealth != oldMaxHealth) {
+			float fraction = oldMaxHealth > 0.0F ? Math.clamp(this.shieldState.health / oldMaxHealth, 0.0F, 1.0F) : 1.0F;
+			this.shieldState.maxHealth = newMaxHealth;
+			this.shieldState.health = fraction * newMaxHealth;
+			this.markUpdated();
 		}
-
-		this.shieldState.maxHealth = newMaxHealth;
-		this.shieldState.health = Math.min(this.shieldState.health, newMaxHealth);
-		this.markUpdated();
 	}
 
 	/**
@@ -644,13 +689,18 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	}
 
 	/**
-	 * Applies damage to the shield, breaking it (deactivate + tier-scaled cooldown) when
-	 * health is depleted.
+	 * Applies RAW damage to the shield through the single damage pipeline
+	 * ({@link ShieldLogic#appliedDamage}: this shield's own tier DR, future plating
+	 * DR/last-stand hooks), breaking it (deactivate + tier-scaled cooldown) when
+	 * health is depleted. Linked-split shares also arrive here raw: the split happens
+	 * first, then each receiving shield discounts its share by its own DR.
 	 */
 	public void applyShieldDamage(float amount) {
 		long gameTime = this.level != null ? this.level.getGameTime() : 0L;
 		boolean wasActive = this.shieldState.active;
-		boolean broke = ShieldLogic.applyDamage(this.shieldState, amount, gameTime, ShieldLogic.breakCooldownTicks(this.tier()));
+		int tier = this.tier();
+		float applied = ShieldLogic.appliedDamage(amount, tier, 0.0F, false);
+		boolean broke = ShieldLogic.applyDamage(this.shieldState, applied, gameTime, ShieldLogic.breakCooldownTicks(tier));
 		if (broke && this.level instanceof ServerLevel serverLevel) {
 			serverLevel.playSound(null, this.worldPosition, SoundEvents.SHIELD_BREAK.value(), SoundSource.BLOCKS, 1.0F, 1.0F);
 			ModCriteria.fireShieldBroken(serverLevel, this.shieldState.ownerUuid);
@@ -906,6 +956,7 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 				state.targetRadius,
 				ShieldLogic.currentRadius(state),
 				state.maxHealth > 0.0F ? state.health / state.maxHealth : 0.0F,
+				state.maxHealth,
 				this.tier(),
 				state.shape.ordinal(),
 				state.colorOverride,
@@ -1015,7 +1066,9 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		this.fuelContainer.fromItemList(input.listOrEmpty("fuel_items", ItemStack.CODEC));
 		this.coreContainer.fromItemList(input.listOrEmpty("core_items", ItemStack.CODEC));
 		this.capacitorContainer.fromItemList(input.listOrEmpty("capacitor_items", ItemStack.CODEC));
-		// Re-derive tier-dependent fields on the next tick (covers cores edited while unloaded).
+		// Force the max-health recompute on the next tick (covers cores/diameters/
+		// strength edited while unloaded AND maps a legacy save's health fraction
+		// onto the current max-health model).
 		this.lastTier = -1;
 		// Cap the remaining cooldown on the first tick (needs the level clock).
 		this.capLoadedCooldown = true;

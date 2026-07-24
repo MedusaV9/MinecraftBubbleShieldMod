@@ -40,7 +40,8 @@
 			"com.bubbleshield.gametest.WorldIntegrationGameTests",
 			"com.bubbleshield.gametest.NbtHardeningGameTests",
 			"com.bubbleshield.gametest.BeamGameTests",
-			"com.bubbleshield.gametest.ShapeGameTests"
+			"com.bubbleshield.gametest.ShapeGameTests",
+			"com.bubbleshield.gametest.StrengthGameTests"
 		]
 	},
 	"mixins": [

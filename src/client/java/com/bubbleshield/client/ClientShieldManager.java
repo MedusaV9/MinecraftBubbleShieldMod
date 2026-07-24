@@ -66,6 +66,11 @@ public final class ClientShieldManager {
 			return this.visual.healthFrac();
 		}
 
+		/** The synced absolute max health; 0 means "unknown" (HUD falls back to tier-only). */
+		public float maxHealth() {
+			return this.visual.maxHealth();
+		}
+
 		public int tier() {
 			return this.visual.tier();
 		}

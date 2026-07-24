@@ -130,9 +130,11 @@ public final class ShieldPayloads {
 	 * The renderable core of a shield snapshot, nested inside {@link ShieldSyncS2C} with
 	 * its own codec so the outer {@link StreamCodec#composite} (capped at 12 fields in
 	 * this Minecraft version) keeps free slots for future fields (e.g. tier/shape).
-	 * This nested composite itself sits at 9 of those 12 fields.
+	 * This nested composite itself sits at 10 of those 12 fields.
 	 *
-	 * <p>{@code colorOverride} is the owner-picked recolor: -1 = authored palette,
+	 * <p>{@code healthFrac} drives the renderer; {@code maxHealth} (0 = unknown) lets
+	 * the in-bubble HUD render absolute "HP cur/max" without a second payload.
+	 * {@code colorOverride} is the owner-picked recolor: -1 = authored palette,
 	 * otherwise an opaque ARGB (negative as a signed int; compare against -1, not 0).
 	 * {@code beamStyle} is the synced {@link com.bubbleshield.shield.BeamStyle} ordinal.
 	 */
@@ -142,6 +144,7 @@ public final class ShieldPayloads {
 		float targetRadius,
 		float currentRadius,
 		float healthFrac,
+		float maxHealth,
 		int tier,
 		int shape,
 		int colorOverride,
@@ -153,6 +156,7 @@ public final class ShieldPayloads {
 			ByteBufCodecs.FLOAT, ShieldVisual::targetRadius,
 			ByteBufCodecs.FLOAT, ShieldVisual::currentRadius,
 			ByteBufCodecs.FLOAT, ShieldVisual::healthFrac,
+			ByteBufCodecs.FLOAT, ShieldVisual::maxHealth,
 			ByteBufCodecs.VAR_INT, ShieldVisual::tier,
 			ByteBufCodecs.VAR_INT, ShieldVisual::shape,
 			ByteBufCodecs.VAR_INT, ShieldVisual::colorOverride,

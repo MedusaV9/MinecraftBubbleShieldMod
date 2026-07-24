@@ -80,13 +80,15 @@ public class BossBarNameGameTests {
 					Math.abs(event.getProgress() - 1.0F) < 0.01F,
 					"a full-health shield's boss bar should be full, got " + event.getProgress());
 
-			// Tier 0 shields never regenerate, so 70/100 health stays put between ticks.
+			// The hit opens the 200-tick combat gate, and tier 0 shields do not
+			// regenerate in combat, so 95/125 (30 raw, no tier-0 DR) stays put
+			// between ticks.
 			be.applyShieldDamage(30.0F);
 			be.setCustomName("Home Base");
 			helper.runAfterDelay(2, () -> {
 				helper.assertTrue(
-						Math.abs(event.getProgress() - 0.7F) < 0.02F,
-						"the boss bar should track applyShieldDamage (70/100), got " + event.getProgress());
+						Math.abs(event.getProgress() - 0.76F) < 0.02F,
+						"the boss bar should track applyShieldDamage (95/125), got " + event.getProgress());
 				helper.assertTrue(
 						"Home Base".equals(event.getName().getString()),
 						"the boss bar should show the custom name, got " + event.getName().getString());

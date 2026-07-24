@@ -47,24 +47,48 @@ import org.jspecify.annotations.Nullable;
  */
 public final class ShieldLogic {
 	public static final float MIN_RADIUS = 4.0F;
-	/** Absorb damage for arrows (and unclassified projectiles): the pre-existing behaviour. */
-	public static final float PROJECTILE_DAMAGE = 5.0F;
+	/** Absorb damage for arrows (and unclassified projectiles). */
+	public static final float PROJECTILE_DAMAGE = 3.0F;
 	/** Tridents are too heavy to absorb; they are reverse-deflected instead. */
 	public static final float TRIDENT_DAMAGE = 4.0F;
 	/** Fireballs/wither skulls/wind charges are reverse-deflected (no explosion inside). */
-	public static final float HURTING_PROJECTILE_DAMAGE = 8.0F;
+	public static final float HURTING_PROJECTILE_DAMAGE = 10.0F;
 	/** Thrown items (snowballs, potions, ender pearls) and shulker bullets fizzle out. */
-	public static final float THROWN_DAMAGE = 2.0F;
-	/** 30 minutes. */
-	public static final long BREAK_COOLDOWN_TICKS = 36000L;
+	public static final float THROWN_DAMAGE = 1.0F;
+	/** Tier-0 break cooldown: 15 minutes. See {@link #breakCooldownTicks} for the full table. */
+	public static final long BREAK_COOLDOWN_TICKS = 18000L;
+	/** Break cooldown by tier 0..3: 15 min, 10 min, 6 min, 3 min. */
+	private static final long[] BREAK_COOLDOWN_TICKS_BY_TIER = {18000L, 12000L, 7200L, 3600L};
+	/**
+	 * Base max health by tier 0..3 for {@link #maxHealthFor}; the effective value
+	 * additionally scales with the bubble diameter and the strength gamerule.
+	 */
+	public static final float[] BASE_HP_BY_TIER = {200.0F, 400.0F, 700.0F, 1200.0F};
+	/** {@link #maxHealthFor} clamps its result into [{@code MIN_MAX_HEALTH}, {@code MAX_MAX_HEALTH}]. */
+	public static final float MIN_MAX_HEALTH = 50.0F;
+	public static final float MAX_MAX_HEALTH = 8000.0F;
+	/** Tier damage resistance (fraction of raw damage negated) by tier 0..3; see {@link #appliedDamage}. */
+	public static final float[] TIER_DR_BY_TIER = {0.0F, 0.25F, 0.40F, 0.50F};
+	/** Combined (tier x plating) damage resistance never exceeds 70%. */
+	public static final float MAX_COMBINED_DR = 0.70F;
 	public static final int TICKS_PER_FUEL_SECOND = 20;
 	/** Upper bound on the combined (ECO x capacitor) passive-drain interval; see {@link #drainIntervalTicks}. */
 	public static final int MAX_DRAIN_INTERVAL_TICKS = 80;
 	public static final double PUSHBACK_MARGIN = 0.75;
-	/** A tier-1+ shield regenerates once every 2 seconds while active and fueled. */
+	/** A fueled shield regenerates once every 2 seconds of active runtime (combat-gated for tier 0). */
 	public static final int REGEN_PERIOD_TICKS = 40;
-	public static final float TIER_1_REGEN_PER_PULSE = 1.0F;
-	public static final float TIER_2_REGEN_PER_PULSE = 2.5F;
+	/** Heal per regen pulse by tier 0..3; see {@link #regenPerPulse}. */
+	private static final float[] REGEN_PER_PULSE_BY_TIER = {1.0F, 3.0F, 6.0F, 12.0F};
+	/**
+	 * "In combat" = the last shield hit was less than this many ticks ago. Tier 0
+	 * shields do not regenerate at all in combat; tiers 1-3 pulse at their base rate
+	 * in combat and {@link #OUT_OF_COMBAT_REGEN_MULTIPLIER}x out of combat.
+	 */
+	public static final long COMBAT_GATE_TICKS = 200L;
+	/** Out-of-combat regen multiplier for tiers 1-3 (tier 0's 1.0/pulse is already its OOC rate). */
+	public static final float OUT_OF_COMBAT_REGEN_MULTIPLIER = 3.0F;
+	/** Below this health fraction the bubble starts shrinking; at or above it stays at full radius. */
+	public static final float SHRINK_PLATEAU_FRACTION = 0.60F;
 	/** Regen pulses heal this much more while the shield has at least one resonance-linked partner. */
 	public static final float LINKED_REGEN_MULTIPLIER = 1.25F;
 	/** PULSE mode zaps hostile mobs inside the bubble once per this many ticks. */
@@ -80,17 +104,74 @@ public final class ShieldLogic {
 	}
 
 	/**
-	 * @return the current shield radius; shrinks with health but never below {@link #MIN_RADIUS} while
-	 * active. In {@link ShieldMode#ECO} the result is capped at {@link #ECO_RADIUS_FACTOR} times the
-	 * normal value; applying the cap here keeps the barrier, renderer sync and projectile interception
-	 * in agreement about the eco bubble's size.
+	 * The canonical max-health model:
+	 * {@code clamp(round(BASE_HP[tier] * (0.5 + diameter/64) * strengthPercent/100), 50, 8000)}
+	 * with {@code diameter = 2 * targetRadius}. Pure; the block entity recomputes it
+	 * whenever tier, diameter or the strength gamerule changes (and on the first tick
+	 * after load), always preserving the health FRACTION across the recompute.
+	 * Examples: T0 D32 = 200, T0 D8 = 125, T2 D32 = 700, T3 D200 = 4350.
+	 */
+	public static float maxHealthFor(int tier, float targetRadius, int strengthPercent) {
+		float base = BASE_HP_BY_TIER[Math.clamp(tier, 0, BASE_HP_BY_TIER.length - 1)];
+		double diameter = targetRadius * 2.0;
+		double raw = base * (0.5 + diameter / 64.0) * (strengthPercent / 100.0);
+		return Math.clamp(Math.round(raw), (long) MIN_MAX_HEALTH, (long) MAX_MAX_HEALTH);
+	}
+
+	/**
+	 * The single damage pipeline every shield hit goes through: the receiving
+	 * shield's tier DR and (future) plating DR stack multiplicatively, capped at
+	 * {@link #MAX_COMBINED_DR} (70%), and a (future) last-stand state halves what
+	 * remains. Linked-split hits split the RAW damage first, then each receiving
+	 * shield applies its own DR to its share.
+	 *
+	 * @param platingDr additional plating damage resistance in [0, 1); always 0 until a later WP.
+	 * @param lastStand halves the applied damage when true; always false until a later WP.
+	 */
+	public static float appliedDamage(float raw, int tier, float platingDr, boolean lastStand) {
+		float tierDr = TIER_DR_BY_TIER[Math.clamp(tier, 0, TIER_DR_BY_TIER.length - 1)];
+		float combinedDr = Math.min(MAX_COMBINED_DR, 1.0F - (1.0F - tierDr) * (1.0F - platingDr));
+		return raw * (1.0F - combinedDr) * (lastStand ? 0.5F : 1.0F);
+	}
+
+	/** Heal per regen pulse for the given tier (before the linked/out-of-combat multipliers). */
+	public static float regenPerPulse(int tier) {
+		return REGEN_PER_PULSE_BY_TIER[Math.clamp(tier, 0, REGEN_PER_PULSE_BY_TIER.length - 1)];
+	}
+
+	/** @return true when the shield was hit less than {@link #COMBAT_GATE_TICKS} ago. */
+	public static boolean inCombat(ShieldState state, long gameTime) {
+		return gameTime - state.lastHitGameTime < COMBAT_GATE_TICKS;
+	}
+
+	/**
+	 * Fuel-seconds burned per passive-drain event, scaling with the bubble size:
+	 * {@code max(1, round(diameter / 50))} — 1 at diameter &le; 74, 2 at 75-124,
+	 * 3 at 125-174, 4 at &ge; 175. The drain INTERVAL ({@link #drainIntervalTicks})
+	 * is unchanged; only the per-event cost grows with the diameter.
+	 */
+	public static int drainUnits(float targetRadius) {
+		return Math.max(1, Math.round(targetRadius * 2.0F / 50.0F));
+	}
+
+	/**
+	 * @return the current shield radius. Shrink plateau: at a health fraction of
+	 * {@link #SHRINK_PLATEAU_FRACTION} (60%) or above the bubble holds its FULL target
+	 * radius; below that it shrinks proportionally ({@code targetRadius * frac/0.60}),
+	 * floored at {@link #MIN_RADIUS} while active. In {@link ShieldMode#ECO} the result
+	 * is capped at {@link #ECO_RADIUS_FACTOR} times the normal value; applying the cap
+	 * here keeps the barrier, renderer sync and projectile interception in agreement
+	 * about the eco bubble's size.
 	 */
 	public static float currentRadius(ShieldState state) {
 		if (!state.active || state.maxHealth <= 0.0F) {
 			return 0.0F;
 		}
 
-		float radius = Math.max(MIN_RADIUS, state.targetRadius * state.health / state.maxHealth);
+		float healthFrac = state.health / state.maxHealth;
+		float radius = healthFrac >= SHRINK_PLATEAU_FRACTION
+				? state.targetRadius
+				: Math.max(MIN_RADIUS, state.targetRadius * (healthFrac / SHRINK_PLATEAU_FRACTION));
 		if (state.mode == ShieldMode.ECO) {
 			radius *= ECO_RADIUS_FACTOR;
 		}
@@ -159,9 +240,9 @@ public final class ShieldLogic {
 		return false;
 	}
 
-	/** @return the break cooldown for the given shield tier; tier 2 halves the default. */
+	/** @return the break cooldown for the given shield tier (see {@link #BREAK_COOLDOWN_TICKS_BY_TIER}). */
 	public static long breakCooldownTicks(int tier) {
-		return tier >= 2 ? BREAK_COOLDOWN_TICKS / 2 : BREAK_COOLDOWN_TICKS;
+		return BREAK_COOLDOWN_TICKS_BY_TIER[Math.clamp(tier, 0, BREAK_COOLDOWN_TICKS_BY_TIER.length - 1)];
 	}
 
 	/**
@@ -194,19 +275,20 @@ public final class ShieldLogic {
 		boolean changed = false;
 		long gameTime = level.getGameTime();
 
-		// Combined passive-drain rule: the active shield burns 1 fuel-second per
-		// effective drain interval of ACTIVE ticks, which is TICKS_PER_FUEL_SECOND
-		// * (eco ? 2 : 1) * (capacitor ? 2 : 1), capped at MAX_DRAIN_INTERVAL_TICKS
-		// (80). Plain: 20; ECO or capacitor: 40; both: 80 (cap). The persisted
-		// per-shield accumulator (instead of the old gameTime % interval check)
-		// closes the dodge exploit where toggling the shield off across the level's
-		// payment ticks kept it active for free: only active ticks advance the
-		// accumulator, and it survives deactivation, so every interval of active
-		// runtime is paid exactly once no matter how the shield is toggled.
+		// Combined passive-drain rule: per effective drain interval of ACTIVE ticks
+		// — TICKS_PER_FUEL_SECOND * (eco ? 2 : 1) * (capacitor ? 2 : 1), capped at
+		// MAX_DRAIN_INTERVAL_TICKS (80); plain: 20, ECO or capacitor: 40, both: 80 —
+		// the shield burns drainUnits(targetRadius) fuel-seconds (1..4, growing with
+		// the diameter). The persisted per-shield accumulator (instead of the old
+		// gameTime % interval check) closes the dodge exploit where toggling the
+		// shield off across the level's payment ticks kept it active for free: only
+		// active ticks advance the accumulator, and it survives deactivation, so
+		// every interval of active runtime is paid exactly once no matter how the
+		// shield is toggled.
 		state.drainAccum++;
 		if (state.drainAccum >= drainIntervalTicks(state.mode == ShieldMode.ECO, capacitor)) {
 			state.drainAccum = 0;
-			state.fuelSeconds--;
+			state.fuelSeconds -= drainUnits(state.targetRadius);
 			changed = true;
 			if (state.fuelSeconds <= 0) {
 				state.fuelSeconds = 0;
@@ -215,22 +297,31 @@ public final class ShieldLogic {
 			}
 		}
 
-		// Fueled regeneration: tier-1+ shields heal once per REGEN_PERIOD_TICKS of
-		// active runtime (same accumulator scheme as the drain above), each pulse
-		// burning one extra fuel-second on top of the runtime drain -- unless a flux
-		// capacitor is installed, which makes regen pulses fuel-free. ECO mode
-		// suppresses regeneration entirely as part of its efficiency trade-off. The
-		// accumulator always advances while active; the pulse conditions are
-		// evaluated when it fires, matching the old boundary-tick semantics.
+		// Fueled regeneration: one pulse per REGEN_PERIOD_TICKS of active runtime
+		// (same accumulator scheme as the drain above), healing regenPerPulse(tier)
+		// HP. Combat gate: tier 0 does not pulse at all while in combat (hit less
+		// than COMBAT_GATE_TICKS ago); tiers 1-3 pulse at their base rate in combat
+		// and x3 out of combat. Each successful pulse burns one extra fuel-second on
+		// top of the runtime drain — unless a flux capacitor is installed, which
+		// makes regen pulses fuel-free. ECO mode suppresses regeneration entirely as
+		// part of its efficiency trade-off. The accumulator always advances while
+		// active; the pulse conditions are evaluated when it fires, matching the old
+		// boundary-tick semantics.
 		state.regenAccum++;
 		if (state.regenAccum >= REGEN_PERIOD_TICKS) {
 			state.regenAccum = 0;
-			if (tier >= 1 && state.mode != ShieldMode.ECO && state.health < state.maxHealth && state.fuelSeconds > 0) {
-				float perPulse = tier == 1 ? TIER_1_REGEN_PER_PULSE : TIER_2_REGEN_PER_PULSE;
+			boolean inCombat = inCombat(state, gameTime);
+			boolean gatedOut = tier == 0 && inCombat;
+			if (!gatedOut && state.mode != ShieldMode.ECO && state.health < state.maxHealth && state.fuelSeconds > 0) {
+				float perPulse = regenPerPulse(tier);
+				if (tier >= 1 && !inCombat) {
+					perPulse *= OUT_OF_COMBAT_REGEN_MULTIPLIER;
+				}
+
 				// Resonance bonus: a shield with at least one linked partner (same
 				// owner, active, overlapping — resolved through the per-tick link
 				// cache, see BubbleShieldBlockEntity#linkedShields) heals x1.25 per
-				// pulse. Applied only at this pulse site for now.
+				// pulse, stacking multiplicatively with the out-of-combat x3.
 				if (self.linkedShields(level).size() > 1) {
 					perPulse *= LINKED_REGEN_MULTIPLIER;
 				}
@@ -283,7 +374,7 @@ public final class ShieldLogic {
 			}
 		}
 
-		if (interceptProjectiles(level, pos, center, radius, state, projectiles, breakCooldownTicks(tier), self)) {
+		if (interceptProjectiles(level, pos, center, radius, state, projectiles, tier, self)) {
 			changed = true;
 		}
 
@@ -466,8 +557,9 @@ public final class ShieldLogic {
 		level.playSound(null, center.x, center.y, center.z, sound, SoundSource.AMBIENT, volume, def.ambientPitch());
 	}
 
-	private static boolean interceptProjectiles(ServerLevel level, BlockPos pos, Vec3 center, double radius, ShieldState state, List<Projectile> projectiles, long breakCooldownTicks, BubbleShieldBlockEntity self) {
+	private static boolean interceptProjectiles(ServerLevel level, BlockPos pos, Vec3 center, double radius, ShieldState state, List<Projectile> projectiles, int tier, BubbleShieldBlockEntity self) {
 		boolean changed = false;
+		long breakCooldownTicks = breakCooldownTicks(tier);
 
 		// The boundary shrinks as hits land, so it is recomputed after every applied
 		// hit below: a later projectile in the same tick's volley must test the
@@ -538,12 +630,14 @@ public final class ShieldLogic {
 			projectile.zOld = projectile.getZ();
 
 			// Resonance link: same-owner active shields overlapping this one split the
-			// damage evenly. Discarded projectiles are gone; deflected ones had their
-			// crossing neutralized above, so a linked partner's own tick can never
-			// re-intercept the same projectile for a second damage split.
-			// Partners take their share through applyShieldDamage (their own tier's
-			// break cooldown, break sound and criteria); the hit shield keeps the local
-			// applyDamage path so this loop's state/broke handling stays authoritative.
+			// RAW damage evenly; each receiving shield then applies its OWN tier DR to
+			// its share (appliedDamage). Discarded projectiles are gone; deflected ones
+			// had their crossing neutralized above, so a linked partner's own tick can
+			// never re-intercept the same projectile for a second damage split.
+			// Partners take their raw share through applyShieldDamage (their own tier's
+			// DR, break cooldown, break sound and criteria); the hit shield keeps the
+			// local applyDamage path so this loop's state/broke handling stays
+			// authoritative.
 			// D7b: linkedShields memoizes the findLinked resolution per shield tick, so
 			// a same-tick volley resolves the partner set ONCE (first hit) instead of
 			// re-running findLinked + a LOADED_SHIELDS copy per intercepted projectile.
@@ -556,14 +650,14 @@ public final class ShieldLogic {
 				ModCriteria.fireShieldsLinked(level, state.ownerUuid);
 
 				float split = damage / linked.size();
-				broke = applyDamage(state, split, level.getGameTime(), breakCooldownTicks);
+				broke = applyDamage(state, appliedDamage(split, tier, 0.0F, false), level.getGameTime(), breakCooldownTicks);
 				for (BubbleShieldBlockEntity partner : linked) {
 					if (partner != self) {
 						partner.applyShieldDamage(split);
 					}
 				}
 			} else {
-				broke = applyDamage(state, damage, level.getGameTime(), breakCooldownTicks);
+				broke = applyDamage(state, appliedDamage(damage, tier, 0.0F, false), level.getGameTime(), breakCooldownTicks);
 			}
 
 			changed = true;

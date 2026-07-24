@@ -175,7 +175,7 @@ public class NbtHardeningGameTests {
 		return new ShieldPayloads.ShieldSyncS2C(
 			new BlockPos(0, 64, 0),
 			helper.getLevel().dimension(),
-			new ShieldPayloads.ShieldVisual(false, 0, ShieldState.DEFAULT_TARGET_RADIUS, 0.0F, 1.0F, 0, 0, ShieldState.NO_COLOR_OVERRIDE, 0),
+			new ShieldPayloads.ShieldVisual(false, 0, ShieldState.DEFAULT_TARGET_RADIUS, 0.0F, 1.0F, 0.0F, 0, 0, ShieldState.NO_COLOR_OVERRIDE, 0),
 			List.of(),
 			whitelistNames,
 			0,
@@ -323,10 +323,12 @@ public class NbtHardeningGameTests {
 	 * (e) A health/max_health of 1e9 edited into the NBT keeps every menu data slot
 	 * 16-bit safe: health syncs as permille (&le; 1000, never the old health*10
 	 * encoding that overflowed above 3276.7 HP), max health caps at 32767, and no
-	 * slot ever goes negative. Read synchronously after load, before the tier
-	 * refresh on the next tick re-derives maxHealth.
+	 * slot ever goes negative. Read synchronously after load, before the max-health
+	 * refresh on the next tick re-derives maxHealth — and then the refresh must WIN:
+	 * the canonical model overrides the tamper, mapping the huge health by (clamped)
+	 * fraction to full.
 	 */
-	@GameTest(environment = ISOLATED_ENVIRONMENT, padding = 16)
+	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 100, padding = 16)
 	public void hugeLoadedHealthKeepsMenuDataSafe(GameTestHelper helper) {
 		helper.setBlock(PROJECTOR_POS, ModBlocks.BUBBLE_SHIELD_PROJECTOR);
 		BubbleShieldBlockEntity be = helper.getBlockEntity(PROJECTOR_POS, BubbleShieldBlockEntity.class);
@@ -360,16 +362,30 @@ public class NbtHardeningGameTests {
 					"menu data slot " + slot + " must stay 16-bit safe, got " + value);
 		}
 
-		helper.succeed();
+		// First tick after load: the canonical recompute overrides the tampered
+		// max_health entirely (tier 0 at the default diameter 32 -> 200) and the
+		// huge loaded health maps by its clamped fraction (1.0) to full.
+		helper.runAfterDelay(2, () -> {
+			float expected = ShieldLogic.maxHealthFor(0, state.targetRadius, 100);
+			helper.assertTrue(
+					state.maxHealth == expected,
+					"the first-tick recompute must override the tampered max_health with " + expected + ", got " + state.maxHealth);
+			helper.assertTrue(
+					state.health == expected,
+					"the huge loaded health must map by fraction to full (" + expected + "), got " + state.health);
+			helper.succeed();
+		});
 	}
 
 	/**
 	 * (f) Two arrows crossing the boundary on the same tick: the first hit shrinks
 	 * the shield, and the second arrow must be tested against the POST-shrink
-	 * radius. Both arrows end the crossing tick 7.71 blocks from the center —
-	 * inside the pre-hit boundary (8) but outside the post-first-hit boundary
-	 * (95/100 * 8 = 7.6) — so exactly one may be absorbed. With the stale
-	 * radius cached before the interception loop, both were.
+	 * radius. The shield starts pre-damaged BELOW the 60% shrink plateau (85/150:
+	 * boundary 8 x (85/150)/0.6 = 7.556) so a 3-damage arrow still moves the
+	 * boundary (82/150 -> 7.289). Both arrows end the crossing tick ~7.41 blocks
+	 * from the center — inside the pre-hit boundary but outside the post-first-hit
+	 * one — so exactly one may be absorbed. With the stale radius cached before the
+	 * interception loop, both were.
 	 */
 	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 200, padding = 16)
 	public void volleySecondArrowSeesShrunkRadius(GameTestHelper helper) {
@@ -381,36 +397,55 @@ public class NbtHardeningGameTests {
 		helper.assertTrue(be.tryActivate(), "shield should activate");
 		helper.assertTrue(be.currentRadius() == 8.0F, "shield radius should start at 8");
 
-		// Both dive straight down in lockstep (no gravity, 1.2 blocks/tick), from
-		// ~8.91 blocks above the center to ~7.71: one shared outside->inside
-		// crossing tick, both ending in the (7.6, 8) shell. Tier 0, so no regen can
-		// mask the damage accounting.
-		Arrow first = helper.spawn(EntityTypes.ARROW, new Vec3(4.5, 2.5 + 8.9, 4.1));
-		Arrow second = helper.spawn(EntityTypes.ARROW, new Vec3(4.5, 2.5 + 8.9, 4.9));
-		for (Arrow arrow : new Arrow[] {first, second}) {
-			arrow.setNoGravity(true);
-			arrow.setDeltaMovement(0.0, -1.2, 0.0);
-		}
+		// A sequence instead of a runAfterDelay-nested onEachTick: onEachTick
+		// registers one map entry per remaining tick, and entries added from WITHIN
+		// another tick callback can be missed by the in-progress iteration — the
+		// vanilla runner then fires TWO of them on the next tick, re-running the
+		// asserts right after this test's own cleanup discards the surviving arrow.
+		// thenWaitUntil/thenExecute run their closing asserts exactly once.
+		Arrow[] arrows = new Arrow[2];
+		helper.startSequence()
+				// Let the first tick's recompute land (tier 0 at diameter 16: 150),
+				// then pre-damage below the plateau and launch the volley.
+				.thenExecuteAfter(2, () -> {
+					helper.assertTrue(state.maxHealth == 150.0F, "tier 0 at diameter 16 should have maxHealth 150, got " + state.maxHealth);
+					state.health = 85.0F;
+					double boundary = be.currentRadius();
+					helper.assertTrue(
+							Math.abs(boundary - 8.0 * (85.0 / 150.0) / 0.6) < 0.01,
+							"the pre-damaged shield should sit below the plateau at ~7.556, got " + boundary);
 
-		helper.onEachTick(() -> {
-			if (state.health == state.maxHealth) {
-				return; // no interception yet
-			}
-
-			// First observed interception tick: exactly one absorb (5 damage) may
-			// have landed — the survivor sat outside the recomputed 7.6 boundary.
-			helper.assertTrue(
-					state.health == 95.0F,
-					"only ONE arrow of the same-tick volley may be absorbed, health is " + state.health);
-			boolean firstAlive = !first.isRemoved();
-			boolean secondAlive = !second.isRemoved();
-			helper.assertTrue(
-					firstAlive != secondAlive,
-					"exactly one arrow should survive the volley (first=" + firstAlive + ", second=" + secondAlive + ")");
-			// Stop the survivor before its continued flight crosses the shrunk boundary.
-			(firstAlive ? first : second).discard();
-			helper.succeed();
-		});
+					// Both dive straight down in lockstep (no gravity, 1.2 blocks/tick),
+					// from ~8.61 blocks above the center to ~7.41: one shared
+					// outside->inside crossing tick, both ending in the (7.289, 7.556)
+					// shell. Tier 0 with the combat gate untouched, but the first regen
+					// pulse is 40 ticks away — long after this test succeeds — so no
+					// regen can mask the accounting.
+					arrows[0] = helper.spawn(EntityTypes.ARROW, new Vec3(4.5, 2.5 + 8.6, 4.1));
+					arrows[1] = helper.spawn(EntityTypes.ARROW, new Vec3(4.5, 2.5 + 8.6, 4.9));
+					for (Arrow arrow : arrows) {
+						arrow.setNoGravity(true);
+						arrow.setDeltaMovement(0.0, -1.2, 0.0);
+					}
+				})
+				// The poll runs every tick, so the first passing check observes the
+				// interception tick itself — before the survivor's next move.
+				.thenWaitUntil(() -> helper.assertTrue(state.health != 85.0F, "waiting for the volley's crossing tick"))
+				.thenExecute(() -> {
+					// Exactly one absorb (3 damage) may have landed — the survivor sat
+					// outside the recomputed 7.289 boundary.
+					helper.assertTrue(
+							state.health == 82.0F,
+							"only ONE arrow of the same-tick volley may be absorbed, health is " + state.health);
+					boolean firstAlive = !arrows[0].isRemoved();
+					boolean secondAlive = !arrows[1].isRemoved();
+					helper.assertTrue(
+							firstAlive != secondAlive,
+							"exactly one arrow should survive the volley (first=" + firstAlive + ", second=" + secondAlive + ")");
+					// Stop the survivor before its continued flight crosses the shrunk boundary.
+					(firstAlive ? arrows[0] : arrows[1]).discard();
+				})
+				.thenSucceed();
 	}
 
 	/**

@@ -54,7 +54,7 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 	public static final int DATA_DRAIN_PER_MIN_X10 = 14;
 	/** Whitelist entry count, 0..{@link com.bubbleshield.shield.ShieldState#MAX_WHITELIST_SIZE}. */
 	public static final int DATA_WHITELIST_COUNT = 15;
-	/** Shield strength percent; constant 100 until a gamerule is wired up by a later WP. */
+	/** Shield strength percent from the {@code bubbleshield:strength} gamerule (10..500). */
 	public static final int DATA_STRENGTH_PERCENT = 16;
 	/** Threats currently engaging the shield; constant 0 until a later WP fills it. */
 	public static final int DATA_THREAT_COUNT = 17;
@@ -130,9 +130,9 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 		this.addDataSlots(data);
 	}
 
-	/** @return true for the two upgrade-core items accepted by the core slot. */
+	/** @return true for the three upgrade-core items accepted by the core slot. */
 	private static boolean isCore(ItemStack stack) {
-		return stack.is(ModItems.RESONANT_CORE) || stack.is(ModItems.PRISMATIC_CORE);
+		return stack.is(ModItems.RESONANT_CORE) || stack.is(ModItems.PRISMATIC_CORE) || stack.is(ModItems.AEGIS_CORE);
 	}
 
 	public BlockPos pos() {
@@ -173,7 +173,7 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 		return this.data.get(DATA_WHITELIST_COUNT);
 	}
 
-	/** @return the synced shield strength percent (constant 100 for now). */
+	/** @return the synced shield strength percent (the {@code bubbleshield:strength} gamerule). */
 	public int strengthPercent() {
 		return this.data.get(DATA_STRENGTH_PERCENT);
 	}

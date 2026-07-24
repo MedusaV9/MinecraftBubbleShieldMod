@@ -41,7 +41,7 @@ public class LinkingGameTests {
 	 * A 39x8x8 empty arena ({@code data/bubbleshield/gametest/structure/linking_arena.snbt})
 	 * wide enough for two projectors 10 or 30 blocks apart. Height 8 keeps the
 	 * radius-8 boundary crossing (relative y=10.5) above the framework's barrier
-	 * ceiling, the same trick as ShieldGameTests.arrowShrinksShield.
+	 * ceiling, the same trick as ShieldGameTests.arrowDamagesShield.
 	 */
 	private static final String ARENA_STRUCTURE = "bubbleshield:linking_arena";
 	private static final BlockPos SHIELD_A_POS = new BlockPos(4, 2, 4);
@@ -52,6 +52,8 @@ public class LinkingGameTests {
 	private static final float RADIUS = 8.0F;
 	private static final int PLENTY_OF_FUEL = 600;
 	private static final float TOLERANCE = 0.01F;
+	/** Tier-0 max health at RADIUS 8 (diameter 16): 200 * (0.5 + 16/64) = 150. */
+	private static final float T0_MAX_HEALTH = ShieldLogic.maxHealthFor(0, RADIUS, 100);
 
 	private static BubbleShieldBlockEntity placeProjector(GameTestHelper helper, BlockPos pos, UUID owner) {
 		helper.setBlock(pos, ModBlocks.BUBBLE_SHIELD_PROJECTOR);
@@ -63,7 +65,7 @@ public class LinkingGameTests {
 	}
 
 	/**
-	 * Copies the arrow-spawn pattern from ShieldGameTests.arrowShrinksShield: spawned
+	 * Copies the arrow-spawn pattern from ShieldGameTests.arrowDamagesShield: spawned
 	 * 12 blocks above shield A's projector (staying in the structure's own force-loaded
 	 * chunk column), shooting straight down into shield A. The interception discards
 	 * the arrow, so no entity cleanup is needed.
@@ -89,7 +91,8 @@ public class LinkingGameTests {
 
 		ShieldState stateA = shieldA.getShieldState();
 		ShieldState stateB = shieldB.getShieldState();
-		float expected = ShieldState.DEFAULT_MAX_HEALTH - ShieldLogic.PROJECTILE_DAMAGE / 2.0F;
+		// Tier 0 has no DR, so each shield loses exactly its raw half of the split.
+		float expected = T0_MAX_HEALTH - ShieldLogic.PROJECTILE_DAMAGE / 2.0F;
 		helper.startSequence()
 				.thenWaitUntil(() -> helper.assertTrue(stateA.health < stateA.maxHealth, "shield A should take damage from the intercepted arrow"))
 				// A few extra ticks so a non-discarded arrow (or double application by
@@ -194,7 +197,7 @@ public class LinkingGameTests {
 
 		ShieldState stateA = shieldA.getShieldState();
 		ShieldState stateB = shieldB.getShieldState();
-		float expected = ShieldState.DEFAULT_MAX_HEALTH - ShieldLogic.HURTING_PROJECTILE_DAMAGE / 2.0F;
+		float expected = T0_MAX_HEALTH - ShieldLogic.HURTING_PROJECTILE_DAMAGE / 2.0F;
 		helper.startSequence()
 				.thenWaitUntil(() -> helper.assertTrue(stateA.health < stateA.maxHealth, "shield A should take damage from the intercepted fireball"))
 				// Extra ticks so a second interception (by the partner's tick on the
@@ -226,18 +229,18 @@ public class LinkingGameTests {
 	 * linked pair must split the total damage exactly evenly. The per-tick link
 	 * cache resolves the partner set once per shield tick (instead of once per
 	 * intercepted projectile), so every hit of the volley must use the same
-	 * partner set: 10 arrows x {@link ShieldLogic#PROJECTILE_DAMAGE} = 50 total,
-	 * exactly 25 per shield.
+	 * partner set: 10 arrows x {@link ShieldLogic#PROJECTILE_DAMAGE} = 30 total,
+	 * exactly 15 per shield (both tier 0, so no DR discounts the raw shares).
 	 *
 	 * <p>Geometry: the whole volley must land within ONE interception loop, because
 	 * the framework's barrier ceiling caps the arena at the structure top — an arrow
 	 * that gets stuck on that ceiling BETWEEN two boundary radii (prev and current
 	 * both inside/both outside) would never register as crossing in. Shield A is
-	 * widened to radius 12 (final post-volley boundary 12 x 75/100 = 9.0) and the
-	 * arrows fall a whole 6 blocks on their first move tick: prev sits at distance
-	 * ~12.3 (outside even the full boundary) and current sticks on the ceiling at
-	 * distance ~6.5 (inside even the final shrunk boundary), so every arrow of the
-	 * volley crosses in on the same shield tick regardless of the per-hit shrink.
+	 * widened to radius 12 (post-volley health fraction 160/175 stays above the 60%
+	 * shrink plateau, so the boundary holds at 12) and the arrows fall a whole
+	 * 6 blocks on their first move tick: prev sits at distance ~12.3 (outside the
+	 * boundary) and current sticks on the ceiling at distance ~6.5 (well inside),
+	 * so every arrow of the volley crosses in on the same shield tick.
 	 */
 	@GameTest(environment = ISOLATED_ENVIRONMENT, structure = ARENA_STRUCTURE, maxTicks = 200, padding = 16)
 	public void linkedVolleySplitsEvenly(GameTestHelper helper) {
@@ -246,39 +249,53 @@ public class LinkingGameTests {
 		BubbleShieldBlockEntity shieldB = placeProjector(helper, SHIELD_B_NEAR_POS, owner);
 		// Widen A so the boundary stays above the ceiling-stuck arrow positions for
 		// the whole volley (see the geometry note in the javadoc). Still linked to B
-		// throughout: worst case 9.0 + 6.0 > 10 (both at health 75).
+		// throughout: both stay on the shrink plateau (12 + 8 > 10).
 		shieldA.getShieldState().targetRadius = 12.0F;
 		helper.assertTrue(shieldA.tryActivate(), "shield A should activate");
 		helper.assertTrue(shieldB.tryActivate(), "shield B should activate");
 
-		// x-fanned around the column so the arrows are distinct entities; all spawn
-		// just above A's radius-12 top (center y 2.5 + 12 = 14.5) and dive 6 blocks
-		// on their first move tick, landing stuck on the barrier ceiling INSIDE the
-		// final boundary, so the whole volley intercepts in one loop.
-		int volley = 10;
-		for (int i = 0; i < volley; i++) {
-			Arrow arrow = helper.spawn(EntityTypes.ARROW, new Vec3(4.05 + 0.1 * i, 14.8, 4.5));
-			arrow.setDeltaMovement(0.0, -6.0, 0.0);
-		}
-
 		ShieldState stateA = shieldA.getShieldState();
 		ShieldState stateB = shieldB.getShieldState();
-		float expected = ShieldState.DEFAULT_MAX_HEALTH - volley * ShieldLogic.PROJECTILE_DAMAGE / 2.0F;
+		// A is radius 12 (max 175), B radius 8 (max 150); each loses 15 raw (T0: no DR).
+		int volley = 10;
+		float halfVolley = volley * ShieldLogic.PROJECTILE_DAMAGE / 2.0F;
+		float expectedA = ShieldLogic.maxHealthFor(0, 12.0F, 100) - halfVolley;
+		float expectedB = T0_MAX_HEALTH - halfVolley;
 		helper.startSequence()
+				// Let BOTH first-tick max-health refreshes land before firing: the
+				// volley crosses on its very first move tick, and a split share
+				// applied to B before ITS refresh would be taken against the stale
+				// default max and then rescaled by the fraction-preserving refresh.
+				.thenExecuteAfter(2, () -> {
+					helper.assertTrue(stateA.maxHealth == expectedA + halfVolley,
+							"shield A should refresh to maxHealth 175, got " + stateA.maxHealth);
+					helper.assertTrue(stateB.maxHealth == expectedB + halfVolley,
+							"shield B should refresh to maxHealth 150, got " + stateB.maxHealth);
+
+					// x-fanned around the column so the arrows are distinct entities;
+					// all spawn just above A's radius-12 top (center y 2.5 + 12 = 14.5)
+					// and dive 6 blocks on their first move tick, landing stuck on the
+					// barrier ceiling INSIDE the final boundary, so the whole volley
+					// intercepts in one loop.
+					for (int i = 0; i < volley; i++) {
+						Arrow arrow = helper.spawn(EntityTypes.ARROW, new Vec3(4.05 + 0.1 * i, 14.8, 4.5));
+						arrow.setDeltaMovement(0.0, -6.0, 0.0);
+					}
+				})
 				.thenWaitUntil(() -> helper.assertTrue(
-						stateA.health <= expected + TOLERANCE,
+						stateA.health <= expectedA + TOLERANCE,
 						"all 10 arrows should be absorbed by shield A, health is " + stateA.health))
 				// Extra ticks so a stray un-discarded arrow or an uneven split would
 				// be caught by the exact-value asserts.
 				.thenExecuteAfter(10, () -> {
 					helper.assertTrue(
-							Math.abs(stateA.health - expected) <= TOLERANCE,
-							"shield A should lose exactly half the volley damage (25), health is " + stateA.health);
+							Math.abs(stateA.health - expectedA) <= TOLERANCE,
+							"shield A should lose exactly half the volley damage (15), health is " + stateA.health);
 					helper.assertTrue(
-							Math.abs(stateB.health - expected) <= TOLERANCE,
-							"shield B should lose the other half (25), health is " + stateB.health);
+							Math.abs(stateB.health - expectedB) <= TOLERANCE,
+							"shield B should lose the other half (15), health is " + stateB.health);
 					helper.assertTrue(
-							stateA.health == stateB.health,
+							stateA.maxHealth - stateA.health == stateB.maxHealth - stateB.health,
 							"the volley split must stay exactly even, A=" + stateA.health + " B=" + stateB.health);
 				})
 				.thenSucceed();
@@ -286,9 +303,11 @@ public class LinkingGameTests {
 
 	/**
 	 * (a''') The linked regen bonus: a tier-1 shield with at least one resonance-linked
-	 * partner heals {@link ShieldLogic#TIER_1_REGEN_PER_PULSE} x
-	 * {@link ShieldLogic#LINKED_REGEN_MULTIPLIER} = 1.25 per pulse; after the partner
-	 * deactivates (link gone) the very next pulse is back to the base 1.0.
+	 * partner heals {@link ShieldLogic#regenPerPulse regenPerPulse(1)} x
+	 * {@link ShieldLogic#LINKED_REGEN_MULTIPLIER} = 3.75 per pulse; after the partner
+	 * deactivates (link gone) the very next pulse is back to the base 3.0. Both
+	 * observed pulses land inside the 200-tick combat gate opened by the damage, so
+	 * the out-of-combat x3 never applies here.
 	 */
 	@GameTest(environment = ISOLATED_ENVIRONMENT, structure = ARENA_STRUCTURE, maxTicks = 200, padding = 16)
 	public void linkedRegenHealsFaster(GameTestHelper helper) {
@@ -301,13 +320,16 @@ public class LinkingGameTests {
 
 		ShieldState stateA = shieldA.getShieldState();
 		float[] healthBefore = new float[1];
-		float linkedPulse = ShieldLogic.TIER_1_REGEN_PER_PULSE * ShieldLogic.LINKED_REGEN_MULTIPLIER;
+		float t1MaxHealth = ShieldLogic.maxHealthFor(1, RADIUS, 100);
+		float basePulse = ShieldLogic.regenPerPulse(1);
+		float linkedPulse = basePulse * ShieldLogic.LINKED_REGEN_MULTIPLIER;
 		helper.startSequence()
-				// Let the core refresh land (maxHealth 200), then damage A. The shrunk
-				// radius (8 * 140/200 = 5.6) still overlaps B (5.6 + 8 > 10): linked.
+				// Let the core refresh land (maxHealth 300), then damage A: 60 raw is
+				// 45 after tier 1's 25% DR, so health 255/300 = 85% — on the shrink
+				// plateau, so the radius holds at 8 and A stays linked (8 + 8 > 10).
 				.thenExecuteAfter(2, () -> {
-					helper.assertTrue(stateA.maxHealth == 200.0F,
-							"the resonant core should raise max health to 200, got " + stateA.maxHealth);
+					helper.assertTrue(stateA.maxHealth == t1MaxHealth,
+							"the resonant core should raise max health to " + t1MaxHealth + ", got " + stateA.maxHealth);
 					shieldA.applyShieldDamage(60.0F);
 					healthBefore[0] = stateA.health;
 					helper.assertTrue(
@@ -334,9 +356,8 @@ public class LinkingGameTests {
 				.thenExecute(() -> {
 					float healed = stateA.health - healthBefore[0];
 					helper.assertTrue(
-							Math.abs(healed - ShieldLogic.TIER_1_REGEN_PER_PULSE) <= TOLERANCE,
-							"an unlinked regen pulse should heal the base " + ShieldLogic.TIER_1_REGEN_PER_PULSE
-									+ ", got " + healed);
+							Math.abs(healed - basePulse) <= TOLERANCE,
+							"an unlinked regen pulse should heal the base " + basePulse + ", got " + healed);
 				})
 				.thenSucceed();
 	}
@@ -388,13 +409,14 @@ public class LinkingGameTests {
 				"an inactive origin links to nothing");
 
 		// Linking uses the CURRENT (health-shrunk) radii, not the target radii.
+		// 30% health is below the 60% shrink plateau: currentRadius = max(4, 8 * 0.3/0.6) = 4.
 		BubbleShieldBlockEntity shrunk = standalone(originPos.east(13), 8.0F, owner, true);
-		shrunk.getShieldState().health = 50.0F; // currentRadius = max(4, 8 * 0.5) = 4
+		shrunk.getShieldState().health = 30.0F;
 		helper.assertTrue(
 				ShieldLinking.findLinked(origin, List.of(shrunk)).equals(List.of(origin)),
 				"a health-shrunk partner (current radius 4) at distance 13 must not link (8 + 4 < 13)");
 		BubbleShieldBlockEntity shrunkNear = standalone(originPos.east(11), 8.0F, owner, true);
-		shrunkNear.getShieldState().health = 50.0F;
+		shrunkNear.getShieldState().health = 30.0F;
 		helper.assertTrue(
 				ShieldLinking.findLinked(origin, List.of(shrunkNear)).equals(List.of(origin, shrunkNear)),
 				"the same shrunk partner at distance 11 should link (8 + 4 > 11)");

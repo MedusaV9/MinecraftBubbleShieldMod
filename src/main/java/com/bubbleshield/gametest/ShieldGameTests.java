@@ -61,8 +61,13 @@ public class ShieldGameTests {
 		helper.succeed();
 	}
 
+	/**
+	 * An intercepted arrow damages the shield (3 raw, tier 0: no DR), but a single
+	 * arrow leaves the health fraction far above the 60% shrink plateau, so the
+	 * bubble must hold its FULL radius — shields no longer shrink on every scratch.
+	 */
 	@GameTest(maxTicks = 200, padding = 16)
-	public void arrowShrinksShield(GameTestHelper helper) {
+	public void arrowDamagesShield(GameTestHelper helper) {
 		BubbleShieldBlockEntity be = placeProjector(helper, 8.0F);
 		be.addFuelSeconds(PLENTY_OF_FUEL);
 		helper.assertTrue(be.tryActivate(), "shield should activate");
@@ -76,7 +81,15 @@ public class ShieldGameTests {
 		arrow.setDeltaMovement(0.0, -1.5, 0.0);
 
 		ShieldState state = be.getShieldState();
-		helper.succeedWhen(() -> helper.assertTrue(state.health < state.maxHealth, "shield should take damage from the intercepted arrow"));
+		helper.succeedWhen(() -> {
+			helper.assertTrue(state.health < state.maxHealth, "shield should take damage from the intercepted arrow");
+			helper.assertTrue(
+					state.health == state.maxHealth - ShieldLogic.PROJECTILE_DAMAGE,
+					"a tier-0 shield should take the full arrow damage, health is " + state.health);
+			helper.assertTrue(
+					be.currentRadius() == 8.0F,
+					"above the 60% shrink plateau the radius must stay at 8, got " + be.currentRadius());
+		});
 	}
 
 	@GameTest(padding = 16)
