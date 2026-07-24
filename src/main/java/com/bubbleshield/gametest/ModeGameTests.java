@@ -117,6 +117,12 @@ public class ModeGameTests {
 		helper.assertTrue(
 				ShieldLogic.currentRadius(pure) == 8.0F * ShieldLogic.ECO_RADIUS_FACTOR,
 				"ECO should cap the radius at 0.75x, got " + ShieldLogic.currentRadius(pure));
+		// Fix 10: the 4-block MIN_RADIUS floor applies AFTER the ECO multiplier —
+		// the old order let ECO undercut the floor to an effective 3 at target 4.
+		pure.targetRadius = 4.0F;
+		helper.assertTrue(
+				ShieldLogic.currentRadius(pure) == ShieldLogic.MIN_RADIUS,
+				"ECO at the minimum target radius must floor at 4, got " + ShieldLogic.currentRadius(pure));
 
 		BubbleShieldBlockEntity defense = placeProjector(helper, new BlockPos(2, 2, 2), 4.0F);
 		defense.addFuelSeconds(PLENTY_OF_FUEL);
@@ -127,8 +133,8 @@ public class ModeGameTests {
 		eco.getShieldState().mode = ShieldMode.ECO;
 		helper.assertTrue(eco.tryActivate(), "ECO shield should activate");
 		helper.assertTrue(
-				eco.currentRadius() == 4.0F * ShieldLogic.ECO_RADIUS_FACTOR,
-				"the live ECO shield radius should be 3, got " + eco.currentRadius());
+				eco.currentRadius() == ShieldLogic.MIN_RADIUS,
+				"the live ECO shield radius must floor at 4 (fix 10), got " + eco.currentRadius());
 
 		ShieldState defenseState = defense.getShieldState();
 		ShieldState ecoState = eco.getShieldState();

@@ -27,9 +27,10 @@ import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityReference;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
 import net.minecraft.world.entity.boss.wither.WitherBoss;
-import net.minecraft.world.entity.monster.Monster;
+import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.entity.projectile.ProjectileDeflection;
@@ -58,7 +59,7 @@ public final class ShieldLogic {
 	public static final float HURTING_PROJECTILE_DAMAGE = 10.0F;
 	/** Thrown items (snowballs, potions, ender pearls) and shulker bullets fizzle out. */
 	public static final float THROWN_DAMAGE = 1.0F;
-	/** Tier-0 break cooldown: 15 minutes. See {@link #breakCooldownTicks} for the full table. */
+	/** Tier-0 (and default) break cooldown: 15 minutes. See {@link #breakCooldownTicks} for the full table. */
 	public static final long BREAK_COOLDOWN_TICKS = 18000L;
 	/** Break cooldown by tier 0..3: 15 min, 10 min, 6 min, 3 min. */
 	private static final long[] BREAK_COOLDOWN_TICKS_BY_TIER = {18000L, 12000L, 7200L, 3600L};
@@ -92,6 +93,14 @@ public final class ShieldLogic {
 	public static final int TICKS_PER_FUEL_SECOND = 20;
 	/** Upper bound on the combined (ECO x capacitor) passive-drain interval; see {@link #drainIntervalTicks}. */
 	public static final int MAX_DRAIN_INTERVAL_TICKS = 80;
+	/**
+	 * Fix 4: fixed-point scale of {@link ShieldState#drainDebtMicros} — one fuel-second
+	 * of drain debt is this many micro-units. 1e6 divides evenly by every possible
+	 * drain interval (20/40/80 ticks), so the per-tick accrual
+	 * {@code units * 1_000_000 / interval} is EXACT and the steady-state rate can
+	 * never drift from the old "units per interval" formula.
+	 */
+	public static final long DRAIN_DEBT_MICROS_PER_FUEL_SECOND = 1_000_000L;
 	public static final double PUSHBACK_MARGIN = 0.75;
 	/** A fueled shield regenerates once every 2 seconds of active runtime (combat-gated for tier 0). */
 	public static final int REGEN_PERIOD_TICKS = 40;
@@ -144,14 +153,24 @@ public final class ShieldLogic {
 	/** An active shield with cycleEffect enabled re-rolls its effect once per this many ticks. */
 	public static final int EFFECT_CYCLE_PERIOD_TICKS = 600;
 	/**
-	 * A7 emergency revive: an owner may skip a running break cooldown by paying this
-	 * many stored fuel-seconds; the shield reactivates at
-	 * {@link #REVIVE_HEALTH_FRACTION} of its max health. Shared with the client GUI
-	 * so the Activate button can flip to its "Revive (-400 fuel)" face exactly when
-	 * the server would accept the request.
+	 * A7 emergency revive, base fee: an owner may skip a running break cooldown by
+	 * paying {@link #reviveFuelCost} stored fuel-seconds ({@code 400 + 200 * tier}:
+	 * 400/600/800/1000 for tiers 0..3); the shield reactivates at
+	 * {@link #REVIVE_HEALTH_FRACTION} of its max health. {@link #reviveFuelCost} is
+	 * shared with the client GUI so the Activate button can flip to its
+	 * "Revive (-N fuel)" face exactly when the server would accept the request.
 	 */
-	public static final int REVIVE_FUEL_COST = 400;
-	/** Health fraction a revived shield restarts at (see {@link #REVIVE_FUEL_COST}). */
+	public static final int REVIVE_FUEL_COST_BASE = 400;
+	/** Fix 3b: extra revive fee per shield tier on top of {@link #REVIVE_FUEL_COST_BASE}. */
+	public static final int REVIVE_FUEL_COST_PER_TIER = 200;
+	/**
+	 * Fix 3c: a revive is refused while FEWER than this many cooldown ticks remain —
+	 * paying hundreds of fuel-seconds to skip under 10 s is never worth it, and the
+	 * guard closes the floor-rounding trap where the GUI displayed 0 s while the
+	 * server still refused a plain activation (see also the fix-8 ceiling division).
+	 */
+	public static final long MIN_REVIVE_COOLDOWN_TICKS = 200L;
+	/** Health fraction a revived shield restarts at (see {@link #reviveFuelCost}). */
 	public static final float REVIVE_HEALTH_FRACTION = 0.5F;
 	/** C3 patch kit: HP restored per kit used on an ACTIVE projector (capped at max health). */
 	public static final float PATCH_KIT_HEAL = 150.0F;
@@ -161,11 +180,24 @@ public final class ShieldLogic {
 
 	/**
 	 * C3 patch kit on a broken (cooling-down) projector: each kit cuts the REMAINING
-	 * cooldown by 20% of the tier's FULL break cooldown (so repeated uses stack
-	 * linearly). All table values are divisible by 5, so the integer division is exact.
+	 * cooldown by 20% of the FULL break cooldown (so repeated uses stack linearly).
+	 * All table values are divisible by 5, so the integer division is exact.
+	 *
+	 * <p>Fix 2: "the full cooldown" is the duration SNAPSHOTTED when this cooldown
+	 * started ({@link ShieldState#breakCooldownTotalTicks}), NOT the current tier's
+	 * table value — swapping the upgrade core after a break must not change the
+	 * per-kit reduction (a T0 break used to be clearable at T3's 720/kit rate, and
+	 * pulling the core mid-cooldown used to punish legitimately shorter cooldowns).
+	 * Legacy saves without a snapshot (0) fall back to the current tier's table value.
 	 */
-	public static long patchKitCooldownReduction(int tier) {
-		return breakCooldownTicks(tier) / 5L;
+	public static long patchKitCooldownReduction(ShieldState state, int tier) {
+		long total = state.breakCooldownTotalTicks > 0L ? state.breakCooldownTotalTicks : breakCooldownTicks(tier);
+		return total / 5L;
+	}
+
+	/** Fix 3b: the tier-scaled emergency-revive fee, {@code 400 + 200 * tier} (400/600/800/1000). */
+	public static int reviveFuelCost(int tier) {
+		return REVIVE_FUEL_COST_BASE + REVIVE_FUEL_COST_PER_TIER * Math.clamp(tier, 0, BASE_HP_BY_TIER.length - 1);
 	}
 
 	/**
@@ -173,7 +205,8 @@ public final class ShieldLogic {
 	 * {@code clamp(round(BASE_HP[tier] * (0.5 + diameter/64) * strengthPercent/100), 50, 8000)}
 	 * with {@code diameter = 2 * targetRadius}. Pure; the block entity recomputes it
 	 * whenever tier, diameter or the strength gamerule changes (and on the first tick
-	 * after load), always preserving the health FRACTION across the recompute.
+	 * after load), keeping the ABSOLUTE current health clamped into [0, newMax]
+	 * across the recompute (fix 1; see {@code BubbleShieldBlockEntity#refreshMaxHealth}).
 	 * Examples: T0 D32 = 200, T0 D8 = 125, T2 D32 = 700, T3 D200 = 4350.
 	 */
 	public static float maxHealthFor(int tier, float targetRadius, int strengthPercent) {
@@ -284,11 +317,13 @@ public final class ShieldLogic {
 	/**
 	 * @return the current shield radius. Shrink plateau: at a health fraction of
 	 * {@link #SHRINK_PLATEAU_FRACTION} (60%) or above the bubble holds its FULL target
-	 * radius; below that it shrinks proportionally ({@code targetRadius * frac/0.60}),
-	 * floored at {@link #MIN_RADIUS} while active. In {@link ShieldMode#ECO} the result
-	 * is capped at {@link #ECO_RADIUS_FACTOR} times the normal value; applying the cap
-	 * here keeps the barrier, renderer sync and projectile interception in agreement
-	 * about the eco bubble's size.
+	 * radius; below that it shrinks proportionally ({@code targetRadius * frac/0.60}).
+	 * In {@link ShieldMode#ECO} the result is capped at {@link #ECO_RADIUS_FACTOR}
+	 * times the normal value; applying the cap here keeps the barrier, renderer sync
+	 * and projectile interception in agreement about the eco bubble's size. Fix 10:
+	 * the {@link #MIN_RADIUS} floor is applied LAST, after every multiplier, so an
+	 * active bubble is never smaller than 4 blocks — the old order let ECO's x0.75
+	 * undercut the floor to an effective 3.
 	 */
 	public static float currentRadius(ShieldState state) {
 		if (!state.active || state.maxHealth <= 0.0F) {
@@ -298,12 +333,12 @@ public final class ShieldLogic {
 		float healthFrac = state.health / state.maxHealth;
 		float radius = healthFrac >= SHRINK_PLATEAU_FRACTION
 				? state.targetRadius
-				: Math.max(MIN_RADIUS, state.targetRadius * (healthFrac / SHRINK_PLATEAU_FRACTION));
+				: state.targetRadius * (healthFrac / SHRINK_PLATEAU_FRACTION);
 		if (state.mode == ShieldMode.ECO) {
 			radius *= ECO_RADIUS_FACTOR;
 		}
 
-		return radius;
+		return Math.max(MIN_RADIUS, radius);
 	}
 
 	public static boolean canActivate(ShieldState state, long gameTime) {
@@ -336,7 +371,7 @@ public final class ShieldLogic {
 	}
 
 	/**
-	 * Applies damage to the shield using the default break cooldown (tier 0/1).
+	 * Applies damage to the shield using the default (tier-0) break cooldown.
 	 *
 	 * @return true if the shield broke.
 	 */
@@ -359,6 +394,11 @@ public final class ShieldLogic {
 			state.active = false;
 			state.health = state.maxHealth;
 			state.cooldownUntil = gameTime + cooldownTicks;
+			// Fix 2: snapshot the FULL cooldown this break started, so the patch
+			// kit's 20% reduction stays pinned to it across later core swaps.
+			state.breakCooldownTotalTicks = cooldownTicks;
+			// Fix 3a: a NEW break-cooldown window grants a fresh (single) revive.
+			state.revivedThisCooldown = false;
 			// Arms the one-time "shield ready again" ping for when this cooldown elapses.
 			state.readyAnnounced = false;
 			return true;
@@ -377,8 +417,9 @@ public final class ShieldLogic {
 	 * interval in ticks is {@code TICKS_PER_FUEL_SECOND * (eco ? 2 : 1) * (capacitor ? 2 : 1)},
 	 * capped at {@link #MAX_DRAIN_INTERVAL_TICKS} (80). So: 20 plain, 40 with either
 	 * ECO or a capacitor, and 80 (the cap) with both. Pure; the drain in
-	 * {@link #serverTick} fires whenever {@link ShieldState#drainAccum} (active
-	 * ticks since the last drain) reaches this interval.
+	 * {@link #serverTick} accrues {@code units * 1e6 / thisInterval} micro-debt per
+	 * active tick ({@link ShieldState#drainDebtMicros}), sampling this interval
+	 * fresh EVERY tick.
 	 */
 	public static int drainIntervalTicks(boolean eco, boolean capacitor) {
 		return Math.min(MAX_DRAIN_INTERVAL_TICKS, TICKS_PER_FUEL_SECOND * (eco ? 2 : 1) * (capacitor ? 2 : 1));
@@ -387,7 +428,7 @@ public final class ShieldLogic {
 	/**
 	 * Runs one server tick of shield logic for the projector at {@code pos}.
 	 *
-	 * @param tier the projector's upgrade-core tier (0..2); drives regeneration and break cooldown.
+	 * @param tier the projector's upgrade-core tier (0..3); drives regeneration and break cooldown.
 	 * @param capacitor whether a flux capacitor is installed: halves the passive drain
 	 * (see {@link #drainIntervalTicks}) and skips the regen pulses' extra fuel-second.
 	 * @param self the ticking projector's block entity ({@code state} is its shield state);
@@ -402,21 +443,25 @@ public final class ShieldLogic {
 		boolean changed = false;
 		long gameTime = level.getGameTime();
 
-		// Combined passive-drain rule: per effective drain interval of ACTIVE ticks
-		// — TICKS_PER_FUEL_SECOND * (eco ? 2 : 1) * (capacitor ? 2 : 1), capped at
-		// MAX_DRAIN_INTERVAL_TICKS (80); plain: 20, ECO or capacitor: 40, both: 80 —
-		// the shield burns drainUnits(targetRadius) fuel-seconds (1..4, growing with
-		// the diameter). The persisted per-shield accumulator (instead of the old
-		// gameTime % interval check) closes the dodge exploit where toggling the
-		// shield off across the level's payment ticks kept it active for free: only
-		// active ticks advance the accumulator, and it survives deactivation, so
-		// every interval of active runtime is paid exactly once no matter how the
-		// shield is toggled.
-		state.drainAccum++;
-		if (state.drainAccum >= drainIntervalTicks(state.mode == ShieldMode.ECO, capacitor)) {
-			state.drainAccum = 0;
-			// B3: a last-stand shield burns double units per drain event.
-			state.fuelSeconds -= drainUnits(state.targetRadius, isLastStand(state));
+		// Fix 4, normalized fixed-point passive drain: every ACTIVE tick accrues
+		// units(diameter, lastStand) * 1e6 / interval(eco, capacitor) micro-debt,
+		// sampling the CURRENT config each tick; whole fuel-seconds are paid off
+		// whenever the debt reaches 1e6 micros, keeping the remainder. Steady-state
+		// rates are IDENTICAL to the old "units per interval of active ticks"
+		// scheme (1e6 divides evenly by 20/40/80, and units <= 8 keeps the accrual
+		// far from overflow), but a config flip mid-interval is now priced
+		// per-tick — the old accumulator sampled diameter/ECO/capacitor only on
+		// the payment tick, so swapping to a big diameter right before it (or a
+		// cheap config right on it) cheated the rate. Only active ticks accrue and
+		// the debt survives deactivation, so toggling still never dodges the
+		// drain. B3: a last-stand shield accrues at double units per tick.
+		int interval = drainIntervalTicks(state.mode == ShieldMode.ECO, capacitor);
+		state.drainDebtMicros += drainUnits(state.targetRadius, isLastStand(state))
+				* DRAIN_DEBT_MICROS_PER_FUEL_SECOND / interval;
+		if (state.drainDebtMicros >= DRAIN_DEBT_MICROS_PER_FUEL_SECOND) {
+			int owedFuelSeconds = (int) (state.drainDebtMicros / DRAIN_DEBT_MICROS_PER_FUEL_SECOND);
+			state.drainDebtMicros %= DRAIN_DEBT_MICROS_PER_FUEL_SECOND;
+			state.fuelSeconds -= owedFuelSeconds;
 			changed = true;
 			if (state.fuelSeconds <= 0) {
 				state.fuelSeconds = 0;
@@ -493,25 +538,31 @@ public final class ShieldLogic {
 		// the per-consumer lists. This replaces the up-to-four separate scans of the
 		// same volume the consumers below used to run (projectile interception, PULSE
 		// monsters, the player/mob barrier, the CROWD_SCALE context count and the B6
-		// threat census). Semantics are unchanged: getEntitiesOfClass(clazz, box) is
+		// threat census). Semantics: getEntitiesOfClass(clazz, box) is
 		// getEntities(typeTest, box, EntitySelector.NO_SPECTATORS) and
 		// getEntities(null, box) applies the exact same NO_SPECTATORS default, so
-		// instanceof partitioning yields the same sets (Projectile/Player/Monster are
-		// hierarchy-disjoint classes). Entities do not move within this shield's
-		// tick, so one snapshot serves every consumer; the per-consumer geometry
-		// filters (crossedInto, isInside) still run per use against the CURRENT
-		// radius. The CROWD_SCALE count used a radius*2 box, a subset of this area;
-		// its isInside filter keeps the result identical.
+		// instanceof partitioning yields the same sets. Entities do not move within
+		// this shield's tick, so one snapshot serves every consumer; the
+		// per-consumer geometry filters (crossedInto, isInside) still run per use
+		// against the CURRENT radius. The CROWD_SCALE count used a radius*2 box, a
+		// subset of this area; its isInside filter keeps the result identical.
+		// Fix 6: the hostile partition is "Mob that implements Enemy" (alive), not
+		// Monster — the Monster class misses hostile Enemy implementations on other
+		// branches of the Mob hierarchy (Slime, Phantom, Shulker, Ghast, the
+		// dragon...), which walked straight through the barrier and dodged the
+		// pulse/census/nova. Bosses keep their barrier exemption downstream
+		// (isBarrierExemptBoss); the alive filter keeps dying-but-not-yet-removed
+		// mobs out of the census and the zap/nova target lists.
 		List<Projectile> projectiles = new ArrayList<>();
 		List<Player> players = new ArrayList<>();
-		List<Monster> monsters = new ArrayList<>();
+		List<Mob> hostiles = new ArrayList<>();
 		for (Entity entity : level.getEntities((Entity) null, area)) {
 			if (entity instanceof Projectile projectile) {
 				projectiles.add(projectile);
 			} else if (entity instanceof Player player) {
 				players.add(player);
-			} else if (entity instanceof Monster monster) {
-				monsters.add(monster);
+			} else if (entity instanceof Mob mob && entity instanceof Enemy && mob.isAlive()) {
+				hostiles.add(mob);
 			}
 		}
 
@@ -521,7 +572,7 @@ public final class ShieldLogic {
 		// under a dome is still a threat). Exposed via DATA_THREAT_COUNT; a
 		// 0-to-positive edge fires the siege alarm (rate-limited in triggerAlarm).
 		if (gameTime % THREAT_CENSUS_PERIOD_TICKS == 0L) {
-			int threats = countThreats(center, radius + THREAT_RING_MARGIN, state, players, monsters);
+			int threats = countThreats(center, radius + THREAT_RING_MARGIN, state, players, hostiles);
 			int previous = self.threatCount();
 			self.setThreatCount(threats);
 			if (previous == 0 && threats > 0 && triggerAlarm(level, pos, state, gameTime, radius)) {
@@ -533,9 +584,9 @@ public final class ShieldLogic {
 			changed = true;
 		}
 
-		// PULSE mode: periodically zap every monster inside the (possibly shrunk) bubble.
+		// PULSE mode: periodically zap every hostile mob inside the (possibly shrunk) bubble.
 		if (state.active && state.mode == ShieldMode.PULSE && gameTime % PULSE_PERIOD_TICKS == 0L) {
-			if (pulseMonsters(level, center, currentRadius(state), state, monsters)) {
+			if (pulseMonsters(level, center, currentRadius(state), state, hostiles)) {
 				changed = true;
 				if (!state.active) {
 					return true;
@@ -555,16 +606,16 @@ public final class ShieldLogic {
 
 			// A5 hostile-mob barrier, from the same combined-scan partition (no
 			// extra scan; the push itself allocates no more than the player path).
-			// Mode matrix: DEFENSE expels any monster inside (like the player
-			// barrier); PULSE only blocks NEW entry at the boundary — monsters
+			// Mode matrix: DEFENSE expels any hostile inside (like the player
+			// barrier); PULSE only blocks NEW entry at the boundary — hostiles
 			// already inside are the pulse zap's prey, not expelled; ECO repels
 			// nothing (efficiency trade-off). Bosses are exempt (see
 			// isBarrierExemptBoss). No 'changed': the barrier moves mobs, never
 			// shield state.
 			if (mobBarrierBlocksEntry(state.mode)) {
 				boolean expelInside = mobBarrierExpelsInside(state.mode);
-				for (Monster monster : monsters) {
-					applyMobBarrier(center, barrierRadius, state, monster, expelInside);
+				for (Mob hostile : hostiles) {
+					applyMobBarrier(center, barrierRadius, state, hostile, expelInside);
 				}
 			}
 
@@ -576,12 +627,13 @@ public final class ShieldLogic {
 
 	/**
 	 * B6: counts the threats currently engaging the shield — non-whitelisted,
-	 * non-owner players ({@link #shouldBlock}) plus ALL hostile monsters (bosses
-	 * included; the barrier's teleport exemption does not make a Wither less of a
-	 * threat) — within {@code ringRadius} of the center. Plain center distance,
-	 * not shape-aware. Pure over the given scan partitions.
+	 * non-owner players ({@link #shouldBlock}) plus ALL hostile mobs
+	 * ({@code Mob && Enemy}; bosses included — the barrier's teleport exemption
+	 * does not make a Wither less of a threat) — within {@code ringRadius} of the
+	 * center. Plain center distance, not shape-aware. Pure over the given scan
+	 * partitions.
 	 */
-	public static int countThreats(Vec3 center, double ringRadius, ShieldState state, List<Player> players, List<Monster> monsters) {
+	public static int countThreats(Vec3 center, double ringRadius, ShieldState state, List<Player> players, List<? extends Mob> hostiles) {
 		int threats = 0;
 		for (Player player : players) {
 			if (player.position().distanceTo(center) > ringRadius) {
@@ -594,8 +646,8 @@ public final class ShieldLogic {
 			}
 		}
 
-		for (Monster monster : monsters) {
-			if (monster.position().distanceTo(center) <= ringRadius) {
+		for (Mob hostile : hostiles) {
+			if (hostile.position().distanceTo(center) <= ringRadius) {
 				threats++;
 			}
 		}
@@ -630,16 +682,17 @@ public final class ShieldLogic {
 	}
 
 	/**
-	 * One PULSE-mode zap: every {@link net.minecraft.world.entity.monster.Monster} inside the
-	 * bubble (shape-aware) takes {@link #PULSE_DAMAGE} magic damage plus a small outward
-	 * knockback. A pulse that hit at least one monster burns one extra fuel-second on top of
-	 * the passive drain; running dry deactivates the shield.
+	 * One PULSE-mode zap: every hostile mob ({@code Mob && Enemy}, from the
+	 * combined-scan partition) inside the bubble (shape-aware) takes
+	 * {@link #PULSE_DAMAGE} magic damage plus a small outward knockback. A pulse
+	 * that hit at least one hostile burns one extra fuel-second on top of the
+	 * passive drain; running dry deactivates the shield.
 	 *
-	 * @return true if at least one monster was hit (state changed).
+	 * @return true if at least one hostile was hit (state changed).
 	 */
-	private static boolean pulseMonsters(ServerLevel level, Vec3 center, double radius, ShieldState state, List<Monster> monsters) {
+	private static boolean pulseMonsters(ServerLevel level, Vec3 center, double radius, ShieldState state, List<? extends Mob> hostiles) {
 		boolean hitAny = false;
-		for (Monster mob : monsters) {
+		for (Mob mob : hostiles) {
 			if (!ShieldGeometry.isInside(state.shape, center, radius, mob.position())) {
 				continue;
 			}
@@ -673,7 +726,7 @@ public final class ShieldLogic {
 	 * 0.1) and the B5 break nova (strong: 1.2 / 0.5). {@code hurtMarked} forces the
 	 * velocity to replicate to clients.
 	 */
-	private static void knockbackOutward(Monster mob, Vec3 center, double horizontalScale, double up) {
+	private static void knockbackOutward(Mob mob, Vec3 center, double horizontalScale, double up) {
 		Vec3 direction = mob.position().subtract(center);
 		Vec3 horizontal = new Vec3(direction.x, 0.0, direction.z);
 		horizontal = horizontal.lengthSqr() < 1.0E-6 ? new Vec3(1.0, 0.0, 0.0) : horizontal.normalize();
@@ -688,12 +741,16 @@ public final class ShieldLogic {
 	 * partner shares also take) route through here, so the break sound, the
 	 * {@code shield_broken} criterion and the shockwave nova can never drift apart.
 	 *
-	 * <p>The nova: every hostile {@link Monster} inside the PRE-break current
-	 * radius (shape-aware, like the pulse zap) takes {@link #NOVA_DAMAGE} magic
-	 * damage plus a strong outward knockback, and {@code RESPAWN_ANCHOR_DEPLETE}
-	 * (1.2, 0.7) marks the collapse. Players and pets are unaffected by
-	 * construction (only Monsters are targeted); bosses are hit too — damage,
-	 * unlike the barrier's teleport, is boss-safe. Plain {@code magic()} damage
+	 * <p>The nova: every hostile mob ({@code Mob && Enemy}, alive) inside the
+	 * PRE-break current radius (shape-aware, like the pulse zap) takes
+	 * {@link #NOVA_DAMAGE} magic damage plus a strong outward knockback, and
+	 * {@code RESPAWN_ANCHOR_DEPLETE} (1.2, 0.7) marks the collapse. Players and
+	 * pets are unaffected by construction (only hostiles are targeted); bosses
+	 * are hit too — damage, unlike the barrier's teleport, is boss-safe. Fix 6:
+	 * CUSTOM-NAMED hostiles are skipped by the NOVA ONLY (a named "pet" hostile —
+	 * a nametagged zombie in a display pen, say — should not be executed by its
+	 * owner's own collapsing shield; the barrier and the pulse zap deliberately
+	 * still treat named hostiles as hostile). Plain {@code magic()} damage
 	 * (unattributed) keeps the nova deterministic whether or not the owner is
 	 * online. The one-shot entity scan here is fine: a break happens at most once
 	 * per activation, not per tick.
@@ -707,7 +764,11 @@ public final class ShieldLogic {
 
 		Vec3 center = Vec3.atCenterOf(pos);
 		AABB area = AABB.ofSize(center, 2.0 * preBreakRadius, 2.0 * preBreakRadius, 2.0 * preBreakRadius);
-		for (Monster mob : level.getEntitiesOfClass(Monster.class, area)) {
+		for (Mob mob : level.getEntitiesOfClass(Mob.class, area)) {
+			if (!(mob instanceof Enemy) || !mob.isAlive() || mob.hasCustomName()) {
+				continue;
+			}
+
 			if (!ShieldGeometry.isInside(state.shape, center, preBreakRadius, mob.position())) {
 				continue;
 			}
@@ -869,6 +930,7 @@ public final class ShieldLogic {
 			// first noDeflectTicks) falls back to absorbing, so nothing keeps flying
 			// inward and explodes inside the bubble.
 			float damage;
+			boolean explosive = false;
 			if (projectile instanceof ThrownTrident) {
 				if (!projectile.deflect(ProjectileDeflection.REVERSE, null, EntityReference.of(owner), false)) {
 					projectile.discard();
@@ -878,12 +940,13 @@ public final class ShieldLogic {
 				if (!projectile.deflect(ProjectileDeflection.REVERSE, null, EntityReference.of(owner), false)) {
 					projectile.discard();
 				}
-				// Blast ward: the explosive class is warded x0.4 at interception —
-				// BEFORE the linked split and the DR pipeline (canonical order, see
-				// blastWardedDamage). The ward changes only the damage math; the
-				// interception itself (deflect-or-discard, so nothing explodes
-				// inside the bubble) is unchanged.
-				damage = blastWardedDamage(HURTING_PROJECTILE_DAMAGE, self.hasBlastWard());
+				// Fix 5: the explosive class keeps its RAW damage here; the blast
+				// ward is applied PER RECEIVER at damage time below (after the
+				// linked split), so each linked shield's OWN ward discounts only
+				// its own share. The interception itself (deflect-or-discard, so
+				// nothing explodes inside the bubble) is unchanged.
+				damage = HURTING_PROJECTILE_DAMAGE;
+				explosive = true;
 			} else if (projectile instanceof ThrowableItemProjectile || projectile instanceof ShulkerBullet) {
 				projectile.discard();
 				damage = THROWN_DAMAGE;
@@ -915,41 +978,49 @@ public final class ShieldLogic {
 			projectile.yOld = projectile.getY();
 			projectile.zOld = projectile.getZ();
 
-			// Resonance link: same-owner active shields overlapping this one split the
-			// RAW damage evenly; each receiving shield then applies its OWN tier DR to
-			// its share (appliedDamage). Discarded projectiles are gone; deflected ones
-			// had their crossing neutralized above, so a linked partner's own tick can
-			// never re-intercept the same projectile for a second damage split.
-			// Partners take their raw share through applyShieldDamage (their own tier's
-			// DR, break cooldown, break sound and criteria); the hit shield keeps the
-			// local applyDamage path so this loop's state/broke handling stays
-			// authoritative.
-			// D7b: linkedShields memoizes the findLinked resolution per shield tick, so
-			// a same-tick volley resolves the partner set ONCE (first hit) instead of
-			// re-running findLinked + a LOADED_SHIELDS copy per intercepted projectile.
+			// Resonance link (fix 5): same-owner active shields overlapping this one
+			// split the RAW damage evenly; each receiving shield then applies ITS OWN
+			// full pipeline to its share — blast ward (explosive hits, that receiver's
+			// ward), appliedDamage (that receiver's tier/plating DR) and the B3
+			// last-stand halving (that receiver's health). Discarded projectiles are
+			// gone; deflected ones had their crossing neutralized above, so a linked
+			// partner's own tick can never re-intercept the same projectile for a
+			// second damage split. Partners take their raw share through
+			// applyShieldDamage (their own ward/DR/last-stand, break cooldown, break
+			// sound and criteria); the hit shield keeps the local applyDamage path so
+			// this loop's state/broke handling stays authoritative.
+			// D7b: linkedShields memoizes the findLinked resolution per shield tick,
+			// so a same-tick volley resolves the partner set ONCE (first hit) instead
+			// of re-running findLinked + a LOADED_SHIELDS copy per projectile. The
+			// cached set is re-FILTERED to ACTIVE receivers per projectile: a partner
+			// that broke earlier in this same volley must not receive further shares
+			// (its applyShieldDamage would also no-op, but the split DENOMINATOR must
+			// shrink too, so the survivors take the full raw damage between them).
 			// B3: last stand is evaluated against the health BEFORE this hit, and B5
 			// needs the PRE-break radius for the nova, so both snapshot here.
-			List<BubbleShieldBlockEntity> linked = self.linkedShields(level);
+			List<BubbleShieldBlockEntity> receivers = self.linkedShields(level).stream()
+					.filter(shield -> shield.getShieldState().active)
+					.toList();
 			boolean lastStand = isLastStand(state);
 			double preHitRadius = boundary;
 			boolean broke;
 			float applied;
-			if (linked.size() > 1) {
+			if (receivers.size() > 1) {
 				// A real damage split across resonance-linked shields awards shields_linked
 				// to the (online) owner; the criterion is idempotent, so re-firing on later
 				// splits is harmless.
 				ModCriteria.fireShieldsLinked(level, state.ownerUuid);
 
-				float split = damage / linked.size();
-				applied = appliedDamage(split, tier, self.platingDr(), lastStand);
+				float split = damage / receivers.size();
+				applied = appliedDamage(blastWardedDamage(split, explosive && self.hasBlastWard()), tier, self.platingDr(), lastStand);
 				broke = applyDamage(state, applied, gameTime, breakCooldownTicks);
-				for (BubbleShieldBlockEntity partner : linked) {
+				for (BubbleShieldBlockEntity partner : receivers) {
 					if (partner != self) {
-						partner.applyShieldDamage(split);
+						partner.applyShieldDamage(split, explosive);
 					}
 				}
 			} else {
-				applied = appliedDamage(damage, tier, self.platingDr(), lastStand);
+				applied = appliedDamage(blastWardedDamage(damage, explosive && self.hasBlastWard()), tier, self.platingDr(), lastStand);
 				broke = applyDamage(state, applied, gameTime, breakCooldownTicks);
 			}
 
@@ -1141,33 +1212,36 @@ public final class ShieldLogic {
 	 * phase logic and the dragon's multi-part body/flight controller react badly
 	 * to being {@code teleportTo}'d by external code (teleport-fragile), and a
 	 * bubble should not trivially cheese a boss fight anyway. They still take
-	 * pulse-zap and break-nova DAMAGE; only the teleport is skipped. The dragon
-	 * is not a {@link Monster} and never reaches the barrier through the scan
-	 * partition — it is matched here defensively for any direct caller.
+	 * pulse-zap and break-nova DAMAGE; only the teleport is skipped. Since the
+	 * fix-6 {@code Mob && Enemy} partition, the dragon DOES reach the barrier
+	 * through the combined scan (it is both), so this exemption is load-bearing
+	 * for it, not merely defensive.
 	 */
 	public static boolean isBarrierExemptBoss(Entity entity) {
 		return entity instanceof WitherBoss || entity instanceof EnderDragon;
 	}
 
 	/**
-	 * A5: blocks one hostile monster at the barrier, reusing the player barrier's
-	 * geometry (mostly-horizontal push to {@code radius + PUSHBACK_MARGIN}), its
-	 * collision-safe placement ({@link #findExpulsionSpot}) and its root-vehicle
-	 * handling — and allocating nothing beyond what the player path does. With
-	 * {@code expelInside} (DEFENSE) any monster inside is expelled, however it
-	 * got there; without it (PULSE) only an outside-to-inside CROSSING since the
-	 * previous tick is pushed back, so monsters already inside stay. Mobs have
-	 * no whitelist identity (no owner), so unlike players there is no
-	 * {@link #shouldBlock} exemption — only the boss exemption applies.
+	 * A5: blocks one hostile mob ({@code Mob && Enemy}) at the barrier, reusing
+	 * the player barrier's geometry (mostly-horizontal push to
+	 * {@code radius + PUSHBACK_MARGIN}), its collision-safe placement
+	 * ({@link #findExpulsionSpot}) and its root-vehicle handling — and allocating
+	 * nothing beyond what the player path does. With {@code expelInside}
+	 * (DEFENSE) any hostile inside is expelled, however it got there; without it
+	 * (PULSE) only an outside-to-inside CROSSING since the previous tick is
+	 * pushed back, so hostiles already inside stay. Mobs have no whitelist
+	 * identity (no owner), so unlike players there is no {@link #shouldBlock}
+	 * exemption — only the boss exemption applies (custom-named hostiles are
+	 * still barred; only the break NOVA spares them).
 	 *
-	 * @return true if the monster was pushed back.
+	 * @return true if the hostile was pushed back.
 	 */
-	public static boolean applyMobBarrier(Vec3 center, double radius, ShieldState state, Monster monster, boolean expelInside) {
-		if (isBarrierExemptBoss(monster)) {
+	public static boolean applyMobBarrier(Vec3 center, double radius, ShieldState state, Mob hostile, boolean expelInside) {
+		if (isBarrierExemptBoss(hostile)) {
 			return false;
 		}
 
-		Vec3 current = monster.position();
+		Vec3 current = hostile.position();
 		if (!ShieldGeometry.isInside(state.shape, center, radius, current)) {
 			return false;
 		}
@@ -1175,7 +1249,7 @@ public final class ShieldLogic {
 		if (!expelInside) {
 			// PULSE: block NEW entry only — a mob whose previous position was
 			// already inside (spawned there, or parked no-AI) is left alone.
-			Vec3 prev = new Vec3(monster.xo, monster.yo, monster.zo);
+			Vec3 prev = new Vec3(hostile.xo, hostile.yo, hostile.zo);
 			if (ShieldGeometry.isInside(state.shape, center, radius, prev)) {
 				return false;
 			}
@@ -1186,22 +1260,23 @@ public final class ShieldLogic {
 		horizontal = horizontal.lengthSqr() < 1.0E-6 ? new Vec3(1.0, 0.0, 0.0) : horizontal.normalize();
 		Vec3 target = center.add(horizontal.scale(radius + PUSHBACK_MARGIN));
 
-		Entity mover = monster.getRootVehicle();
-		double targetY = Mth.clamp(mover.getY(), monster.level().getMinY(), monster.level().getMaxY());
-		Vec3 spot = findExpulsionSpot(monster.level(), mover, new Vec3(target.x, targetY, target.z), horizontal);
+		Entity mover = hostile.getRootVehicle();
+		double targetY = Mth.clamp(mover.getY(), hostile.level().getMinY(), hostile.level().getMaxY());
+		Vec3 spot = findExpulsionSpot(hostile.level(), mover, new Vec3(target.x, targetY, target.z), horizontal);
 		mover.teleportTo(spot.x, spot.y, spot.z);
 		mover.setDeltaMovement(Vec3.ZERO);
-		monster.setDeltaMovement(Vec3.ZERO);
+		hostile.setDeltaMovement(Vec3.ZERO);
 		return true;
 	}
 
 	/**
-	 * A5: one expulsion pass over all monsters near the projector, used right
-	 * after activation (the monster counterpart of {@link #expelBlockedPlayers}).
-	 * Only DEFENSE expels monsters already inside when the shield rises
-	 * ({@link #mobBarrierExpelsInside}); PULSE and ECO leave them.
+	 * A5: one expulsion pass over all hostile mobs ({@code Mob && Enemy}) near
+	 * the projector, used right after activation (the hostile counterpart of
+	 * {@link #expelBlockedPlayers}). Only DEFENSE expels hostiles already inside
+	 * when the shield rises ({@link #mobBarrierExpelsInside}); PULSE and ECO
+	 * leave them.
 	 *
-	 * @return true if at least one monster was pushed out.
+	 * @return true if at least one hostile was pushed out.
 	 */
 	public static boolean expelBlockedMonsters(ServerLevel level, BlockPos pos, ShieldState state) {
 		if (!mobBarrierExpelsInside(state.mode)) {
@@ -1214,8 +1289,8 @@ public final class ShieldLogic {
 		AABB area = AABB.ofSize(center, areaSize, areaSize, areaSize);
 
 		boolean pushed = false;
-		for (Monster monster : level.getEntitiesOfClass(Monster.class, area)) {
-			if (applyMobBarrier(center, radius, state, monster, true)) {
+		for (Mob hostile : level.getEntitiesOfClass(Mob.class, area)) {
+			if (hostile instanceof Enemy && hostile.isAlive() && applyMobBarrier(center, radius, state, hostile, true)) {
 				pushed = true;
 			}
 		}

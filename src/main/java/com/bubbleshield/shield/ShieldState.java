@@ -35,12 +35,20 @@ public class ShieldState {
 	public static final float MIN_TARGET_RADIUS = 4.0F;
 	public static final float MAX_TARGET_RADIUS = 100.0F;
 	/**
-	 * NBT-load cap for health/max_health: far above any tier's
-	 * {@code 100 * (1 + tier)} (300 at tier 2) but finite, so /data can never
-	 * smuggle Infinity-scale values into the radius shrink math, the boss-bar
-	 * progress or the sync payload.
+	 * NBT-load cap for health/max_health: far above the max-health model's own
+	 * hard ceiling ({@link ShieldLogic#MAX_MAX_HEALTH}, 8000 — see
+	 * {@link ShieldLogic#maxHealthFor}) but finite, so /data can never smuggle
+	 * Infinity-scale values into the radius shrink math, the boss-bar progress
+	 * or the sync payload.
 	 */
 	public static final float MAX_LOADED_HEALTH = 1.0e6F;
+	/**
+	 * NBT-load cap for {@code break_cooldown_total} (the fix-2 break-time cooldown
+	 * snapshot): twice the longest tier-0 break cooldown (18000), matching the
+	 * spec'd 0..36000 clamp so edited NBT can never inflate the patch-kit
+	 * reduction beyond one plausible cooldown.
+	 */
+	public static final long MAX_LOADED_BREAK_COOLDOWN_TICKS = 36000L;
 	/** Sentinel for {@link #colorOverride}: no recolor, use the effect's authored palette. */
 	public static final int NO_COLOR_OVERRIDE = -1;
 	/**
@@ -69,8 +77,8 @@ public class ShieldState {
 	 * One B6 threat-log entry: the sanitized name of a projectile shooter whose shot
 	 * this shield intercepted, the POST-DR damage the shield actually took from that
 	 * hit (the linked-split share when resonance-linked), and the game time of the
-	 * interception. Persisted via {@link #CODEC}; a later WP exposes the log through
-	 * a command — for now it is only stored and readable via {@link #threatLog()}.
+	 * interception. Persisted via {@link #CODEC}; exposed in-game through the
+	 * {@code /bubbleshield log} command (and readable via {@link #threatLog()}).
 	 */
 	public record ThreatLogEntry(String attackerName, float damage, long gameTime) {
 		public static final Codec<ThreatLogEntry> CODEC = RecordCodecBuilder.create(instance -> instance.group(
@@ -118,14 +126,39 @@ public class ShieldState {
 	public int fuelSeconds;
 	public long cooldownUntil;
 	/**
-	 * Ticks of ACTIVE runtime accumulated toward the next passive fuel drain. Unlike
-	 * the old {@code gameTime % interval} check, this only advances while the shield
-	 * is active and fires (then resets) when it reaches the effective drain interval,
-	 * so toggling the shield off across payment ticks can never dodge the drain: the
-	 * cost is always exactly one fuel-second per interval of ACTIVE ticks.
+	 * Fix 2: the FULL break-cooldown duration snapshotted when the shield last
+	 * broke ({@link ShieldLogic#applyDamage}'s break branch), in ticks; 0 for
+	 * pre-feature saves / no break yet. Everything that needs "the full cooldown
+	 * this cooldown started from" — most notably the patch kit's 20% reduction —
+	 * reads THIS snapshot instead of re-deriving it from the CURRENT tier, so
+	 * swapping the upgrade core after a break can neither shrink nor inflate the
+	 * reduction. Persisted; load-clamped into
+	 * [0, {@link #MAX_LOADED_BREAK_COOLDOWN_TICKS}].
 	 */
-	public int drainAccum;
-	/** Ticks of active runtime accumulated toward the next regen pulse; see {@link #drainAccum}. */
+	public long breakCooldownTotalTicks;
+	/**
+	 * Fix 3a: true once an emergency revive was spent inside the CURRENT break
+	 * cooldown window; the server refuses a second revive while it is set. Reset
+	 * when a NEW break cooldown starts ({@link ShieldLogic#applyDamage}) or when
+	 * the running cooldown fully expires (block-entity tick). Persisted so a
+	 * save/reload cannot grant a fresh revive mid-window.
+	 */
+	public boolean revivedThisCooldown;
+	/**
+	 * Fix 4: normalized fixed-point drain debt in MICRO fuel-seconds
+	 * ({@link ShieldLogic#DRAIN_DEBT_MICROS_PER_FUEL_SECOND} = 1e6 micros = 1
+	 * fuel-second). Every ACTIVE tick accrues
+	 * {@code units(currentDiameter, lastStand) * 1e6 / currentInterval(eco, capacitor)}
+	 * micros — sampling the CURRENT config each tick — and whole fuel-seconds are
+	 * paid whenever the debt reaches 1e6, keeping the remainder. Steady-state
+	 * rates are identical to the old "units per interval of active ticks" scheme,
+	 * but flipping diameter/mode/capacitor on the payment tick can no longer
+	 * retro-price the whole interval (config-swap exploit). Only active ticks
+	 * accrue and the debt survives deactivation, so toggling still never dodges
+	 * the drain.
+	 */
+	public long drainDebtMicros;
+	/** Ticks of active runtime accumulated toward the next regen pulse (fires at {@link ShieldLogic#REGEN_PERIOD_TICKS}). */
 	public int regenAccum;
 	/** Game time of the most recent shield damage application; 0 until first hit. */
 	public long lastHitGameTime;
@@ -283,7 +316,9 @@ public class ShieldState {
 		output.store("whitelist_name_uuids", NAME_TO_UUID_CODEC, Map.copyOf(this.whitelistNameToUuid));
 		output.putInt("fuel_seconds", this.fuelSeconds);
 		output.putLong("cooldown_until", this.cooldownUntil);
-		output.putInt("drain_accum", this.drainAccum);
+		output.putLong("break_cooldown_total", this.breakCooldownTotalTicks);
+		output.putBoolean("revived_this_cooldown", this.revivedThisCooldown);
+		output.putLong("drain_debt_micros", this.drainDebtMicros);
 		output.putInt("regen_accum", this.regenAccum);
 		output.putLong("last_hit_game_time", this.lastHitGameTime);
 		output.putFloat("absorbed_total", this.absorbedTotal);
@@ -337,7 +372,12 @@ public class ShieldState {
 		// oversized list would bloat every sync payload, and a >16-char (or
 		// control-char) name would blow up the bounded stringUtf8(16) name codec in
 		// ShieldSyncS2C on every broadcast. Apply the exact same rules on load:
-		// trim, drop invalid names, cap at MAX_WHITELIST_SIZE entries.
+		// trim, drop invalid names, and (fix 9) cap the COMBINED identity count
+		// (names + uuids) at MAX_WHITELIST_SIZE — names load first, uuids fill
+		// whatever room remains. The old per-list cap allowed 64 + 64 = 128 total
+		// identities, double what the C2S path and the sync payloads are sized for.
+		// A uuid dropped by the combined cap is re-learned by the join backfill the
+		// next time that whitelisted player appears (the name entry keeps priority).
 		this.whitelistNames.clear();
 		for (String name : input.listOrEmpty("whitelist_names", Codec.STRING)) {
 			if (this.whitelistNames.size() >= MAX_WHITELIST_SIZE) {
@@ -351,8 +391,9 @@ public class ShieldState {
 		}
 
 		this.whitelistUuids.clear();
+		int remainingIdentitySlots = MAX_WHITELIST_SIZE - this.whitelistNames.size();
 		for (UUID uuid : input.listOrEmpty("whitelist_uuids", UUIDUtil.CODEC)) {
-			if (this.whitelistUuids.size() >= MAX_WHITELIST_SIZE) {
+			if (this.whitelistUuids.size() >= remainingIdentitySlots) {
 				break;
 			}
 
@@ -368,9 +409,17 @@ public class ShieldState {
 		// no game time here); see BubbleShieldBlockEntity.
 		this.fuelSeconds = Math.clamp(input.getIntOr("fuel_seconds", 0), 0, MAX_LOADED_FUEL_SECONDS);
 		this.cooldownUntil = Math.max(0L, input.getLongOr("cooldown_until", 0L));
+		// Fix 2: the break-time cooldown snapshot clamps into [0, 36000] so edited
+		// NBT can never inflate the patch-kit reduction beyond a plausible cooldown.
+		this.breakCooldownTotalTicks = Math.clamp(input.getLongOr("break_cooldown_total", 0L),
+				0L, MAX_LOADED_BREAK_COOLDOWN_TICKS);
+		this.revivedThisCooldown = input.getBooleanOr("revived_this_cooldown", false);
 		// Accumulators clamp into [0, their firing threshold]: a tampered value can
 		// at worst fire one drain/regen pulse immediately, never skip payments.
-		this.drainAccum = Math.clamp(input.getIntOr("drain_accum", 0), 0, ShieldLogic.MAX_DRAIN_INTERVAL_TICKS);
+		// (The legacy int "drain_accum" key is deliberately dropped: at worst a
+		// pre-migration save loses one partial drain interval.)
+		this.drainDebtMicros = Math.clamp(input.getLongOr("drain_debt_micros", 0L),
+				0L, ShieldLogic.DRAIN_DEBT_MICROS_PER_FUEL_SECOND);
 		this.regenAccum = Math.clamp(input.getIntOr("regen_accum", 0), 0, ShieldLogic.REGEN_PERIOD_TICKS);
 		this.lastHitGameTime = Math.max(0L, input.getLongOr("last_hit_game_time", 0L));
 		this.absorbedTotal = sanitizeLoadedFloat(input.getFloatOr("absorbed_total", 0.0F), 0.0F, Float.MAX_VALUE, 0.0F);

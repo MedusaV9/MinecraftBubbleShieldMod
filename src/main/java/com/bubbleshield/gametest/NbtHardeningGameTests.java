@@ -188,9 +188,11 @@ public class NbtHardeningGameTests {
 	 * (c) 100 whitelist entries edited into the NBT — 70 valid plus 30 garbage
 	 * (space-containing, oversized, control-character) names — load back capped at
 	 * {@link ShieldState#MAX_WHITELIST_SIZE} with every survivor passing the same
-	 * name-validity rule the C2S add path enforces. 100 whitelist UUIDs cap the
-	 * same way, and the loaded name set survives ShieldSyncS2C's bounded
-	 * stringUtf8(16) per-name codec — which an UNSANITIZED oversized name breaks.
+	 * name-validity rule the C2S add path enforces. Fix 9: the cap is COMBINED
+	 * across identities — names load first, uuids only fill the remaining slots
+	 * (the old per-list cap admitted 64 + 64 = 128 identities) — and the loaded
+	 * name set survives ShieldSyncS2C's bounded stringUtf8(16) per-name codec —
+	 * which an UNSANITIZED oversized name breaks.
 	 */
 	@GameTest(environment = ISOLATED_ENVIRONMENT)
 	public void oversizedWhitelistCappedAndSanitizedOnLoad(GameTestHelper helper) {
@@ -230,9 +232,33 @@ public class NbtHardeningGameTests {
 			helper.assertTrue(name.startsWith("Player"), "garbage names must be dropped on load, got '" + name + "'");
 		}
 
+		// Fix 9: 64 names already exhaust the COMBINED identity budget, so every
+		// uuid is dropped (re-learned by the join backfill when the named players
+		// next appear).
 		helper.assertTrue(
-				loaded.whitelistUuids.size() == ShieldState.MAX_WHITELIST_SIZE,
-				"100 whitelist UUIDs must cap at " + ShieldState.MAX_WHITELIST_SIZE + ", got " + loaded.whitelistUuids.size());
+				loaded.whitelistUuids.isEmpty(),
+				"with the name list full, the combined cap must drop every uuid, got " + loaded.whitelistUuids.size());
+
+		// A partially filled name list leaves exactly the remaining combined
+		// slots for uuids: 40 names + 100 uuids -> 40 + 24 = 64 identities.
+		ShieldState partial = new ShieldState();
+		for (int i = 0; i < 40; i++) {
+			partial.whitelistNames.add("Player" + i);
+		}
+		for (int i = 0; i < 100; i++) {
+			partial.whitelistUuids.add(java.util.UUID.randomUUID());
+		}
+
+		TagValueOutput partialOutput = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, registries);
+		partial.save(partialOutput);
+		ShieldState partialLoaded = new ShieldState();
+		partialLoaded.load(TagValueInput.create(ProblemReporter.DISCARDING, registries, partialOutput.buildResult()));
+		helper.assertTrue(
+				partialLoaded.whitelistNames.size() == 40,
+				"40 valid names should load unchanged, got " + partialLoaded.whitelistNames.size());
+		helper.assertTrue(
+				partialLoaded.whitelistUuids.size() == ShieldState.MAX_WHITELIST_SIZE - 40,
+				"uuids must fill only the remaining combined slots (24), got " + partialLoaded.whitelistUuids.size());
 
 		// The loaded (sanitized) name set must survive the bounded sync codec.
 		RegistryFriendlyByteBuf buffer = new RegistryFriendlyByteBuf(Unpooled.buffer(), registries);
@@ -281,7 +307,8 @@ public class NbtHardeningGameTests {
 
 		tag.putInt("fuel_seconds", Integer.MAX_VALUE);
 		tag.putLong("cooldown_until", -12345L);
-		tag.putInt("drain_accum", 999999);
+		tag.putLong("drain_debt_micros", Long.MAX_VALUE);
+		tag.putLong("break_cooldown_total", 1_000_000L);
 		tag.putInt("regen_accum", 999999);
 		ShieldState loaded = new ShieldState();
 		loaded.load(TagValueInput.create(ProblemReporter.DISCARDING, registries, tag));
@@ -290,16 +317,34 @@ public class NbtHardeningGameTests {
 				"a huge fuel_seconds must clamp to " + ShieldState.MAX_LOADED_FUEL_SECONDS + ", got " + loaded.fuelSeconds);
 		helper.assertTrue(loaded.cooldownUntil == 0L, "a negative cooldown_until must clamp to 0, got " + loaded.cooldownUntil);
 		helper.assertTrue(
-				loaded.drainAccum <= ShieldLogic.MAX_DRAIN_INTERVAL_TICKS,
-				"drain_accum must clamp to its firing threshold, got " + loaded.drainAccum);
+				loaded.drainDebtMicros <= ShieldLogic.DRAIN_DEBT_MICROS_PER_FUEL_SECOND,
+				"drain_debt_micros must clamp to its 1e6 payment threshold, got " + loaded.drainDebtMicros);
+		helper.assertTrue(
+				loaded.breakCooldownTotalTicks == ShieldState.MAX_LOADED_BREAK_COOLDOWN_TICKS,
+				"break_cooldown_total must clamp to " + ShieldState.MAX_LOADED_BREAK_COOLDOWN_TICKS
+						+ ", got " + loaded.breakCooldownTotalTicks);
 		helper.assertTrue(
 				loaded.regenAccum <= ShieldLogic.REGEN_PERIOD_TICKS,
 				"regen_accum must clamp to its firing threshold, got " + loaded.regenAccum);
 
 		tag.putInt("fuel_seconds", -50);
+		tag.putLong("drain_debt_micros", -999L);
+		tag.putLong("break_cooldown_total", -18000L);
 		ShieldState negative = new ShieldState();
 		negative.load(TagValueInput.create(ProblemReporter.DISCARDING, registries, tag));
 		helper.assertTrue(negative.fuelSeconds == 0, "a negative fuel_seconds must clamp to 0, got " + negative.fuelSeconds);
+		helper.assertTrue(negative.drainDebtMicros == 0L, "a negative drain_debt_micros must clamp to 0, got " + negative.drainDebtMicros);
+		helper.assertTrue(negative.breakCooldownTotalTicks == 0L,
+				"a negative break_cooldown_total must clamp to 0, got " + negative.breakCooldownTotalTicks);
+
+		// The legacy int "drain_accum" key is deliberately dropped on load (at
+		// worst a pre-migration save loses one partial drain interval).
+		tag.remove("drain_debt_micros");
+		tag.putInt("drain_accum", 19);
+		ShieldState legacy = new ShieldState();
+		legacy.load(TagValueInput.create(ProblemReporter.DISCARDING, registries, tag));
+		helper.assertTrue(legacy.drainDebtMicros == 0L,
+				"a legacy drain_accum must not seed the micro-debt accumulator, got " + legacy.drainDebtMicros);
 
 		// First-tick cap: a live projector re-loaded with an absurd future cooldown.
 		helper.setBlock(PROJECTOR_POS, ModBlocks.BUBBLE_SHIELD_PROJECTOR);
@@ -325,8 +370,8 @@ public class NbtHardeningGameTests {
 	 * encoding that overflowed above 3276.7 HP), max health caps at 32767, and no
 	 * slot ever goes negative. Read synchronously after load, before the max-health
 	 * refresh on the next tick re-derives maxHealth — and then the refresh must WIN:
-	 * the canonical model overrides the tamper, mapping the huge health by (clamped)
-	 * fraction to full.
+	 * the canonical model overrides the tamper, clamping the huge health absolutely
+	 * down onto the recomputed max (fix 1).
 	 */
 	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 100, padding = 16)
 	public void hugeLoadedHealthKeepsMenuDataSafe(GameTestHelper helper) {
@@ -364,7 +409,8 @@ public class NbtHardeningGameTests {
 
 		// First tick after load: the canonical recompute overrides the tampered
 		// max_health entirely (tier 0 at the default diameter 32 -> 200) and the
-		// huge loaded health maps by its clamped fraction (1.0) to full.
+		// huge loaded health clamps ABSOLUTELY down onto the new max (fix 1) —
+		// which at 1e6 loaded HP happens to land at full.
 		helper.runAfterDelay(2, () -> {
 			float expected = ShieldLogic.maxHealthFor(0, state.targetRadius, 100);
 			helper.assertTrue(
@@ -372,7 +418,7 @@ public class NbtHardeningGameTests {
 					"the first-tick recompute must override the tampered max_health with " + expected + ", got " + state.maxHealth);
 			helper.assertTrue(
 					state.health == expected,
-					"the huge loaded health must map by fraction to full (" + expected + "), got " + state.health);
+					"the huge loaded health must clamp absolutely onto the new max (" + expected + "), got " + state.health);
 			helper.succeed();
 		});
 	}

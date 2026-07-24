@@ -1,8 +1,12 @@
 package com.bubbleshield.gametest;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import com.bubbleshield.BubbleShield;
 import com.bubbleshield.block.BubbleShieldBlockEntity;
 import com.bubbleshield.menu.BubbleShieldMenu;
+import com.bubbleshield.net.ShieldPayloads;
 import com.bubbleshield.registry.ModBlocks;
 import com.bubbleshield.registry.ModItems;
 import com.bubbleshield.shield.ShieldLogic;
@@ -18,6 +22,8 @@ import net.minecraft.advancements.AdvancementNode;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
+import net.minecraft.network.protocol.common.ServerboundCustomPayloadPacket;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.server.level.ServerLevel;
@@ -122,6 +128,110 @@ public class UxGameTests {
 		helper.assertTrue(data.get(BubbleShieldMenu.DATA_WHITELIST_COUNT) == 2,
 				"two adds should read 2 in the whitelist slot, got " + data.get(BubbleShieldMenu.DATA_WHITELIST_COUNT));
 		helper.succeed();
+	}
+
+	/**
+	 * (Fix 8) DATA_COOLDOWN_SECONDS uses CEILING division: 1..19 remaining ticks
+	 * must display 1 s (the old floor showed 0 s while the server still refused
+	 * activation), exact boundaries round up correctly, and the slot is gated to
+	 * 0 while the shield is ACTIVE (a post-revive background window is not a
+	 * user-facing "time until ready").
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, padding = 16)
+	public void menuDataCooldownSecondsCeil(GameTestHelper helper) {
+		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
+		be.addFuelSeconds(PLENTY_OF_FUEL);
+		ShieldState state = be.getShieldState();
+		var data = be.getMenuData();
+		long gameTime = helper.getLevel().getGameTime();
+
+		helper.assertTrue(data.get(BubbleShieldMenu.DATA_COOLDOWN_SECONDS) == 0,
+				"no cooldown should read 0 s");
+		state.cooldownUntil = gameTime + 1L;
+		helper.assertTrue(data.get(BubbleShieldMenu.DATA_COOLDOWN_SECONDS) == 1,
+				"1 remaining tick must display 1 s (ceil), got " + data.get(BubbleShieldMenu.DATA_COOLDOWN_SECONDS));
+		state.cooldownUntil = gameTime + 19L;
+		helper.assertTrue(data.get(BubbleShieldMenu.DATA_COOLDOWN_SECONDS) == 1,
+				"19 remaining ticks must display 1 s (ceil), got " + data.get(BubbleShieldMenu.DATA_COOLDOWN_SECONDS));
+		state.cooldownUntil = gameTime + 20L;
+		helper.assertTrue(data.get(BubbleShieldMenu.DATA_COOLDOWN_SECONDS) == 1,
+				"a full 20 remaining ticks is exactly 1 s, got " + data.get(BubbleShieldMenu.DATA_COOLDOWN_SECONDS));
+		state.cooldownUntil = gameTime + 21L;
+		helper.assertTrue(data.get(BubbleShieldMenu.DATA_COOLDOWN_SECONDS) == 2,
+				"21 remaining ticks must round up to 2 s, got " + data.get(BubbleShieldMenu.DATA_COOLDOWN_SECONDS));
+
+		// Active gating: with a background (post-revive style) window still
+		// running, an ACTIVE shield's slot reads 0.
+		state.cooldownUntil = gameTime;
+		helper.assertTrue(be.tryActivate(), "the fueled shield should activate");
+		state.cooldownUntil = gameTime + 100L;
+		helper.assertTrue(data.get(BubbleShieldMenu.DATA_COOLDOWN_SECONDS) == 0,
+				"while ACTIVE the cooldown slot must read 0, got " + data.get(BubbleShieldMenu.DATA_COOLDOWN_SECONDS));
+		helper.succeed();
+	}
+
+	/**
+	 * (Fix 13) Inactive-projector sync: the block-entity ticker runs while
+	 * INACTIVE (fuel insert, cooldown countdown and the comparator depend on it)
+	 * and the WP2 coalescing flush lives in the always-running part of serverTick
+	 * — so a GUI mutation arriving through the REAL C2S handler path on an
+	 * inactive projector reaches clients within a tick. Exercised end-to-end: a
+	 * SetSettingsC2S packet is pushed through the mock owner's live connection
+	 * (Fabric's global receiver validates, clamps and applies it), then the
+	 * capture channel must show exactly ONE ShieldSyncS2C carrying the updated
+	 * replicated state (the settings change and its same-tick max-health
+	 * recompute coalesce into the one broadcast).
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 200, padding = 16)
+	public void inactiveProjectorSyncsC2SMutationWithinATick(GameTestHelper helper) {
+		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
+		ShieldState state = be.getShieldState();
+		BlockPos absPos = helper.absolutePos(PROJECTOR_POS);
+
+		MockPlayers.CapturingMockPlayer capture = MockPlayers.createCapturingMockPlayer(helper, GameType.CREATIVE);
+		ServerPlayer player = capture.player();
+		// Owner + in interact range: the handler's validatedShield/isOwner gates.
+		state.ownerUuid = player.getUUID();
+		Vec3 center = Vec3.atCenterOf(absPos);
+		player.snapTo(center.x + 1.5, center.y - 0.5, center.z);
+
+		helper.startSequence()
+				// Let the placement/join syncs flush, then drop them as setup noise.
+				.thenExecuteAfter(5, () -> {
+					helper.assertTrue(!state.active, "the projector under test must be INACTIVE");
+					drainShieldSyncs(capture, absPos);
+					player.connection.handleCustomPayload(new ServerboundCustomPayloadPacket(
+							new ShieldPayloads.SetSettingsC2S(absPos, 12, 7, 0, 0, false, 0)));
+				})
+				.thenExecuteAfter(2, () -> {
+					helper.assertTrue(state.targetRadius == 6.0F && state.effectId == 7,
+							"the C2S handler should have applied the settings to the inactive projector, radius "
+									+ state.targetRadius + " effect " + state.effectId);
+					List<ShieldPayloads.ShieldSyncS2C> syncs = drainShieldSyncs(capture, absPos);
+					helper.assertTrue(syncs.size() == 1,
+							"the inactive projector's tick must flush exactly ONE sync, got " + syncs.size());
+					ShieldPayloads.ShieldSyncS2C sync = syncs.get(0);
+					helper.assertTrue(sync.visual().effectId() == 7 && sync.visual().targetRadius() == 6.0F,
+							"the sync must carry the updated replicated state, radius "
+									+ sync.visual().targetRadius() + " effect " + sync.visual().effectId());
+					MockPlayers.removeMockPlayer(helper, player);
+				})
+				.thenSucceed();
+	}
+
+	/** Drains the capture channel, returning the ShieldSyncS2C payloads for the given projector. */
+	private static List<ShieldPayloads.ShieldSyncS2C> drainShieldSyncs(MockPlayers.CapturingMockPlayer capture, BlockPos absPos) {
+		List<ShieldPayloads.ShieldSyncS2C> syncs = new ArrayList<>();
+		Object message;
+		while ((message = capture.channel().readOutbound()) != null) {
+			if (message instanceof ClientboundCustomPayloadPacket packet
+					&& packet.payload() instanceof ShieldPayloads.ShieldSyncS2C sync
+					&& sync.pos().equals(absPos)) {
+				syncs.add(sync);
+			}
+		}
+
+		return syncs;
 	}
 
 	/**

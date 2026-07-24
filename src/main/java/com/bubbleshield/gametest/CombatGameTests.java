@@ -16,6 +16,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.ProblemReporter;
@@ -23,6 +24,7 @@ import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
 import net.minecraft.world.entity.boss.wither.WitherBoss;
+import net.minecraft.world.entity.monster.cubemob.Slime;
 import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.entity.projectile.arrow.Arrow;
 import net.minecraft.world.item.ItemStack;
@@ -130,6 +132,36 @@ public class CombatGameTests {
 	}
 
 	/**
+	 * (A5/fix 6) The hostile partition is {@code Mob && Enemy}, not Monster: a
+	 * slime — a hostile {@link net.minecraft.world.entity.monster.Enemy} on the
+	 * AbstractCubeMob branch that the old Monster partition MISSED entirely — is
+	 * expelled by the per-tick DEFENSE barrier exactly like a zombie. Frozen
+	 * (NoAI/persistent) like the zombie helper for deterministic geometry.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 100, padding = 16)
+	public void defenseBarrierExpelsSlimeInside(GameTestHelper helper) {
+		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
+		be.addFuelSeconds(PLENTY_OF_FUEL);
+		helper.assertTrue(be.tryActivate(), "shield should activate");
+
+		Slime slime = helper.spawn(EntityTypes.SLIME, new Vec3(4.5, 4.5, 4.5));
+		slime.setNoAi(true);
+		slime.setPersistenceRequired();
+		helper.runAfterDelay(5, () -> {
+			double distance = slime.position().distanceTo(shieldCenter(helper));
+			try {
+				helper.assertTrue(
+						distance > 4.0,
+						"the per-tick DEFENSE barrier should expel a slime inside (Mob && Enemy partition), distance is " + distance);
+			} finally {
+				slime.discard();
+			}
+
+			helper.succeed();
+		});
+	}
+
+	/**
 	 * (A5) The per-tick DEFENSE barrier: a monster that ends up inside a running
 	 * DEFENSE shield (spawned in, here) is expelled by the next barrier pass, so
 	 * hostile mobs can never take up residence inside.
@@ -223,7 +255,8 @@ public class CombatGameTests {
 		be.getShieldState().mode = ShieldMode.ECO;
 		be.addFuelSeconds(PLENTY_OF_FUEL);
 		helper.assertTrue(be.tryActivate(), "shield should activate");
-		// ECO caps the radius at 0.75 x 4 = 3; park the zombie well inside.
+		// ECO's x0.75 would give 3, but the MIN_RADIUS floor is applied after all
+		// multipliers (fix 10), so the bubble holds 4; park the zombie well inside.
 		Zombie zombie = spawnFrozenZombie(helper, new Vec3(4.5, 3.0, 4.5));
 		float startHealth = zombie.getHealth();
 
@@ -246,8 +279,9 @@ public class CombatGameTests {
 	 * (A5) Boss exemption: the wither and the ender dragon are never
 	 * teleport-expelled (teleport-fragile bosses; they still take pulse/nova
 	 * DAMAGE), while a plain zombie in the same spot is. The dragon check uses a
-	 * constructed (never-spawned) instance — dragons are not Monsters and never
-	 * reach the barrier through the scan partition anyway.
+	 * constructed (never-spawned) instance — since the fix-6 {@code Mob && Enemy}
+	 * partition the dragon DOES reach the barrier through the combined scan, so
+	 * this exemption is load-bearing for it.
 	 */
 	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 100, padding = 16)
 	public void bossesAreBarrierExempt(GameTestHelper helper) {
@@ -408,9 +442,11 @@ public class CombatGameTests {
 	/**
 	 * (B5) The break shockwave nova: at the moment the shield breaks (here via the
 	 * direct applyShieldDamage path, which routes through the same shared break
-	 * routine as interception breaks), every hostile monster inside the pre-break
-	 * radius takes exactly 8 magic damage, while a whitelisted player standing
-	 * inside is untouched (only Monsters are targeted).
+	 * routine as interception breaks), every hostile mob ({@code Mob && Enemy},
+	 * fix 6) inside the pre-break radius takes exactly 8 magic damage, while a
+	 * whitelisted player standing inside is untouched — and (fix 6) a
+	 * CUSTOM-NAMED hostile is skipped by the nova only: a nametagged "pet" zombie
+	 * in the blast zone stays unhurt.
 	 */
 	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 100, padding = 16)
 	public void breakNovaDamagesMonstersSparesPlayers(GameTestHelper helper) {
@@ -425,7 +461,7 @@ public class CombatGameTests {
 		helper.assertTrue(be.tryActivate(), "shield should activate");
 
 		Vec3 center = shieldCenter(helper);
-		// ECO radius is 0.75 x 4 = 3: park both well inside it.
+		// ECO radius floors at MIN_RADIUS 4 (fix 10): park everyone well inside it.
 		owner.snapTo(center.x + 1.0, center.y, center.z);
 		Zombie zombie = spawnFrozenZombie(helper, new Vec3(4.5, 3.5, 4.5));
 		// Deterministic magic-damage math: no randomly rolled (possibly
@@ -435,14 +471,21 @@ public class CombatGameTests {
 		zombie.setItemSlot(EquipmentSlot.FEET, ItemStack.EMPTY);
 		zombie.setItemSlot(EquipmentSlot.MAINHAND, ItemStack.EMPTY);
 		zombie.setItemSlot(EquipmentSlot.OFFHAND, ItemStack.EMPTY);
+		// Fix 6: a custom-named "pet" hostile in the same blast zone is skipped
+		// by the nova (and by the nova ONLY).
+		Zombie namedPet = spawnFrozenZombie(helper, new Vec3(3.5, 3.5, 4.5));
+		namedPet.setCustomName(Component.literal("Chomper"));
 
 		helper.runAfterDelay(5, () -> {
 			float zombieStart = zombie.getHealth();
+			float petStart = namedPet.getHealth();
 			float ownerStart = owner.getHealth();
 			double distance = distanceFromCenter(helper, zombie);
+			double petDistance = distanceFromCenter(helper, namedPet);
 			try {
 				helper.assertTrue(state.active, "the shield should still be active before the overkill hit");
 				helper.assertTrue(distance <= be.currentRadius(), "the zombie should sit inside the pre-break radius");
+				helper.assertTrue(petDistance <= be.currentRadius(), "the named zombie should sit inside the pre-break radius");
 
 				be.applyShieldDamage(100000.0F);
 				helper.assertTrue(!state.active, "the overkill hit should break the shield");
@@ -451,10 +494,14 @@ public class CombatGameTests {
 						"the break nova should deal exactly 8 magic damage to the inside zombie, health went "
 								+ zombieStart + " -> " + zombie.getHealth());
 				helper.assertTrue(
+						namedPet.getHealth() == petStart,
+						"the nova must skip custom-named hostiles, pet health went " + petStart + " -> " + namedPet.getHealth());
+				helper.assertTrue(
 						owner.getHealth() == ownerStart,
 						"the nova must never hurt players, owner health went " + ownerStart + " -> " + owner.getHealth());
 			} finally {
 				zombie.discard();
+				namedPet.discard();
 			}
 
 			helper.succeed();

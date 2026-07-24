@@ -130,7 +130,10 @@ public class CapacitorGameTests {
 		installCapacitor(be);
 		be.addFuelSeconds(PLENTY_OF_FUEL);
 		helper.assertTrue(be.tryActivate(), "shield should activate");
-		be.applyShieldDamage(30.0F);
+		// Damage AFTER the first-tick max-health recompute: a fresh placement's
+		// first recompute snaps health to full (fix 1), which would erase a hit
+		// landed before it. The first fuel drop is 40 ticks out, far behind this.
+		helper.runAfterDelay(2, () -> be.applyShieldDamage(30.0F));
 
 		// With a capacitor the only fuel sink is the 40-tick passive drain (regen
 		// pulses are fuel-free), so any observed fuel drop marks a 40-tick boundary.

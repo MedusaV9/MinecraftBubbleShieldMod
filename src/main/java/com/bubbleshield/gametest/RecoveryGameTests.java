@@ -23,6 +23,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -56,9 +57,12 @@ public class RecoveryGameTests {
 	}
 
 	/**
-	 * (a) The A7 emergency revive: with a running break cooldown and at least 400
-	 * stored fuel-seconds, the OWNER's revive clears the cooldown, charges exactly
-	 * 400 fuel-seconds and reactivates the shield at 50% of its max health.
+	 * (a) The A7 emergency revive: with a running break cooldown and at least the
+	 * tier-scaled fee (tier 0: 400) stored, the OWNER's revive bypasses the
+	 * cooldown, charges exactly the fee and reactivates the shield at 50% of its
+	 * max health. Fix 3a: the cooldown WINDOW keeps running in the background
+	 * (cooldownUntil is bypassed for the activation, not cleared) and the
+	 * once-per-window flag is set.
 	 */
 	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 100, padding = 16)
 	public void reviveSkipsCooldownForFuel(GameTestHelper helper) {
@@ -76,14 +80,16 @@ public class RecoveryGameTests {
 			helper.assertTrue(!state.active && state.cooldownUntil > gameTime, "overkill damage should break the shield into a cooldown");
 			helper.assertTrue(!be.tryActivate(), "the plain activation must still refuse during the cooldown");
 			int fuelBefore = state.fuelSeconds;
-			helper.assertTrue(fuelBefore >= ShieldLogic.REVIVE_FUEL_COST, "the test setup should leave at least the revive fee stored");
+			helper.assertTrue(fuelBefore >= ShieldLogic.reviveFuelCost(0), "the test setup should leave at least the revive fee stored");
 
 			helper.assertTrue(be.tryEmergencyRevive(owner), "the owner's revive should succeed with the fee affordable");
 			helper.assertTrue(state.active, "the revived shield should be active");
 			helper.assertTrue(
-					state.fuelSeconds == fuelBefore - ShieldLogic.REVIVE_FUEL_COST,
-					"the revive should charge exactly 400 fuel-seconds, fuel went " + fuelBefore + " -> " + state.fuelSeconds);
-			helper.assertTrue(state.cooldownUntil <= gameTime, "the revive should clear the break cooldown");
+					state.fuelSeconds == fuelBefore - ShieldLogic.reviveFuelCost(0),
+					"the tier-0 revive should charge exactly 400 fuel-seconds, fuel went " + fuelBefore + " -> " + state.fuelSeconds);
+			helper.assertTrue(state.cooldownUntil > gameTime,
+					"fix 3a: the cooldown window must keep running in the background across the revive");
+			helper.assertTrue(state.revivedThisCooldown, "the revive must set the once-per-window flag");
 			helper.assertTrue(
 					state.health == 0.5F * state.maxHealth,
 					"the revived shield should restart at 50% of max health (62.5), got " + state.health);
@@ -92,8 +98,9 @@ public class RecoveryGameTests {
 	}
 
 	/**
-	 * (b) The revive is refused when fewer than 400 fuel-seconds are stored: the
-	 * shield stays broken, the cooldown keeps running and no fuel is charged.
+	 * (b) The revive is refused when fewer fuel-seconds than the tier-scaled fee
+	 * (tier 0: 400) are stored: the shield stays broken, the cooldown keeps
+	 * running and no fuel is charged.
 	 */
 	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 100, padding = 16)
 	public void reviveRefusedWhenFuelBelowCost(GameTestHelper helper) {
@@ -101,14 +108,14 @@ public class RecoveryGameTests {
 		ShieldState state = be.getShieldState();
 		ServerPlayer owner = MockPlayers.createUniqueMockPlayer(helper);
 		be.setOwner(owner);
-		be.addFuelSeconds(ShieldLogic.REVIVE_FUEL_COST - 1);
+		be.addFuelSeconds(ShieldLogic.reviveFuelCost(0) - 1);
 		helper.assertTrue(be.tryActivate(), "shield should activate");
 
 		helper.runAfterDelay(2, () -> {
 			be.applyShieldDamage(100000.0F);
 			long gameTime = helper.getLevel().getGameTime();
 			int fuelBefore = state.fuelSeconds;
-			helper.assertTrue(fuelBefore == ShieldLogic.REVIVE_FUEL_COST - 1, "the setup should leave 399 fuel-seconds, got " + fuelBefore);
+			helper.assertTrue(fuelBefore == ShieldLogic.reviveFuelCost(0) - 1, "the setup should leave 399 fuel-seconds, got " + fuelBefore);
 
 			helper.assertTrue(!be.tryEmergencyRevive(owner), "the revive must refuse below the 400 fuel-second fee");
 			helper.assertTrue(!state.active, "the shield must stay inactive after the refused revive");
@@ -116,6 +123,139 @@ public class RecoveryGameTests {
 			helper.assertTrue(state.fuelSeconds == fuelBefore, "a refused revive must not charge any fuel");
 			helper.succeed();
 		});
+	}
+
+	/**
+	 * (b2, fix 3b) The revive fee scales with the shield tier: the pure table is
+	 * {@code 400 + 200 * tier} (400/600/800/1000, out-of-range tiers clamped),
+	 * and a live tier-3 revive charges exactly 1000 fuel-seconds.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 100, padding = 16)
+	public void reviveCostScalesWithTier(GameTestHelper helper) {
+		helper.assertTrue(ShieldLogic.reviveFuelCost(0) == 400, "tier 0 revive should cost 400");
+		helper.assertTrue(ShieldLogic.reviveFuelCost(1) == 600, "tier 1 revive should cost 600");
+		helper.assertTrue(ShieldLogic.reviveFuelCost(2) == 800, "tier 2 revive should cost 800");
+		helper.assertTrue(ShieldLogic.reviveFuelCost(3) == 1000, "tier 3 revive should cost 1000");
+		helper.assertTrue(ShieldLogic.reviveFuelCost(-1) == 400 && ShieldLogic.reviveFuelCost(99) == 1000,
+				"out-of-range tiers should clamp into the 400..1000 fee table");
+
+		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
+		ShieldState state = be.getShieldState();
+		ServerPlayer owner = MockPlayers.createUniqueMockPlayer(helper);
+		be.setOwner(owner);
+		be.getCoreContainer().setItem(0, new ItemStack(ModItems.AEGIS_CORE));
+		be.addFuelSeconds(3000);
+		helper.assertTrue(be.tryActivate(), "shield should activate");
+
+		helper.runAfterDelay(2, () -> {
+			be.applyShieldDamage(1000000.0F);
+			helper.assertTrue(!state.active, "overkill damage should break the tier-3 shield");
+			int fuelBefore = state.fuelSeconds;
+
+			helper.assertTrue(be.tryEmergencyRevive(owner), "the tier-3 revive should succeed with 3000 fuel stored");
+			helper.assertTrue(state.fuelSeconds == fuelBefore - 1000,
+					"the tier-3 revive should charge exactly 1000 fuel-seconds, fuel went " + fuelBefore + " -> " + state.fuelSeconds);
+			helper.succeed();
+		});
+	}
+
+	/**
+	 * (b3, fix 3a) At most ONE revive per cooldown window: after a successful
+	 * revive the window keeps running in the background, and even a deliberate
+	 * deactivation inside it cannot buy a second revive — the server refuses and
+	 * charges nothing, and the menu's {@code DATA_REVIVE_AVAILABLE} slot mirrors
+	 * the refusal for the GUI's Revive button face.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 100, padding = 16)
+	public void reviveOncePerCooldownWindow(GameTestHelper helper) {
+		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
+		ShieldState state = be.getShieldState();
+		ServerPlayer owner = MockPlayers.createUniqueMockPlayer(helper);
+		be.setOwner(owner);
+		be.addFuelSeconds(PLENTY_OF_FUEL);
+		helper.assertTrue(be.tryActivate(), "shield should activate");
+
+		helper.runAfterDelay(2, () -> {
+			be.applyShieldDamage(100000.0F);
+			long gameTime = helper.getLevel().getGameTime();
+			helper.assertTrue(be.getMenuData().get(BubbleShieldMenu.DATA_REVIVE_AVAILABLE) == 1,
+					"a fresh break window should report the revive as available");
+			helper.assertTrue(be.tryEmergencyRevive(owner), "the first revive in the window should succeed");
+			helper.assertTrue(be.getMenuData().get(BubbleShieldMenu.DATA_REVIVE_AVAILABLE) == 0,
+					"an active (revived) shield must not report the revive as available");
+
+			// Deliberately power down INSIDE the still-running window: the flag
+			// (not the active state) must block the second revive.
+			be.setActive(false);
+			helper.assertTrue(!state.active && state.cooldownUntil > gameTime,
+					"the setup should leave an inactive shield inside the original window");
+			int fuelBefore = state.fuelSeconds;
+			helper.assertTrue(be.getMenuData().get(BubbleShieldMenu.DATA_REVIVE_AVAILABLE) == 0,
+					"a spent window must not report the revive as available");
+			helper.assertTrue(!be.tryEmergencyRevive(owner), "the second revive in the same window must be refused");
+			helper.assertTrue(state.fuelSeconds == fuelBefore, "the refused second revive must not charge any fuel");
+			helper.assertTrue(!state.active, "the refused second revive must not activate the shield");
+			helper.succeed();
+		});
+	}
+
+	/**
+	 * (b4, fix 3c) The revive is refused while fewer than
+	 * {@link ShieldLogic#MIN_REVIVE_COOLDOWN_TICKS} (200) cooldown ticks remain —
+	 * paying hundreds of fuel-seconds to skip under 10 s is a rounding trap, not
+	 * a rescue — and accepted at exactly the threshold.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 100, padding = 16)
+	public void reviveRefusedForTinyRemainder(GameTestHelper helper) {
+		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
+		ShieldState state = be.getShieldState();
+		ServerPlayer owner = MockPlayers.createUniqueMockPlayer(helper);
+		be.setOwner(owner);
+		be.addFuelSeconds(PLENTY_OF_FUEL);
+		helper.assertTrue(be.tryActivate(), "shield should activate");
+
+		helper.runAfterDelay(2, () -> {
+			be.applyShieldDamage(100000.0F);
+			long gameTime = helper.getLevel().getGameTime();
+			int fuelBefore = state.fuelSeconds;
+
+			state.cooldownUntil = gameTime + ShieldLogic.MIN_REVIVE_COOLDOWN_TICKS - 1;
+			helper.assertTrue(be.getMenuData().get(BubbleShieldMenu.DATA_REVIVE_AVAILABLE) == 0,
+					"a 199-tick remainder must not report the revive as available");
+			helper.assertTrue(!be.tryEmergencyRevive(owner), "a 199-tick remainder must refuse the revive");
+			helper.assertTrue(state.fuelSeconds == fuelBefore && !state.active,
+					"the tiny-remainder refusal must not charge fuel or activate");
+
+			state.cooldownUntil = gameTime + ShieldLogic.MIN_REVIVE_COOLDOWN_TICKS;
+			helper.assertTrue(be.tryEmergencyRevive(owner), "a 200-tick remainder should accept the revive");
+			helper.assertTrue(state.fuelSeconds == fuelBefore - ShieldLogic.reviveFuelCost(0),
+					"the accepted revive should charge the tier-0 fee");
+			helper.succeed();
+		});
+	}
+
+	/**
+	 * (b5, fix 3d) Live fuel top-ups clamp the stored total to the same
+	 * {@link ShieldState#MAX_LOADED_FUEL_SECONDS} (100000) cap the NBT load
+	 * enforces, so repeated additions can never park an overflow-prone total.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, padding = 16)
+	public void liveFuelTopUpsClampToCap(GameTestHelper helper) {
+		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
+		ShieldState state = be.getShieldState();
+
+		be.addFuelSeconds(ShieldState.MAX_LOADED_FUEL_SECONDS - 1);
+		helper.assertTrue(state.fuelSeconds == ShieldState.MAX_LOADED_FUEL_SECONDS - 1,
+				"a below-cap top-up should store unclamped, got " + state.fuelSeconds);
+
+		be.addFuelSeconds(50000);
+		helper.assertTrue(state.fuelSeconds == ShieldState.MAX_LOADED_FUEL_SECONDS,
+				"an over-cap top-up must clamp to 100000, got " + state.fuelSeconds);
+
+		be.addFuelSeconds(Integer.MAX_VALUE);
+		helper.assertTrue(state.fuelSeconds == ShieldState.MAX_LOADED_FUEL_SECONDS,
+				"an Integer.MAX_VALUE top-up must not overflow past the cap, got " + state.fuelSeconds);
+		helper.succeed();
 	}
 
 	/**
@@ -178,7 +318,10 @@ public class RecoveryGameTests {
 	public void patchKitHealsAndCapsAtMax(GameTestHelper helper) {
 		BubbleShieldBlockEntity be = placeProjector(helper, 16.0F);
 		ShieldState state = be.getShieldState();
-		ServerPlayer owner = MockPlayers.createUniqueMockPlayer(helper);
+		// SURVIVAL: fix 11 routes consumption through ItemStack.consume, which
+		// no-ops for creative (instabuild) players — the default creative mock
+		// would keep its kits and break every consumption assert below.
+		ServerPlayer owner = MockPlayers.createCapturingMockPlayer(helper, GameType.SURVIVAL).player();
 		be.setOwner(owner);
 		be.addFuelSeconds(PLENTY_OF_FUEL);
 		helper.assertTrue(be.tryActivate(), "shield should activate");
@@ -211,7 +354,9 @@ public class RecoveryGameTests {
 	public void patchKitFullHealthNoOpOpensMenu(GameTestHelper helper) {
 		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
 		ShieldState state = be.getShieldState();
-		ServerPlayer owner = MockPlayers.createUniqueMockPlayer(helper);
+		// SURVIVAL keeps the "not consumed" assert non-vacuous (fix 11: creative
+		// players never consume kits, no-op or not).
+		ServerPlayer owner = MockPlayers.createCapturingMockPlayer(helper, GameType.SURVIVAL).player();
 		be.setOwner(owner);
 		be.addFuelSeconds(PLENTY_OF_FUEL);
 		helper.assertTrue(be.tryActivate(), "shield should activate");
@@ -230,20 +375,30 @@ public class RecoveryGameTests {
 
 	/**
 	 * (g) The patch kit on a broken shield cuts the REMAINING cooldown by 20% of
-	 * the tier's FULL cooldown (tier 0: 3600 of 18000 ticks), stacks across uses,
-	 * floors at 1 remaining tick, and is only consumed when it reduced something.
+	 * the FULL cooldown this break started (tier 0: 3600 of 18000 ticks), stacks
+	 * across uses, floors at 1 remaining tick, and is only consumed when it
+	 * reduced something.
 	 */
 	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 100, padding = 16)
 	public void patchKitCutsBreakCooldown(GameTestHelper helper) {
-		// The 20%-of-full reduction table is pure and exact (all values divide by 5).
-		helper.assertTrue(ShieldLogic.patchKitCooldownReduction(0) == 3600L, "tier 0 reduction should be 3600 ticks");
-		helper.assertTrue(ShieldLogic.patchKitCooldownReduction(1) == 2400L, "tier 1 reduction should be 2400 ticks");
-		helper.assertTrue(ShieldLogic.patchKitCooldownReduction(2) == 1440L, "tier 2 reduction should be 1440 ticks");
-		helper.assertTrue(ShieldLogic.patchKitCooldownReduction(3) == 720L, "tier 3 reduction should be 720 ticks");
+		// The 20% reduction is pure and exact (all table values divide by 5). A
+		// state WITHOUT a break-time snapshot (0: legacy save / no break yet)
+		// falls back to the given tier's table value...
+		ShieldState fresh = new ShieldState();
+		helper.assertTrue(ShieldLogic.patchKitCooldownReduction(fresh, 0) == 3600L, "tier 0 fallback reduction should be 3600 ticks");
+		helper.assertTrue(ShieldLogic.patchKitCooldownReduction(fresh, 1) == 2400L, "tier 1 fallback reduction should be 2400 ticks");
+		helper.assertTrue(ShieldLogic.patchKitCooldownReduction(fresh, 2) == 1440L, "tier 2 fallback reduction should be 1440 ticks");
+		helper.assertTrue(ShieldLogic.patchKitCooldownReduction(fresh, 3) == 720L, "tier 3 fallback reduction should be 720 ticks");
+		// ... and fix 2: a present snapshot WINS over the current tier, whatever it is.
+		fresh.breakCooldownTotalTicks = 18000L;
+		helper.assertTrue(ShieldLogic.patchKitCooldownReduction(fresh, 3) == 3600L,
+				"the break-time snapshot must pin the reduction regardless of the current tier");
 
 		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
 		ShieldState state = be.getShieldState();
-		ServerPlayer owner = MockPlayers.createUniqueMockPlayer(helper);
+		// SURVIVAL: the consumption asserts below need ItemStack.consume to
+		// actually shrink the stack (fix 11 exempts creative players).
+		ServerPlayer owner = MockPlayers.createCapturingMockPlayer(helper, GameType.SURVIVAL).player();
 		be.setOwner(owner);
 		be.addFuelSeconds(PLENTY_OF_FUEL);
 		helper.assertTrue(be.tryActivate(), "shield should activate");
@@ -283,6 +438,72 @@ public class RecoveryGameTests {
 	}
 
 	/**
+	 * (g2, fix 2) Core-swap exploit kill: the per-kit cooldown reduction is
+	 * pinned to the cooldown SNAPSHOTTED at break time. A tier-0 break (18000
+	 * ticks, 3600/kit) keeps its 3600 reduction even after an aegis core (tier 3,
+	 * whose own table value would be 720) is socketed mid-cooldown.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 100, padding = 16)
+	public void patchKitReductionPinnedAcrossCoreSwap(GameTestHelper helper) {
+		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
+		ShieldState state = be.getShieldState();
+		// SURVIVAL: the consumption assert needs ItemStack.consume to shrink (fix 11).
+		ServerPlayer owner = MockPlayers.createCapturingMockPlayer(helper, GameType.SURVIVAL).player();
+		be.setOwner(owner);
+		be.addFuelSeconds(PLENTY_OF_FUEL);
+		helper.assertTrue(be.tryActivate(), "shield should activate");
+
+		helper.runAfterDelay(2, () -> {
+			be.applyShieldDamage(100000.0F);
+			long gameTime = helper.getLevel().getGameTime();
+			helper.assertTrue(state.cooldownUntil == gameTime + 18000L, "a tier-0 break should start the full 18000-tick cooldown");
+			helper.assertTrue(state.breakCooldownTotalTicks == 18000L,
+					"the break should snapshot its full cooldown, got " + state.breakCooldownTotalTicks);
+
+			// The exploit setup: swap in the tier-3 core AFTER the tier-0 break.
+			be.getCoreContainer().setItem(0, new ItemStack(ModItems.AEGIS_CORE));
+
+			armWithPatchKits(helper, owner, 1);
+			helper.useBlock(PROJECTOR_POS, owner);
+			helper.assertTrue(state.cooldownUntil == gameTime + 14400L,
+					"the kit must keep cutting the SNAPSHOTTED 3600 (not tier 3's 720), got " + (state.cooldownUntil - gameTime));
+			helper.assertTrue(owner.getMainHandItem().getCount() == 0, "the effective cut should consume the kit");
+			helper.succeed();
+		});
+	}
+
+	/**
+	 * (g3, fix 11) A creative-mode player's patch kit is NOT consumed (the
+	 * standard {@code ItemStack.consume} player-aware pattern), while the heal
+	 * still applies once.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 100, padding = 16)
+	public void patchKitCreativeAppliesWithoutConsuming(GameTestHelper helper) {
+		BubbleShieldBlockEntity be = placeProjector(helper, 16.0F);
+		ShieldState state = be.getShieldState();
+		ServerPlayer owner = MockPlayers.createUniqueMockPlayer(helper);
+		be.setOwner(owner);
+		be.addFuelSeconds(PLENTY_OF_FUEL);
+		helper.assertTrue(be.tryActivate(), "shield should activate");
+
+		helper.runAfterDelay(2, () -> {
+			helper.assertTrue(state.maxHealth == 200.0F, "tier 0 at diameter 32 should have maxHealth 200, got " + state.maxHealth);
+			be.applyShieldDamage(160.0F);
+			helper.assertTrue(state.health == 40.0F, "damaged health should be 40, got " + state.health);
+
+			// Creative semantics: ItemStack.consume keys off hasInfiniteMaterials()
+			// = abilities.instabuild, exactly what GameType.CREATIVE grants a real
+			// player on mode change.
+			owner.getAbilities().instabuild = true;
+			armWithPatchKits(helper, owner, 1);
+			helper.useBlock(PROJECTOR_POS, owner);
+			helper.assertTrue(state.health == 190.0F, "the creative kit should still heal exactly 150 (40 -> 190), got " + state.health);
+			helper.assertTrue(owner.getMainHandItem().getCount() == 1, "a creative-mode kit use must not be consumed");
+			helper.succeed();
+		});
+	}
+
+	/**
 	 * (h) The patch kit mirrors the barrier's subject rule: a non-whitelisted
 	 * stranger gets no effect and keeps the kit, a whitelisted (non-owner) friend
 	 * may patch.
@@ -292,7 +513,9 @@ public class RecoveryGameTests {
 		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
 		ShieldState state = be.getShieldState();
 		ServerPlayer owner = MockPlayers.createUniqueMockPlayer(helper);
-		ServerPlayer stranger = MockPlayers.createUniqueMockPlayer(helper);
+		// SURVIVAL: the stranger's kit-kept/kit-consumed asserts rely on real
+		// ItemStack.consume semantics (fix 11 exempts creative players).
+		ServerPlayer stranger = MockPlayers.createCapturingMockPlayer(helper, GameType.SURVIVAL).player();
 		be.setOwner(owner);
 		be.addFuelSeconds(PLENTY_OF_FUEL);
 		helper.assertTrue(be.tryActivate(), "shield should activate");
@@ -311,7 +534,7 @@ public class RecoveryGameTests {
 			// Whitelisting the same player flips the decision — no ownership needed.
 			state.whitelistUuids.add(stranger.getUUID());
 			helper.useBlock(PROJECTOR_POS, stranger);
-			helper.assertTrue(state.cooldownUntil == cooldownBefore - ShieldLogic.patchKitCooldownReduction(0),
+			helper.assertTrue(state.cooldownUntil == cooldownBefore - ShieldLogic.patchKitCooldownReduction(state, 0),
 					"a whitelisted friend's kit should cut the cooldown");
 			helper.assertTrue(stranger.getMainHandItem().getCount() == 0, "the friend's effective kit use should be consumed");
 			helper.succeed();

@@ -33,7 +33,9 @@ public class TierGameTests {
 	/**
 	 * The max-health table at diameter 8 (ShieldLogic.maxHealthFor:
 	 * BASE_HP[tier] x (0.5 + 8/64)): tier 2 = 438, tier 3 (aegis) = 750, tier 0 = 125.
-	 * Removing a core keeps the health FRACTION, not the absolute value.
+	 * Fix 1: every recompute keeps the ABSOLUTE health, clamped into [0, newMax] —
+	 * raising the max grants no HP and removing a core clamps down what no longer
+	 * fits. Only a fresh placement's very first recompute snaps to full.
 	 */
 	@GameTest(maxTicks = 100, padding = 16)
 	public void tierRaisesMaxHealth(GameTestHelper helper) {
@@ -45,29 +47,33 @@ public class TierGameTests {
 		helper.assertTrue(be.tier() == 2, "a prismatic core should derive tier 2");
 
 		// The block ticker applies the tier to maxHealth on the next serverTick.
+		// The core insert above landed BEFORE the first tick, so the fresh
+		// placement's first recompute snaps health to the tier-2 full max.
 		helper.runAfterDelay(2, () -> {
 			helper.assertTrue(state.maxHealth == 438.0F, "tier 2 at diameter 8 should raise maxHealth to 438, got " + state.maxHealth);
+			helper.assertTrue(state.health == 438.0F, "a fresh placement's first recompute snaps health to full, got " + state.health);
 			helper.assertTrue(
 					be.getMenuData().get(BubbleShieldMenu.DATA_TIER) == 2,
 					"the menu data slot should reflect tier 2");
 
-			// Tier 3: the aegis core tops the table.
+			// Tier 3: the aegis core tops the table — but the ABSOLUTE health
+			// stays at 438 (fix 1: a bigger tank grants no free HP).
 			be.getCoreContainer().setItem(0, new ItemStack(ModItems.AEGIS_CORE));
 			helper.assertTrue(be.tier() == 3, "an aegis core should derive tier 3");
 			helper.runAfterDelay(2, () -> {
 				helper.assertTrue(state.maxHealth == 750.0F, "tier 3 at diameter 8 should raise maxHealth to 750, got " + state.maxHealth);
+				helper.assertTrue(state.health == 438.0F, "tier-up keeps the absolute health (438), got " + state.health);
 				helper.assertTrue(be.getMenuData().get(BubbleShieldMenu.DATA_TIER) == 3, "the menu data slot should reflect tier 3");
 
-				// Damage to 1/3, then pull the core: maxHealth drops back to the
-				// tier-0 125 and health maps by FRACTION (250/750 -> 125/3).
+				// Set health to 250, then pull the core: maxHealth drops back to
+				// the tier-0 125 and health CLAMPS to the new max (fix 1) —
+				// the old fraction semantics would have mapped 250/750 -> 41.7.
 				state.health = 250.0F;
 				be.getCoreContainer().setItem(0, ItemStack.EMPTY);
 				helper.runAfterDelay(2, () -> {
 					helper.assertTrue(state.maxHealth == 125.0F, "removing the core should restore maxHealth to 125, got " + state.maxHealth);
-					float expectedHealth = 250.0F / 750.0F * 125.0F;
-					helper.assertTrue(
-							Math.abs(state.health - expectedHealth) < 0.01F,
-							"health should map by fraction to " + expectedHealth + ", got " + state.health);
+					helper.assertTrue(state.health == 125.0F,
+							"health should clamp to the new max (125), got " + state.health);
 					helper.assertTrue(be.getMenuData().get(BubbleShieldMenu.DATA_TIER) == 0, "the menu data slot should reflect tier 0");
 					helper.succeed();
 				});
@@ -76,44 +82,37 @@ public class TierGameTests {
 	}
 
 	/**
-	 * Inserting a core into a live shield raises maxHealth but must PRESERVE the health
-	 * fraction (and therefore the current radius); only removing a core clamps health.
+	 * Fix 1 (exploit kill): inserting a core into a live shield raises maxHealth
+	 * but keeps the ABSOLUTE current health — the old fraction preservation let a
+	 * cheaply topped-up small shield resize into thousands of free HP. The health
+	 * fraction (and with it the radius, once below the 60% plateau) drops instead.
 	 */
 	@GameTest(maxTicks = 100, padding = 16)
-	public void tierUpPreservesHealthFraction(GameTestHelper helper) {
+	public void tierUpKeepsAbsoluteHealth(GameTestHelper helper) {
 		BubbleShieldBlockEntity be = placeProjector(helper, 8.0F);
 		ShieldState state = be.getShieldState();
 		be.addFuelSeconds(PLENTY_OF_FUEL);
 		helper.assertTrue(be.tryActivate(), "shield should activate");
 		helper.assertTrue(be.currentRadius() == 8.0F, "a full-health shield should start at radius 8");
 
-		// Full health, tier 0 -> 1: the fraction (1.0) is preserved exactly, so the
-		// radius must not budge (pre-fix, health stayed low and the radius halved).
-		// Tier 1 at diameter 16: 400 x (0.5 + 16/64) = 300.
-		be.getCoreContainer().setItem(0, new ItemStack(ModItems.RESONANT_CORE));
+		// Let the first-tick recompute land (T0 D16: 200 x (0.5 + 16/64) = 150,
+		// snapped to full — the one fresh-placement exception).
 		helper.runAfterDelay(2, () -> {
-			helper.assertTrue(state.maxHealth == 300.0F, "tier 1 at diameter 16 should raise maxHealth to 300, got " + state.maxHealth);
-			helper.assertTrue(state.health == 300.0F, "tier-up at full health should scale health to 300, got " + state.health);
-			helper.assertTrue(be.currentRadius() == 8.0F, "tier-up must not shrink the live shield, radius is " + be.currentRadius());
+			helper.assertTrue(state.maxHealth == 150.0F, "tier 0 at diameter 16 should compute maxHealth 150, got " + state.maxHealth);
+			helper.assertTrue(state.health == 150.0F, "the fresh placement should start at full health, got " + state.health);
 
-			// Partial health, tier 1 -> 2: 200 raw is 150 after tier 1's 25% DR, so
-			// health lands at 150/300 = 50% — below the 60% shrink plateau, so the
-			// radius shrinks to 8 x (0.5/0.6) and must SURVIVE the tier-up unchanged.
-			// Small tolerances absorb at most one regen pulse between the two ticks.
-			be.applyShieldDamage(200.0F);
-			float fracBefore = state.health / state.maxHealth;
-			float radiusBefore = be.currentRadius();
-			helper.assertTrue(radiusBefore < 8.0F, "a 50%-health shield should be below full radius, got " + radiusBefore);
-			be.getCoreContainer().setItem(0, new ItemStack(ModItems.PRISMATIC_CORE));
+			// Full health, tier 0 -> 1 (diameter 16: 400 x 0.75 = 300): the
+			// ABSOLUTE 150 HP is kept, so the fraction drops to 50% — below the
+			// 60% shrink plateau — and the radius contracts to 8 x (0.5/0.6)
+			// until the shield regenerates or is repaired.
+			be.getCoreContainer().setItem(0, new ItemStack(ModItems.RESONANT_CORE));
 			helper.runAfterDelay(2, () -> {
-				helper.assertTrue(state.maxHealth == 525.0F, "tier 2 at diameter 16 should raise maxHealth to 525, got " + state.maxHealth);
-				float fracAfter = state.health / state.maxHealth;
+				helper.assertTrue(state.maxHealth == 300.0F, "tier 1 at diameter 16 should raise maxHealth to 300, got " + state.maxHealth);
+				helper.assertTrue(state.health == 150.0F, "tier-up keeps the absolute health (150), got " + state.health);
+				float expectedRadius = 8.0F * (0.5F / 0.6F);
 				helper.assertTrue(
-						Math.abs(fracAfter - fracBefore) < 0.02F,
-						"tier-up should preserve the health fraction: " + fracBefore + " -> " + fracAfter);
-				helper.assertTrue(
-						Math.abs(be.currentRadius() - radiusBefore) < 0.1F,
-						"tier-up must not shrink the live shield: radius " + radiusBefore + " -> " + be.currentRadius());
+						Math.abs(be.currentRadius() - expectedRadius) < 0.05F,
+						"the 50%-health shield should shrink to " + expectedRadius + ", got " + be.currentRadius());
 				helper.succeed();
 			});
 		});

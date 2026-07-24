@@ -13,12 +13,12 @@ import net.minecraft.world.level.storage.loot.providers.number.ConstantValue;
 import net.minecraft.world.level.storage.loot.providers.number.UniformGenerator;
 
 /**
- * Injects mod items into structure chest loot tables, one extra weighted pool per
- * chest (the existing table content is untouched):
+ * Injects mod items into structure chest loot tables via extra weighted pools —
+ * TWO per matching chest (the existing table content is untouched):
  * <ul>
  * <li>End City treasure + Ancient City: Resonant Core at 1-in-10 (weight 1 vs 9 empty).</li>
  * <li>End City treasure: Aegis Core at 1-in-20 (weight 1 vs 19 empty) — the tier-3
- * endgame core lives where elytra do (C8).</li>
+ * endgame core guards the End City's top-floor treasure room (C8).</li>
  * <li>Ancient City: Patch Kit x1-2 at 1-in-8 (weight 1 vs 7 empty) — field-repair
  * supplies in the deep dark (C8).</li>
  * </ul>

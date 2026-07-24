@@ -123,23 +123,31 @@ public final class MockPlayers {
 	 * parked at the structure center, swept at end of test -- exactly like
 	 * {@link #createUniqueMockPlayer}) and returns it together with its packet
 	 * capture channel. A SURVIVAL mock is the right pick when the test needs
-	 * vanilla-player semantics (aura targeting, damage) rather than a creative
-	 * ghost.
+	 * vanilla-player semantics (aura targeting, damage, item consumption) rather
+	 * than a creative ghost.
+	 *
+	 * <p>The mode is applied FOR REAL via {@link ServerPlayer#setGameMode}: the
+	 * gametest server's level default is CREATIVE, so the ServerPlayer
+	 * constructor seeds the internal ServerPlayerGameMode (and the abilities it
+	 * derives -- {@code instabuild}, {@code invulnerable}) with CREATIVE no
+	 * matter what a {@code gameMode()} getter override would claim. Without the
+	 * explicit mode change a "SURVIVAL" mock would still report
+	 * {@code hasInfiniteMaterials() == true} and silently skip
+	 * {@code ItemStack.consume}.
 	 */
 	public static CapturingMockPlayer createCapturingMockPlayer(GameTestHelper helper, GameType gameType) {
 		String uniqueName = "bsmock" + Integer.toHexString(NAME_COUNTER.getAndIncrement());
 		// The exact vanilla makeMockServerPlayerInLevel recipe, minus the shared name.
 		CommonListenerCookie cookie = CommonListenerCookie.createInitial(new GameProfile(UUID.randomUUID(), uniqueName), false);
 		ServerPlayer player = new ServerPlayer(
-				helper.getLevel().getServer(), helper.getLevel(), cookie.gameProfile(), cookie.clientInformation()) {
-			@Override
-			public GameType gameMode() {
-				return gameType;
-			}
-		};
+				helper.getLevel().getServer(), helper.getLevel(), cookie.gameProfile(), cookie.clientInformation());
 		Connection connection = new Connection(PacketFlow.SERVERBOUND);
 		EmbeddedChannel channel = new EmbeddedChannel(connection);
 		helper.getLevel().getServer().getPlayerList().placeNewPlayer(connection, player, cookie);
+		// After placeNewPlayer: setGameMode needs the game-connection to exist. A
+		// CREATIVE request is a no-op (server default); anything else swaps the
+		// internal ServerPlayerGameMode and re-derives the abilities.
+		player.setGameMode(gameType);
 
 		// placeNewPlayer spawns at the shared world spawn; park the mock inside its own
 		// test structure instead so concurrent tests' mocks never sit in each other's

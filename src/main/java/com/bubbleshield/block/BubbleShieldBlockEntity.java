@@ -88,6 +88,16 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	private int lastTier = -1;
 	private float lastTargetRadius = Float.NaN;
 	private int lastStrengthPercent = -1;
+	/**
+	 * Fix 1: false only between construction and the FIRST {@link #refreshMaxHealth}
+	 * recompute of a freshly placed projector, whose constructor-default health
+	 * (100) carries no meaning — that first recompute snaps health to the new full
+	 * max (the old fraction semantics would have done the same: 100/100 = 1.0).
+	 * Set true by NBT load (a loaded health is a real, meaningful value) and after
+	 * the first recompute; every later recompute keeps the ABSOLUTE health.
+	 * Transient by design: never persisted.
+	 */
+	private boolean healthInitialized;
 	/** Last observed redstone level; persisted so chunk reloads do not fake an edge. */
 	private boolean powered;
 	/**
@@ -122,7 +132,15 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 				case BubbleShieldMenu.DATA_DIAMETER -> Mth.clamp(Math.round(state.targetRadius * 2.0F), 0, Short.MAX_VALUE);
 				case BubbleShieldMenu.DATA_EFFECT_ID -> state.effectId;
 				case BubbleShieldMenu.DATA_ACTIVE -> state.active ? 1 : 0;
-				case BubbleShieldMenu.DATA_COOLDOWN_SECONDS -> (int) Math.min(Short.MAX_VALUE, BubbleShieldBlockEntity.this.cooldownTicksLeft() / ShieldLogic.TICKS_PER_FUEL_SECOND);
+				// Fix 8: CEILING division — the old floor displayed "0 s" (and an
+				// enabled-looking Activate button) for the last 1..19 remaining
+				// ticks while the server still refused the activation. Gated to 0
+				// while ACTIVE: a revive keeps cooldownUntil running in the
+				// background (fix 3a's window), which is not a user-facing
+				// "time until ready" while the shield is up.
+				case BubbleShieldMenu.DATA_COOLDOWN_SECONDS -> state.active
+						? 0
+						: (int) Math.min(Short.MAX_VALUE, Math.ceilDiv(BubbleShieldBlockEntity.this.cooldownTicksLeft(), ShieldLogic.TICKS_PER_FUEL_SECOND));
 				case BubbleShieldMenu.DATA_TIER -> BubbleShieldBlockEntity.this.tier();
 				case BubbleShieldMenu.DATA_SHAPE -> state.shape.ordinal();
 				case BubbleShieldMenu.DATA_MODE -> state.mode.ordinal();
@@ -136,6 +154,13 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 				case BubbleShieldMenu.DATA_STRENGTH_PERCENT -> BubbleShieldBlockEntity.this.strengthPercent();
 				// B6: the once-per-second threat census (0 while inactive).
 				case BubbleShieldMenu.DATA_THREAT_COUNT -> Mth.clamp(BubbleShieldBlockEntity.this.threatCount, 0, Short.MAX_VALUE);
+				// Fix 3a: 1 exactly when the server would accept an emergency
+				// revive from a sufficiently fueled owner — inactive, a running
+				// cooldown with at least MIN_REVIVE_COOLDOWN_TICKS remaining, and
+				// no revive spent in this window yet. The screen combines this
+				// with its own fuel/cost check (it can compute the tier-scaled
+				// cost from DATA_TIER) for the Revive button face.
+				case BubbleShieldMenu.DATA_REVIVE_AVAILABLE -> BubbleShieldBlockEntity.this.reviveAvailable() ? 1 : 0;
 				default -> 0;
 			};
 		}
@@ -163,15 +188,6 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	 * serverTick — at most one tick of added latency.
 	 */
 	private boolean syncDirty;
-
-	/**
-	 * D5: true while this projector holds a {@link ModTicketTypes#SHIELD_PROJECTOR}
-	 * chunk ticket (armed on activation, re-armed each active tick, released on
-	 * deactivate/break/removal). Transient runtime state, never persisted: the
-	 * ticket type is non-persistent and times out on its own if every release path
-	 * is missed (e.g. an unclean shutdown).
-	 */
-	private boolean chunkTicketArmed;
 
 	/**
 	 * D7b: per-tick memo for {@link #linkedShields}. {@code linkedCacheTime} is the
@@ -441,6 +457,17 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 				this.markUpdated();
 			}
 
+			// Fix 3a: the once-per-window revive flag clears when the underlying
+			// break-cooldown window fully expires (the clock keeps running in the
+			// background across a revive, so this fires whether the shield is
+			// active-after-revive or still waiting out the cooldown). A NEW break
+			// resets the flag directly in ShieldLogic.applyDamage.
+			if (this.shieldState.revivedThisCooldown
+					&& serverLevel.getGameTime() >= this.shieldState.cooldownUntil) {
+				this.shieldState.revivedThisCooldown = false;
+				this.setChanged();
+			}
+
 			// B6: refresh the comparator when the alarm window EXPIRES. The trigger
 			// side already refreshes through markUpdated; the expiry is pure clock
 			// passage that no mutation path would otherwise notice, leaving a stale
@@ -489,23 +516,24 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	private static final int CHUNK_TICKET_RADIUS = 1;
 
 	/**
-	 * D5: arms/releases the projector's chunk ticket to match the active flag. While
-	 * active, the ticket is re-added every tick — {@code TicketStorage.addTicket}
-	 * dedups on (type, level) and RESETS the remaining timeout, so the re-arm keeps
-	 * the ticket alive indefinitely while the {@link ModTicketTypes#SHIELD_PROJECTOR}
-	 * timeout still self-releases it if every explicit release path is missed. Kept
+	 * D5: (re-)arms the projector's chunk ticket while active. The ticket is
+	 * re-added every active tick — {@code TicketStorage.addTicket} dedups on
+	 * (type, level) and RESETS the remaining timeout, so the re-arm keeps the
+	 * ticket alive indefinitely while active. Fix 7: there is deliberately NO
+	 * explicit release anywhere (deactivate/break/removal included) — the ticket
+	 * identity is (type, chunk, level), so two projectors in one chunk SHARE one
+	 * ticket, and an explicit release by the one deactivating killed the other's
+	 * coverage. Expiry is left entirely to the
+	 * {@link ModTicketTypes#SHIELD_PROJECTOR} timeout (100 ticks): once nothing
+	 * re-arms it, the chunk stays loaded at most ~5 s longer. Kept
 	 * radius-1/block-ticking: that is exactly what keeps this block entity's own
-	 * ticker (and with it the whole shield enforcement, e.g. a diameter-200 bubble's
-	 * far edge) running when no player is near the projector chunk.
+	 * ticker (and with it the whole shield enforcement, e.g. a diameter-200
+	 * bubble's far edge) running when no player is near the projector chunk.
 	 */
 	private void updateChunkTicket(ServerLevel level) {
-		ChunkPos chunkPos = ChunkPos.containing(this.worldPosition);
 		if (this.shieldState.active) {
-			level.getChunkSource().addTicketWithRadius(ModTicketTypes.SHIELD_PROJECTOR, chunkPos, CHUNK_TICKET_RADIUS);
-			this.chunkTicketArmed = true;
-		} else if (this.chunkTicketArmed) {
-			this.chunkTicketArmed = false;
-			level.getChunkSource().removeTicketWithRadius(ModTicketTypes.SHIELD_PROJECTOR, chunkPos, CHUNK_TICKET_RADIUS);
+			level.getChunkSource().addTicketWithRadius(
+					ModTicketTypes.SHIELD_PROJECTOR, ChunkPos.containing(this.worldPosition), CHUNK_TICKET_RADIUS);
 		}
 	}
 
@@ -690,10 +718,21 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	 * bubble diameter and the {@code bubbleshield:strength} gamerule) whenever any of
 	 * those inputs changed — including the first tick after load, where the recompute
 	 * also overrides whatever (possibly tampered or legacy) {@code max_health} the NBT
-	 * carried. The health FRACTION is always preserved across the recompute (clamped
-	 * into [0, 1] against the previous max first, so a huge loaded {@code health} maps
-	 * to full, not beyond), keeping the radius fraction stable through core swaps,
-	 * resizes and strength changes.
+	 * carried.
+	 *
+	 * <p>Fix 1: the recompute keeps the ABSOLUTE current health, clamped into
+	 * [0, newMax] — it deliberately does NOT preserve the health fraction. The
+	 * fraction semantics were a free-healing exploit: drain a small/low-tier shield
+	 * to near zero (max 125 at D8/T0), top it up cheaply (one Patch Kit's +150
+	 * fills it), then resize/tier up to a huge max (4350 at D200/T3) — the ~1.0
+	 * fraction turned one kit into thousands of HP. With absolute semantics the
+	 * shield keeps exactly the HP it had; growing the max never grants HP, and
+	 * shrinking it only clamps down what no longer fits. The ONE exception is a
+	 * freshly placed projector's first recompute ({@link #healthInitialized}
+	 * false), which snaps health to the new full max: the constructor-default
+	 * 100 HP is not a real health value, and the old fraction path started fresh
+	 * shields at full too (100/100 = 1.0) — no exploit, since a pre-first-tick
+	 * shield can never have absorbed damage worth preserving.
 	 */
 	private void refreshMaxHealth() {
 		int tier = this.tier();
@@ -707,11 +746,13 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		this.lastTargetRadius = targetRadius;
 		this.lastStrengthPercent = strengthPercent;
 		float newMaxHealth = ShieldLogic.maxHealthFor(tier, targetRadius, strengthPercent);
-		float oldMaxHealth = this.shieldState.maxHealth;
-		if (newMaxHealth != oldMaxHealth) {
-			float fraction = oldMaxHealth > 0.0F ? Math.clamp(this.shieldState.health / oldMaxHealth, 0.0F, 1.0F) : 1.0F;
+		boolean firstCompute = !this.healthInitialized;
+		this.healthInitialized = true;
+		if (newMaxHealth != this.shieldState.maxHealth || firstCompute) {
 			this.shieldState.maxHealth = newMaxHealth;
-			this.shieldState.health = fraction * newMaxHealth;
+			this.shieldState.health = firstCompute
+					? newMaxHealth
+					: Math.clamp(this.shieldState.health, 0.0F, newMaxHealth);
 			this.markUpdated();
 		}
 	}
@@ -747,12 +788,20 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		return true;
 	}
 
+	/**
+	 * Fix 3d: every LIVE fuel addition (menu slot via {@link #consumeFuelSlot},
+	 * command/test top-ups) clamps the stored total to the same
+	 * {@link ShieldState#MAX_LOADED_FUEL_SECONDS} cap the NBT load enforces —
+	 * without this, repeated live top-ups could park an overflow-prone total the
+	 * load clamp would only fix after a reload.
+	 */
 	public void addFuelSeconds(int seconds) {
 		if (seconds <= 0) {
 			return;
 		}
 
-		this.shieldState.fuelSeconds += seconds;
+		this.shieldState.fuelSeconds = (int) Math.min(
+				(long) this.shieldState.fuelSeconds + seconds, ShieldState.MAX_LOADED_FUEL_SECONDS);
 		this.markUpdated();
 	}
 
@@ -809,15 +858,39 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	}
 
 	/**
+	 * Fix 3a, the server side of {@code DATA_REVIVE_AVAILABLE}: true exactly when
+	 * {@link #tryEmergencyRevive} would pass its non-fuel, non-ownership gates —
+	 * inactive, a running break cooldown with at least
+	 * {@link ShieldLogic#MIN_REVIVE_COOLDOWN_TICKS} remaining, and no revive spent
+	 * inside this cooldown window yet.
+	 */
+	public boolean reviveAvailable() {
+		ShieldState state = this.shieldState;
+		return !state.active
+				&& !state.revivedThisCooldown
+				&& this.cooldownTicksLeft() >= ShieldLogic.MIN_REVIVE_COOLDOWN_TICKS;
+	}
+
+	/**
 	 * A7 emergency revive: skips a RUNNING break cooldown for
-	 * {@link ShieldLogic#REVIVE_FUEL_COST} stored fuel-seconds, reactivating the
-	 * shield at {@link ShieldLogic#REVIVE_HEALTH_FRACTION} of its max health.
-	 * Only applies when a plain {@link #tryActivate} would fail SOLELY because of
-	 * the cooldown (fuel is present — and at least the revive cost) and the
-	 * initiator passes the same ownership rule as every other mutating request
+	 * {@link ShieldLogic#reviveFuelCost} stored fuel-seconds (fix 3b: tier-scaled,
+	 * 400 + 200 x tier), reactivating the shield at
+	 * {@link ShieldLogic#REVIVE_HEALTH_FRACTION} of its max health. Only applies
+	 * when a plain {@link #tryActivate} would fail SOLELY because of the cooldown
+	 * (fuel is present — and at least the revive cost) and the initiator passes
+	 * the same ownership rule as every other mutating request
 	 * ({@link ServerNet#isOwner}: an ownerless projector is claimed by the first
 	 * interacting player). Called from the SetActiveC2S handler after a failed
 	 * tryActivate; redstone edges never revive (no initiating player).
+	 *
+	 * <p>Fix 3a/3c hardening: at most ONE revive per cooldown window — the
+	 * cooldown clock keeps running in the background across the revive
+	 * ({@code cooldownUntil} is bypassed for the activation, not cleared) and
+	 * {@link ShieldState#revivedThisCooldown} stays set until that window expires
+	 * or a NEW break replaces it, so break-revive-break-revive inside one window
+	 * is impossible. A revive is also refused when fewer than
+	 * {@link ShieldLogic#MIN_REVIVE_COOLDOWN_TICKS} (200) ticks remain: paying
+	 * hundreds of fuel-seconds for under 10 s is a rounding trap, not a rescue.
 	 *
 	 * @return true if the shield was revived (it is active afterwards).
 	 */
@@ -830,8 +903,9 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		long gameTime = serverLevel.getGameTime();
 		// The ONLY canActivate failure the revive may bypass is the cooldown:
 		// an active shield has nothing to revive, an elapsed cooldown needs no
-		// revive, and the fuel gate is strictly TIGHTENED (>= 400, not > 0).
-		if (state.active || gameTime >= state.cooldownUntil || state.fuelSeconds < ShieldLogic.REVIVE_FUEL_COST) {
+		// revive, and the fuel gate is strictly TIGHTENED (>= cost, not > 0).
+		if (!this.reviveAvailable() || gameTime >= state.cooldownUntil
+				|| state.fuelSeconds < ShieldLogic.reviveFuelCost(this.tier())) {
 			return false;
 		}
 
@@ -839,18 +913,24 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 			return false;
 		}
 
-		// Clear the cooldown, then run the REAL activation path (game event, expel,
-		// chunk ticket, shield_activated criterion) before charging the fee: with
-		// exactly 400 fuel the fee would zero the tank and canActivate would refuse.
+		// Bypass the cooldown JUST for the real activation path (game event, expel,
+		// chunk ticket, shield_activated criterion), run BEFORE charging the fee
+		// (with exactly the fee stored, charging first would zero the tank and
+		// canActivate would refuse) — then RESTORE the window so it keeps running
+		// in the background, carrying the once-per-window flag until it expires.
+		long cooldownUntil = state.cooldownUntil;
 		state.cooldownUntil = gameTime;
-		// The cooldown is gone; the pending "shield ready again" ping is moot.
+		// The revive pre-empts the pending "shield ready again" ping.
 		state.readyAnnounced = true;
 		if (!this.tryActivate(initiator)) {
+			state.cooldownUntil = cooldownUntil;
 			this.markUpdated();
 			return false;
 		}
 
-		state.fuelSeconds -= ShieldLogic.REVIVE_FUEL_COST;
+		state.cooldownUntil = cooldownUntil;
+		state.revivedThisCooldown = true;
+		state.fuelSeconds -= ShieldLogic.reviveFuelCost(this.tier());
 		state.health = ShieldLogic.REVIVE_HEALTH_FRACTION * state.maxHealth;
 		serverLevel.playSound(null, this.worldPosition, SoundEvents.RESPAWN_ANCHOR_CHARGE, SoundSource.BLOCKS, 1.0F, 0.8F);
 		this.markUpdated();
@@ -867,12 +947,19 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	 * <li>ACTIVE shield: restore {@link ShieldLogic#PATCH_KIT_HEAL} HP, capped at
 	 * max health; the kit is only consumed when at least 1 HP was actually healed.</li>
 	 * <li>Broken (cooling-down) shield: cut the remaining cooldown by 20% of the
-	 * tier's FULL cooldown ({@link ShieldLogic#patchKitCooldownReduction}), never
-	 * below 1 remaining tick; the kit is only consumed when it reduced something.</li>
+	 * FULL cooldown this break started — fix 2: the break-time SNAPSHOT
+	 * ({@link ShieldLogic#patchKitCooldownReduction(ShieldState, int)}), so a core
+	 * swapped after the break cannot change the per-kit reduction — never below 1
+	 * remaining tick; the kit is only consumed when it reduced something.</li>
 	 * </ul>
 	 *
-	 * @return true if the kit took effect (one item was consumed from {@code stack});
-	 * false leaves the stack untouched and lets the interaction fall through.
+	 * <p>Fix 11: consumption goes through {@link ItemStack#consume}, the standard
+	 * player-aware pattern — creative-mode players ({@code hasInfiniteMaterials})
+	 * keep their kit while the effect, sound and particles still apply once.
+	 *
+	 * @return true if the kit took effect (one item was consumed from {@code stack},
+	 * creative aside); false leaves the stack untouched and lets the interaction
+	 * fall through.
 	 */
 	public boolean applyPatchKit(Player player, ItemStack stack) {
 		if (!(this.level instanceof ServerLevel serverLevel) || !stack.is(ModItems.PATCH_KIT)) {
@@ -902,7 +989,7 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 			state.health += healed;
 		} else if (gameTime < state.cooldownUntil) {
 			long remaining = state.cooldownUntil - gameTime;
-			long reduced = Math.max(1L, remaining - ShieldLogic.patchKitCooldownReduction(this.tier()));
+			long reduced = Math.max(1L, remaining - ShieldLogic.patchKitCooldownReduction(state, this.tier()));
 			if (reduced >= remaining) {
 				return false;
 			}
@@ -913,7 +1000,7 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 			return false;
 		}
 
-		stack.shrink(1);
+		stack.consume(1, player);
 		serverLevel.playSound(null, this.worldPosition, SoundEvents.AMETHYST_BLOCK_CHIME, SoundSource.BLOCKS, 1.0F, 1.2F);
 		Vec3 center = Vec3.atCenterOf(this.worldPosition);
 		serverLevel.sendParticles(ParticleTypes.HAPPY_VILLAGER, true, false,
@@ -935,26 +1022,42 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	}
 
 	/**
-	 * Applies RAW damage to the shield through the single damage pipeline
-	 * ({@link ShieldLogic#appliedDamage}: this shield's own tier DR, its own plating
-	 * DR when reinforced plating is socketed, and the B3 last-stand halving
-	 * evaluated against the health BEFORE the hit), breaking it (deactivate +
-	 * tier-scaled cooldown) when health is depleted. Linked-split shares also
-	 * arrive here raw: the split happens first, then each receiving shield
-	 * discounts its share by its own DR. A break routes through the ONE shared
-	 * break routine ({@link ShieldLogic#onShieldBreak}: break sound, criterion,
-	 * B5 nova) like the interception path. This direct path deliberately never
-	 * fires the B6 siege alarm — only real projectile interceptions and the
-	 * threat count's 0-to-positive edge do — so command/test/linked-share damage
-	 * keeps the comparator purely health-based.
+	 * Applies non-explosive RAW damage to the shield; see
+	 * {@link #applyShieldDamage(float, boolean)}.
 	 */
 	public void applyShieldDamage(float amount) {
+		this.applyShieldDamage(amount, false);
+	}
+
+	/**
+	 * Applies RAW damage to the shield through the single damage pipeline: fix 5 —
+	 * this shield's OWN blast ward first (only for {@code explosive} damage, see
+	 * {@link ShieldLogic#blastWardedDamage}), then {@link ShieldLogic#appliedDamage}
+	 * (this shield's own tier DR, its own plating DR when reinforced plating is
+	 * socketed, and the B3 last-stand halving evaluated against THIS shield's
+	 * health BEFORE the hit), breaking it (deactivate + tier-scaled cooldown) when
+	 * health is depleted. Linked-split shares also arrive here raw: the split
+	 * happens first, then each receiving shield discounts its share by its own
+	 * ward/DR/last-stand. Fix 5a: a NO-OP while the shield is INACTIVE — a partner
+	 * that broke earlier in the same tick's volley must not soak further shares
+	 * into its restored-for-next-activation health. A break routes through the ONE
+	 * shared break routine ({@link ShieldLogic#onShieldBreak}: break sound,
+	 * criterion, B5 nova) like the interception path. This direct path
+	 * deliberately never fires the B6 siege alarm — only real projectile
+	 * interceptions and the threat count's 0-to-positive edge do — so
+	 * command/test/linked-share damage keeps the comparator purely health-based.
+	 */
+	public void applyShieldDamage(float amount, boolean explosive) {
+		if (!this.shieldState.active) {
+			return;
+		}
+
 		long gameTime = this.level != null ? this.level.getGameTime() : 0L;
-		boolean wasActive = this.shieldState.active;
 		int tier = this.tier();
 		// B5: the nova targets the PRE-break radius; snapshot before the hit.
 		double preBreakRadius = ShieldLogic.currentRadius(this.shieldState);
-		float applied = ShieldLogic.appliedDamage(amount, tier, this.platingDr(), ShieldLogic.isLastStand(this.shieldState));
+		float warded = ShieldLogic.blastWardedDamage(amount, explosive && this.hasBlastWard());
+		float applied = ShieldLogic.appliedDamage(warded, tier, this.platingDr(), ShieldLogic.isLastStand(this.shieldState));
 		boolean broke = ShieldLogic.applyDamage(this.shieldState, applied, gameTime, ShieldLogic.breakCooldownTicks(tier));
 		if (broke && this.level instanceof ServerLevel serverLevel) {
 			ShieldLogic.onShieldBreak(serverLevel, this.worldPosition, this.shieldState, preBreakRadius);
@@ -962,12 +1065,7 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 			// sculk-audible: this path covers linked-partner damage applied from
 			// ANOTHER shield's tick, which this shield's own serverTick snapshot
 			// cannot see (the flag is already false by the time it ticks).
-			if (wasActive) {
-				serverLevel.gameEvent(GameEvent.BLOCK_DEACTIVATE, this.worldPosition, GameEvent.Context.of(this.getBlockState()));
-			}
-
-			// D5: a break deactivates; release the chunk ticket immediately.
-			this.updateChunkTicket(serverLevel);
+			serverLevel.gameEvent(GameEvent.BLOCK_DEACTIVATE, this.worldPosition, GameEvent.Context.of(this.getBlockState()));
 		}
 
 		// C7 "unbroken": this direct path (linked shares, commands, tests) feeds
@@ -1049,11 +1147,9 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 				this.bossEvent.removeAllPlayers();
 			}
 
-			// D5: release the chunk ticket immediately instead of on the next tick.
-			if (this.level instanceof ServerLevel serverLevel) {
-				this.updateChunkTicket(serverLevel);
-			}
-
+			// D5/fix 7: the chunk ticket is NOT released here — it simply stops
+			// being re-armed and times out (~100 ticks); an explicit release would
+			// also strip a co-located projector sharing the same ticket identity.
 			this.markUpdated();
 		}
 	}
@@ -1229,7 +1325,10 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 			),
 			Set.copyOf(state.whitelistUuids),
 			Set.copyOf(state.whitelistNames),
-			(int) (this.cooldownTicksLeft() / ShieldLogic.TICKS_PER_FUEL_SECOND),
+			// Fix 8-adjacent: same ceiling + active-gating as DATA_COOLDOWN_SECONDS,
+			// so the HUD "ready in" readout can never show 0 s while the server
+			// still refuses activation, nor a background revive window while active.
+			state.active ? 0 : (int) Math.ceilDiv(this.cooldownTicksLeft(), (long) ShieldLogic.TICKS_PER_FUEL_SECOND),
 			state.ownerUuid,
 			state.customName
 		);
@@ -1253,18 +1352,13 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 
 	@Override
 	public void setRemoved() {
-		if (this.level instanceof ServerLevel serverLevel) {
+		if (this.level instanceof ServerLevel) {
 			ServerNet.untrackShield(this);
 			ServerNet.broadcastRemove(this);
-
-			// D5: never leak the chunk ticket past this block entity's removal
-			// (block broken, chunk discarded, ...). The ticket type's timeout would
-			// eventually drop it anyway; this releases it deterministically.
-			if (this.chunkTicketArmed) {
-				this.chunkTicketArmed = false;
-				serverLevel.getChunkSource().removeTicketWithRadius(
-						ModTicketTypes.SHIELD_PROJECTOR, ChunkPos.containing(this.worldPosition), CHUNK_TICKET_RADIUS);
-			}
+			// D5/fix 7: the chunk ticket is NOT released here — removal stops the
+			// re-arm and the SHIELD_PROJECTOR timeout (100 ticks) drops the ticket
+			// on its own; an explicit release would also strip a co-located
+			// projector sharing the same (type, chunk, level) ticket identity.
 		}
 
 		if (this.bossEvent != null) {
@@ -1335,9 +1429,12 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		this.capacitorContainer.fromItemList(input.listOrEmpty("capacitor_items", ItemStack.CODEC));
 		this.augmentContainer.fromItemList(input.listOrEmpty("augment_items", ItemStack.CODEC));
 		// Force the max-health recompute on the next tick (covers cores/diameters/
-		// strength edited while unloaded AND maps a legacy save's health fraction
-		// onto the current max-health model).
+		// strength edited while unloaded AND re-clamps a legacy save's health onto
+		// the current max-health model). Fix 1: a loaded health is a REAL value —
+		// the recompute must keep it absolutely (clamped), never snap it to full
+		// like a fresh placement's first compute would.
 		this.lastTier = -1;
+		this.healthInitialized = true;
 		// Cap the remaining cooldown on the first tick (needs the level clock).
 		this.capLoadedCooldown = true;
 	}

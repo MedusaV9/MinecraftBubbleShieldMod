@@ -22,12 +22,15 @@ public final class ModTicketTypes {
 	 * <p>Chosen approach: {@code FLAG_LOADING | FLAG_SIMULATION} (the same shape as
 	 * the vanilla portal/ender-pearl tickets, minus persistence) with a finite
 	 * timeout, RE-ARMED every active server tick — {@code TicketStorage.addTicket}
-	 * dedups on (type, level) and resets the countdown, so re-arming is cheap. The
-	 * projector releases the ticket explicitly on deactivate/break/removal; the
-	 * timeout is only the safety net that guarantees no ticket can outlive a missed
-	 * release path by more than a few seconds. Deliberately NOT persistent: after a
-	 * reload the first ticked activation re-arms it, and no stale saved ticket can
-	 * pin chunks of a projector that is gone.
+	 * dedups on (type, level) and resets the countdown, so re-arming is cheap.
+	 * Fix 7: the projector deliberately NEVER releases the ticket explicitly (not
+	 * on deactivate, break or removal) — the ticket identity is (type, chunk,
+	 * level), so two projectors in one chunk SHARE one ticket and an explicit
+	 * release from the one going down would strip the other's coverage. Expiry is
+	 * timeout-only: once nothing re-arms it, the chunk stays loaded at most ~5 s
+	 * longer. Deliberately NOT persistent: after a reload the first ticked
+	 * activation re-arms it, and no stale saved ticket can pin chunks of a
+	 * projector that is gone.
 	 */
 	public static final TicketType SHIELD_PROJECTOR = Registry.register(
 		BuiltInRegistries.TICKET_TYPE,

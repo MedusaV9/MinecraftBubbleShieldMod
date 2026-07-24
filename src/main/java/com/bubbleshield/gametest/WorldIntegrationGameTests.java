@@ -360,11 +360,15 @@ public class WorldIntegrationGameTests {
 	}
 
 	/**
-	 * (d) D5: an ACTIVE projector holds a {@code bubbleshield:shield_projector}
+	 * (d) D5/fix 7: an ACTIVE projector holds a {@code bubbleshield:shield_projector}
 	 * chunk ticket on its own chunk (so a far-flung shield edge stays enforced when
-	 * no player keeps the chunk ticking), re-armed while active, re-registered on
-	 * re-activation, and released immediately on deactivation and on block removal.
-	 * Asserted directly against the level's TicketStorage (the same store
+	 * no player keeps the chunk ticking), re-armed every active tick. There is
+	 * deliberately NO explicit release anywhere — the ticket identity is
+	 * (type, chunk, level), so two projectors in one chunk SHARE one ticket and an
+	 * explicit release by the one deactivating would strip the other's coverage.
+	 * The ticket therefore SURVIVES deactivation and block removal, expiring only
+	 * through the SHIELD_PROJECTOR type's 100-tick timeout once nothing re-arms
+	 * it. Asserted directly against the level's TicketStorage (the same store
 	 * {@code ServerChunkCache.addTicketWithRadius} writes to): the gametest
 	 * framework force-loads the structure's chunks with its own tickets, so
 	 * "chunk is ticking" alone would prove nothing here — ticket presence is the
@@ -381,19 +385,27 @@ public class WorldIntegrationGameTests {
 		helper.assertTrue(hasProjectorTicket(helper, absPos), "activation should register the projector chunk ticket");
 
 		helper.startSequence()
-				// A few ticks of runtime: the per-tick re-arm must keep it present.
+				// A few ticks of runtime: the per-tick re-arm must keep it present
+				// (every re-add resets the 100-tick countdown).
 				.thenExecuteAfter(10, () -> {
 					helper.assertTrue(hasProjectorTicket(helper, absPos), "the ticket should stay armed while active");
 					be.setActive(false);
-					helper.assertTrue(!hasProjectorTicket(helper, absPos), "deactivation should release the ticket immediately");
+					helper.assertTrue(hasProjectorTicket(helper, absPos),
+							"deactivation must NOT release the ticket (fix 7: a co-located projector may share it)");
+				})
+				// Well past the 100-tick timeout since the last active-tick re-arm:
+				// the orphaned ticket must have expired on its own.
+				.thenExecuteAfter(120, () -> {
+					helper.assertTrue(!hasProjectorTicket(helper, absPos),
+							"the un-re-armed ticket should expire via the SHIELD_PROJECTOR 100-tick timeout");
 					helper.assertTrue(be.tryActivate(), "the shield should re-activate");
 					helper.assertTrue(hasProjectorTicket(helper, absPos), "re-activation should re-register the ticket");
-					// Break the projector: setRemoved must release the ticket too.
+					// Break the projector: removal must not strip the ticket either.
 					helper.setBlock(PROJECTOR_POS, Blocks.AIR);
 				})
 				.thenExecuteAfter(2, () -> helper.assertTrue(
-						!hasProjectorTicket(helper, absPos),
-						"removing the projector block must release the ticket"))
+						hasProjectorTicket(helper, absPos),
+						"block removal must not release the shared ticket; it expires by timeout like any orphan"))
 				.thenSucceed();
 	}
 

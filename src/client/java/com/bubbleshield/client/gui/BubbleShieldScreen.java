@@ -124,21 +124,29 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 
 	private void toggleActive() {
 		// During a break cooldown the "activate" request doubles as the A7 emergency
-		// revive: the server accepts it when the sender owns the shield and at least
-		// REVIVE_FUEL_COST fuel-seconds are stored (and simply ignores it otherwise),
-		// so the same payload serves both button faces.
+		// revive: the server accepts it when the sender owns the shield, the revive
+		// window is open (fix 3a) and at least the tier-scaled reviveFuelCost is
+		// stored (and simply ignores it otherwise), so the same payload serves both
+		// button faces.
 		ClientPlayNetworking.send(new ShieldPayloads.SetActiveC2S(this.menu.pos(), !this.menu.isActive()));
 	}
 
+	/** Fix 3b: the tier-scaled revive fee, computed from the synced tier slot. */
+	private int reviveCost() {
+		return ShieldLogic.reviveFuelCost(this.menu.tier());
+	}
+
 	/**
-	 * A7: true while the projector is in break cooldown AND holds at least the
-	 * revive fee — exactly when the server-side SetActiveC2S handler would accept
-	 * an emergency revive, so the Activate button flips to its "Revive" face.
+	 * A7: true while the server-side revive gates pass (the synced
+	 * DATA_REVIVE_AVAILABLE slot: inactive, a running cooldown with &ge; 200 ticks
+	 * remaining, no revive spent in this window — fix 3a) AND at least the
+	 * tier-scaled fee is stored — exactly when the SetActiveC2S handler would
+	 * accept an emergency revive, so the Activate button flips to its "Revive" face.
 	 */
 	private boolean reviveAffordable() {
 		return !this.menu.isActive()
-				&& this.menu.cooldownSeconds() > 0
-				&& this.menu.fuelSeconds() >= ShieldLogic.REVIVE_FUEL_COST;
+				&& this.menu.reviveAvailable()
+				&& this.menu.fuelSeconds() >= this.reviveCost();
 	}
 
 	private Component activateLabel() {
@@ -146,7 +154,10 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 			return Component.translatable("gui.bubbleshield.deactivate");
 		}
 
-		return Component.translatable(this.reviveAffordable() ? "gui.bubbleshield.revive" : "gui.bubbleshield.activate");
+		// Fix 3b: the revive face carries the real, tier-scaled fee.
+		return this.reviveAffordable()
+				? Component.translatable("gui.bubbleshield.revive", this.reviveCost())
+				: Component.translatable("gui.bubbleshield.activate");
 	}
 
 	/**
@@ -178,7 +189,7 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 		}
 
 		if (this.reviveAffordable()) {
-			return Tooltip.create(Component.translatable("gui.bubbleshield.revive.tooltip"));
+			return Tooltip.create(Component.translatable("gui.bubbleshield.revive.tooltip", this.reviveCost()));
 		}
 
 		if (this.menu.cooldownSeconds() > 0) {

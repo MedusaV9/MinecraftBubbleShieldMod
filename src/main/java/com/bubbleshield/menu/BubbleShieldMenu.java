@@ -49,7 +49,7 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 	public static final int DATA_BEAM = 11;
 	/** Max health in whole HP, capped at 32767. */
 	public static final int DATA_MAX_HEALTH = 12;
-	/** Current regeneration rate in HP per minute x10 (0 when tier 0, ECO or inactive). */
+	/** Current regeneration rate in HP per minute x10 (0 when inactive, in ECO, or for a combat-gated tier 0). */
 	public static final int DATA_REGEN_PER_MIN_X10 = 13;
 	/** Current passive fuel drain in fuel-seconds per minute x10 (0 when inactive). */
 	public static final int DATA_DRAIN_PER_MIN_X10 = 14;
@@ -59,10 +59,20 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 	public static final int DATA_STRENGTH_PERCENT = 16;
 	/**
 	 * Threats currently engaging the shield (B6): non-whitelisted players plus
-	 * hostile monsters within radius + 8, censused once per second while active.
+	 * hostile mobs within radius + 8, censused once per second while active.
 	 */
 	public static final int DATA_THREAT_COUNT = 17;
-	public static final int DATA_COUNT = 18;
+	/**
+	 * Fix 3a (APPENDED slot — never renumber): 1 exactly when the server would
+	 * accept an emergency revive from a sufficiently fueled owner — inactive, a
+	 * running break cooldown with at least
+	 * {@link com.bubbleshield.shield.ShieldLogic#MIN_REVIVE_COOLDOWN_TICKS}
+	 * remaining, and no revive spent in the current cooldown window yet. The
+	 * screen combines this with its own fuel-vs-cost check (the tier-scaled cost
+	 * is computable from {@link #DATA_TIER}).
+	 */
+	public static final int DATA_REVIVE_AVAILABLE = 18;
+	public static final int DATA_COUNT = 19;
 
 	public static final int FUEL_SLOT = 0;
 	public static final int CORE_SLOT = 1;
@@ -205,6 +215,11 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 	/** @return the synced threat count (see {@link #DATA_THREAT_COUNT}). */
 	public int threatCount() {
 		return this.data.get(DATA_THREAT_COUNT);
+	}
+
+	/** @return the synced revive-availability flag (see {@link #DATA_REVIVE_AVAILABLE}). */
+	public boolean reviveAvailable() {
+		return this.data.get(DATA_REVIVE_AVAILABLE) != 0;
 	}
 
 	public int diameter() {

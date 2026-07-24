@@ -100,12 +100,15 @@ public class StrengthGameTests {
 	}
 
 	/**
-	 * (b) Max health is size-scaled and recomputes when the diameter changes,
-	 * always preserving the health FRACTION: a 50%-damaged diameter-32 shield
-	 * resized to diameter 8 lands at 50% of the new max.
+	 * (b) Fix 1: max health is size-scaled and recomputes when the diameter
+	 * changes, keeping the ABSOLUTE health clamped into [0, newMax] — a
+	 * 100-HP diameter-32 shield resized to diameter 8 keeps its 100 HP (not the
+	 * old 50% fraction), growing back grants nothing, and a downsize clamps
+	 * health that no longer fits. The fraction semantics were the resize-exploit:
+	 * cheaply refill a tiny max, then resize the ~1.0 fraction into a huge one.
 	 */
 	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 100, padding = 16)
-	public void resizePreservesHealthFraction(GameTestHelper helper) {
+	public void resizeClampsAbsoluteHealth(GameTestHelper helper) {
 		BubbleShieldBlockEntity be = placeProjector(helper, 16.0F);
 		ShieldState state = be.getShieldState();
 		be.addFuelSeconds(PLENTY_OF_FUEL);
@@ -113,19 +116,35 @@ public class StrengthGameTests {
 
 		helper.runAfterDelay(2, () -> {
 			helper.assertTrue(state.maxHealth == 200.0F, "tier 0 at diameter 32 should have maxHealth 200, got " + state.maxHealth);
-			// 100 raw at tier 0 (no DR) leaves exactly 50%; the hit also opens the
-			// combat gate, so tier 0 cannot regenerate between the two checks.
+			// 100 raw at tier 0 (no DR) leaves exactly 100 HP; the hit also opens
+			// the combat gate, so tier 0 cannot regenerate between the checks.
 			be.applyShieldDamage(100.0F);
 			helper.assertTrue(state.health == 100.0F, "damaged health should be 100, got " + state.health);
 
 			state.targetRadius = 4.0F;
 			helper.runAfterDelay(2, () -> {
 				helper.assertTrue(state.maxHealth == 125.0F, "resizing to diameter 8 should recompute maxHealth to 125, got " + state.maxHealth);
-				helper.assertTrue(state.health == 62.5F, "the 50% health fraction must survive the resize (62.5), got " + state.health);
+				helper.assertTrue(state.health == 100.0F,
+						"the ABSOLUTE health must survive the resize (100, not the old 62.5 fraction), got " + state.health);
 				helper.assertTrue(
 						be.getMenuData().get(BubbleShieldMenu.DATA_MAX_HEALTH) == 125,
 						"the DATA_MAX_HEALTH menu slot should mirror the recompute");
-				helper.succeed();
+
+				// Growing back up grants nothing: still 100 HP of 200.
+				state.targetRadius = 16.0F;
+				helper.runAfterDelay(2, () -> {
+					helper.assertTrue(state.maxHealth == 200.0F && state.health == 100.0F,
+							"growing back must not scale health up: got " + state.health + "/" + state.maxHealth);
+
+					// A downsize CLAMPS health that no longer fits into the new max.
+					state.health = 200.0F;
+					state.targetRadius = 4.0F;
+					helper.runAfterDelay(2, () -> {
+						helper.assertTrue(state.maxHealth == 125.0F && state.health == 125.0F,
+								"a downsize should clamp 200 HP into the new max 125, got " + state.health);
+						helper.succeed();
+					});
+				});
 			});
 		});
 	}
@@ -364,9 +383,13 @@ public class StrengthGameTests {
 
 	/**
 	 * (h) Drain units scale with the diameter — {@code max(1, round(diameter/50))}
-	 * pure at the thresholds, plus a live diameter-160 bubble burning exactly 3
-	 * fuel-seconds per 20-tick drain event (and the GUI drain slot reporting it).
-	 * Runs alone in {@link #DRAIN_ENVIRONMENT} and deactivates before success.
+	 * pure at the thresholds, plus a live diameter-160 bubble keeping the
+	 * 3-fuel-seconds-per-20-ticks steady rate (and the GUI drain slot reporting
+	 * it). Fix 4: the micro-debt drain SMOOTHS multi-unit rates into single
+	 * fuel-second payments (150000 micros/tick pays at ticks 7/14/20/27/...
+	 * instead of a 3-unit burst every 20), so the test pins one payment at the
+	 * first drop and the exact 3-per-20 total over the following window. Runs
+	 * alone in {@link #DRAIN_ENVIRONMENT} and deactivates before success.
 	 */
 	@GameTest(environment = DRAIN_ENVIRONMENT, maxTicks = 200, padding = 16)
 	public void drainUnitsScaleWithDiameter(GameTestHelper helper) {
@@ -385,19 +408,36 @@ public class StrengthGameTests {
 		helper.assertTrue(be.tryActivate(), "the diameter-160 shield should activate");
 
 		int fuelStart = state.fuelSeconds;
+		long[] deadline = {-1L};
+		int[] baseline = new int[1];
 		helper.onEachTick(() -> {
-			if (state.fuelSeconds == fuelStart) {
-				return; // waiting for the first 20-tick drain event
+			long now = helper.getLevel().getGameTime();
+			if (deadline[0] < 0L) {
+				if (state.fuelSeconds == fuelStart) {
+					return; // waiting for the first micro-debt payment (~tick 7)
+				}
+
+				// Fix 4 smoothing: single fuel-seconds, never a 3-unit burst.
+				helper.assertTrue(
+						fuelStart - state.fuelSeconds == 1,
+						"a smoothed micro-debt payment should burn exactly 1 fuel-second, burned " + (fuelStart - state.fuelSeconds));
+				baseline[0] = state.fuelSeconds;
+				deadline[0] = now + 20L;
+				return;
+			}
+
+			if (now < deadline[0]) {
+				return;
 			}
 
 			// The GUI baseline while active: 3 units per 20 ticks = 9/min -> x10 = 1800.
 			int drainSlot = be.getMenuData().get(BubbleShieldMenu.DATA_DRAIN_PER_MIN_X10);
-			int burned = fuelStart - state.fuelSeconds;
+			int burned = baseline[0] - state.fuelSeconds;
 			// Deactivate FIRST: a diameter-160 bubble must never outlive its test.
 			be.setActive(false);
 			helper.assertTrue(
 					burned == 3,
-					"a diameter-160 drain event should burn exactly 3 fuel-seconds, burned " + burned);
+					"a diameter-160 bubble must keep the exact 3-fuel-seconds-per-20-ticks steady rate, burned " + burned);
 			helper.assertTrue(
 					drainSlot == 1800,
 					"DATA_DRAIN_PER_MIN_X10 should report 3 units per 20 ticks as 1800, got " + drainSlot);
@@ -424,7 +464,8 @@ public class StrengthGameTests {
 			helper.assertTrue(
 					state.maxHealth == 400.0F,
 					"at strength 200% a tier-0 diameter-32 shield should have maxHealth 400, got " + state.maxHealth);
-			helper.assertTrue(state.health == 400.0F, "the full-health fraction should scale along, got " + state.health);
+			helper.assertTrue(state.health == 400.0F,
+					"a fresh placement's first recompute snaps health to the new full max, got " + state.health);
 			helper.assertTrue(
 					be.getMenuData().get(BubbleShieldMenu.DATA_STRENGTH_PERCENT) == 200,
 					"DATA_STRENGTH_PERCENT should mirror the gamerule");
@@ -487,13 +528,14 @@ public class StrengthGameTests {
 	}
 
 	/**
-	 * (k) Migration: a legacy save from the flat {@code 100 * (1 + tier)} model
-	 * loads verbatim, then the first tick recomputes the canonical max health and
-	 * maps the OLD health fraction onto it (50/100 -> 100/200), never the absolute
-	 * value.
+	 * (k) Migration, fix 1: a legacy save from the flat {@code 100 * (1 + tier)}
+	 * model loads verbatim, then the first tick recomputes the canonical max
+	 * health and keeps the ABSOLUTE loaded health clamped into it (50 of 100
+	 * stays 50 of 200) — never the old fraction mapping, which was the free-heal
+	 * exploit's migration leg.
 	 */
 	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 100, padding = 16)
-	public void legacySaveMigratesByFraction(GameTestHelper helper) {
+	public void legacySaveMigratesByAbsoluteClamp(GameTestHelper helper) {
 		helper.setBlock(PROJECTOR_POS, ModBlocks.BUBBLE_SHIELD_PROJECTOR);
 		BubbleShieldBlockEntity be = helper.getBlockEntity(PROJECTOR_POS, BubbleShieldBlockEntity.class);
 		ShieldState state = be.getShieldState();
@@ -512,8 +554,8 @@ public class StrengthGameTests {
 					state.maxHealth == 200.0F,
 					"the first tick must recompute the legacy max_health to the tier-0 diameter-32 value 200, got " + state.maxHealth);
 			helper.assertTrue(
-					state.health == 100.0F,
-					"the legacy 50% fraction must map onto the new max (100/200), got " + state.health);
+					state.health == 50.0F,
+					"the legacy ABSOLUTE health must survive the recompute (50, not the old 100 fraction mapping), got " + state.health);
 			helper.succeed();
 		});
 	}

@@ -265,7 +265,8 @@ public class LinkingGameTests {
 				// Let BOTH first-tick max-health refreshes land before firing: the
 				// volley crosses on its very first move tick, and a split share
 				// applied to B before ITS refresh would be taken against the stale
-				// default max and then rescaled by the fraction-preserving refresh.
+				// default max and then ERASED by the fresh placement's snap-to-full
+				// first recompute (fix 1).
 				.thenExecuteAfter(2, () -> {
 					helper.assertTrue(stateA.maxHealth == expectedA + halfVolley,
 							"shield A should refresh to maxHealth 175, got " + stateA.maxHealth);
@@ -297,6 +298,106 @@ public class LinkingGameTests {
 					helper.assertTrue(
 							stateA.maxHealth - stateA.health == stateB.maxHealth - stateB.health,
 							"the volley split must stay exactly even, A=" + stateA.health + " B=" + stateB.health);
+				})
+				.thenSucceed();
+	}
+
+	/**
+	 * (fix 5) Per-receiver pipeline on the linked split: the RAW damage is split
+	 * evenly FIRST, then each receiving shield applies ITS OWN DR — here shield B
+	 * carries reinforced plating while A has none, so one arrow into A costs A the
+	 * full raw half (1.5) and B only its plated share (1.5 x 0.7 = 1.05). Under
+	 * the old interceptor-side pipeline both shares would have carried the SAME
+	 * discount (the interceptor's), never each receiver's own.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, structure = ARENA_STRUCTURE, maxTicks = 200, padding = 16)
+	public void linkedSplitAppliesPerReceiverPlating(GameTestHelper helper) {
+		UUID owner = UUID.randomUUID();
+		BubbleShieldBlockEntity shieldA = placeProjector(helper, SHIELD_A_POS, owner);
+		BubbleShieldBlockEntity shieldB = placeProjector(helper, SHIELD_B_NEAR_POS, owner);
+		shieldB.getAugmentContainer().setItem(0, new ItemStack(ModItems.REINFORCED_PLATING));
+		helper.assertTrue(shieldA.tryActivate(), "shield A should activate");
+		helper.assertTrue(shieldB.tryActivate(), "shield B should activate");
+
+		shootArrowIntoShieldA(helper);
+
+		ShieldState stateA = shieldA.getShieldState();
+		ShieldState stateB = shieldB.getShieldState();
+		float rawShare = ShieldLogic.PROJECTILE_DAMAGE / 2.0F;
+		// A: tier 0, no plating -> full raw share. B: its own plating DR on ITS share.
+		float expectedA = T0_MAX_HEALTH - rawShare;
+		float expectedB = T0_MAX_HEALTH - ShieldLogic.appliedDamage(rawShare, 0, ShieldLogic.PLATING_DR, false);
+		helper.startSequence()
+				.thenWaitUntil(() -> helper.assertTrue(stateA.health < stateA.maxHealth, "shield A should take damage from the intercepted arrow"))
+				.thenExecuteAfter(10, () -> {
+					helper.assertTrue(
+							Math.abs(stateA.health - expectedA) <= TOLERANCE,
+							"the unplated hit shield should lose the full raw 1.5 share, health is " + stateA.health);
+					helper.assertTrue(
+							Math.abs(stateB.health - expectedB) <= TOLERANCE,
+							"the plated partner should lose only 1.5 x 0.7 = 1.05, health is " + stateB.health);
+				})
+				.thenSucceed();
+	}
+
+	/**
+	 * (fix 5a/5b) A partner breaking MID-VOLLEY stops receiving shares AND shrinks
+	 * the split denominator for the rest of the same-tick volley: B starts at 4 HP
+	 * (last stand, so each 1.5 raw share applies as 0.75) and breaks on the 6th
+	 * arrow of a 10-arrow volley; arrows 7-10 then hit A alone at the FULL raw 3
+	 * (receiver set re-filtered to ACTIVE shields per projectile). A ends at
+	 * 175 - 6x1.5 - 4x3 = 154; B is restored to full (150), inactive and cooling
+	 * down. Same one-loop volley geometry as {@link #linkedVolleySplitsEvenly}.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, structure = ARENA_STRUCTURE, maxTicks = 200, padding = 16)
+	public void linkedPartnerBreakMidVolleyStopsSplit(GameTestHelper helper) {
+		UUID owner = UUID.randomUUID();
+		BubbleShieldBlockEntity shieldA = placeProjector(helper, SHIELD_A_POS, owner);
+		BubbleShieldBlockEntity shieldB = placeProjector(helper, SHIELD_B_NEAR_POS, owner);
+		// Same widened-A geometry as linkedVolleySplitsEvenly: the whole volley
+		// must intercept within ONE loop of A's tick.
+		shieldA.getShieldState().targetRadius = 12.0F;
+		helper.assertTrue(shieldA.tryActivate(), "shield A should activate");
+		helper.assertTrue(shieldB.tryActivate(), "shield B should activate");
+
+		ShieldState stateA = shieldA.getShieldState();
+		ShieldState stateB = shieldB.getShieldState();
+		float maxA = ShieldLogic.maxHealthFor(0, 12.0F, 100);
+		int volley = 10;
+		// B: 4 HP in last stand soaks 0.75 per share -> breaks on share 6
+		// (4 - 5 x 0.75 = 0.25, then 0.25 - 0.75 < 0). A: 6 split shares (1.5)
+		// while B lived, then 4 full-raw arrows (3) alone.
+		float expectedA = maxA - 6 * (ShieldLogic.PROJECTILE_DAMAGE / 2.0F) - 4 * ShieldLogic.PROJECTILE_DAMAGE;
+		helper.startSequence()
+				// Let both first-tick refreshes land before lowering B's health
+				// (the fresh placement's first recompute snaps to full, fix 1).
+				.thenExecuteAfter(2, () -> {
+					helper.assertTrue(stateA.maxHealth == maxA,
+							"shield A should refresh to maxHealth 175, got " + stateA.maxHealth);
+					helper.assertTrue(stateB.maxHealth == T0_MAX_HEALTH,
+							"shield B should refresh to maxHealth 150, got " + stateB.maxHealth);
+					// Deep in last stand, but still linked: B's current radius floors
+					// at MIN_RADIUS 4 and 12 + 4 > 10.
+					stateB.health = 4.0F;
+
+					for (int i = 0; i < volley; i++) {
+						Arrow arrow = helper.spawn(EntityTypes.ARROW, new Vec3(4.05 + 0.1 * i, 14.8, 4.5));
+						arrow.setDeltaMovement(0.0, -6.0, 0.0);
+					}
+				})
+				.thenWaitUntil(() -> helper.assertTrue(
+						!stateB.active,
+						"shield B should break partway through the volley"))
+				.thenExecuteAfter(10, () -> {
+					helper.assertTrue(
+							Math.abs(stateA.health - expectedA) <= TOLERANCE,
+							"A should take 6 split shares then 4 full arrows (154), health is " + stateA.health);
+					helper.assertTrue(
+							stateB.health == stateB.maxHealth,
+							"the broken B should be restored to full for its next activation, health is " + stateB.health);
+					helper.assertTrue(
+							stateB.cooldownUntil > helper.getLevel().getGameTime(),
+							"the broken B should be cooling down");
 				})
 				.thenSucceed();
 	}
