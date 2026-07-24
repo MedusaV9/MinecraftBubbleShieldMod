@@ -255,8 +255,8 @@ public class CapacitorGameTests {
 			helper.assertTrue(player.containerMenu instanceof BubbleShieldMenu, "using the projector should open a BubbleShieldMenu");
 			BubbleShieldMenu menu = (BubbleShieldMenu) player.containerMenu;
 
-			// Hotbar slots 0..2 map to menu slots 30..32 (3 projector slots + 27 inventory).
-			int hotbarStart = 3 + 27;
+			// Hotbar slots 0..2 map to menu slots 31..33 (4 projector slots + 27 inventory).
+			int hotbarStart = 4 + 27;
 			player.getInventory().setItem(0, new ItemStack(ModItems.FLUX_CAPACITOR));
 			player.getInventory().setItem(1, new ItemStack(ModItems.RESONANT_CORE));
 			player.getInventory().setItem(2, new ItemStack(Items.COAL));

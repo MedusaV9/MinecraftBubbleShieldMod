@@ -20,7 +20,8 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Furnace-like menu for the bubble shield projector: one fuel slot, one upgrade-core
- * slot, the player inventory, and a {@link ContainerData} snapshot of the shield.
+ * slot, one flux-capacitor slot, one augment (defense module) slot, the player
+ * inventory, and a {@link ContainerData} snapshot of the shield.
  *
  * <p>All time values are synced in SECONDS (not ticks) because container data
  * slots are replicated as 16-bit signed values.
@@ -63,14 +64,16 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 	public static final int FUEL_SLOT = 0;
 	public static final int CORE_SLOT = 1;
 	public static final int CAPACITOR_SLOT = 2;
-	private static final int INV_SLOT_START = 3;
-	private static final int INV_SLOT_END = 30;
-	private static final int HOTBAR_SLOT_START = 30;
-	private static final int HOTBAR_SLOT_END = 39;
+	public static final int AUGMENT_SLOT = 3;
+	private static final int INV_SLOT_START = 4;
+	private static final int INV_SLOT_END = 31;
+	private static final int HOTBAR_SLOT_START = 31;
+	private static final int HOTBAR_SLOT_END = 40;
 
 	private final Container fuelContainer;
 	private final Container coreContainer;
 	private final Container capacitorContainer;
+	private final Container augmentContainer;
 	private final ContainerData data;
 	private final BlockPos pos;
 	/** The projector this menu is attached to; null on the client. */
@@ -78,12 +81,12 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 
 	/** Client-side constructor, invoked by the ExtendedMenuType with the synced BlockPos. */
 	public BubbleShieldMenu(int containerId, Inventory inventory, BlockPos pos) {
-		this(containerId, inventory, pos, new SimpleContainer(1), new SimpleContainer(1), new SimpleContainer(1), new SimpleContainerData(DATA_COUNT), null);
+		this(containerId, inventory, pos, new SimpleContainer(1), new SimpleContainer(1), new SimpleContainer(1), new SimpleContainer(1), new SimpleContainerData(DATA_COUNT), null);
 	}
 
 	/** Server-side constructor. */
 	public BubbleShieldMenu(int containerId, Inventory inventory, BubbleShieldBlockEntity blockEntity) {
-		this(containerId, inventory, blockEntity.getBlockPos(), blockEntity.getFuelContainer(), blockEntity.getCoreContainer(), blockEntity.getCapacitorContainer(), blockEntity.getMenuData(), blockEntity);
+		this(containerId, inventory, blockEntity.getBlockPos(), blockEntity.getFuelContainer(), blockEntity.getCoreContainer(), blockEntity.getCapacitorContainer(), blockEntity.getAugmentContainer(), blockEntity.getMenuData(), blockEntity);
 	}
 
 	private BubbleShieldMenu(
@@ -93,6 +96,7 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 		Container fuelContainer,
 		Container coreContainer,
 		Container capacitorContainer,
+		Container augmentContainer,
 		ContainerData data,
 		@Nullable BubbleShieldBlockEntity blockEntity
 	) {
@@ -100,10 +104,12 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 		checkContainerSize(fuelContainer, 1);
 		checkContainerSize(coreContainer, 1);
 		checkContainerSize(capacitorContainer, 1);
+		checkContainerSize(augmentContainer, 1);
 		checkContainerDataCount(data, DATA_COUNT);
 		this.fuelContainer = fuelContainer;
 		this.coreContainer = coreContainer;
 		this.capacitorContainer = capacitorContainer;
+		this.augmentContainer = augmentContainer;
 		this.data = data;
 		this.pos = pos;
 		this.blockEntity = blockEntity;
@@ -126,6 +132,16 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 				return stack.is(ModItems.FLUX_CAPACITOR);
 			}
 		});
+		// The augment slot sits in the left column under the fuel label (its frame is
+		// drawn programmatically by the screen; the Name button moved to the right
+		// column to free this spot). Single slot: exactly ONE defense module fits,
+		// making plating vs blast ward a strategic either/or choice.
+		this.addSlot(new Slot(augmentContainer, 0, 9, 30) {
+			@Override
+			public boolean mayPlace(ItemStack stack) {
+				return isAugment(stack);
+			}
+		});
 		this.addStandardInventorySlots(inventory, 8, 84);
 		this.addDataSlots(data);
 	}
@@ -133,6 +149,11 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 	/** @return true for the three upgrade-core items accepted by the core slot. */
 	private static boolean isCore(ItemStack stack) {
 		return stack.is(ModItems.RESONANT_CORE) || stack.is(ModItems.PRISMATIC_CORE) || stack.is(ModItems.AEGIS_CORE);
+	}
+
+	/** @return true for the two defense modules accepted by the augment slot. */
+	private static boolean isAugment(ItemStack stack) {
+		return stack.is(ModItems.REINFORCED_PLATING) || stack.is(ModItems.BLAST_WARD);
 	}
 
 	public BlockPos pos() {
@@ -235,7 +256,7 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 		if (slot != null && slot.hasItem()) {
 			ItemStack stack = slot.getItem();
 			clicked = stack.copy();
-			if (slotIndex == FUEL_SLOT || slotIndex == CORE_SLOT || slotIndex == CAPACITOR_SLOT) {
+			if (slotIndex == FUEL_SLOT || slotIndex == CORE_SLOT || slotIndex == CAPACITOR_SLOT || slotIndex == AUGMENT_SLOT) {
 				if (!this.moveItemStackTo(stack, INV_SLOT_START, HOTBAR_SLOT_END, true)) {
 					return ItemStack.EMPTY;
 				}
@@ -249,6 +270,10 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 				}
 			} else if (stack.is(ModItems.FLUX_CAPACITOR)) {
 				if (!this.moveItemStackTo(stack, CAPACITOR_SLOT, CAPACITOR_SLOT + 1, false)) {
+					return ItemStack.EMPTY;
+				}
+			} else if (isAugment(stack)) {
+				if (!this.moveItemStackTo(stack, AUGMENT_SLOT, AUGMENT_SLOT + 1, false)) {
 					return ItemStack.EMPTY;
 				}
 			} else if (slotIndex >= INV_SLOT_START && slotIndex < INV_SLOT_END) {

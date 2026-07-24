@@ -471,8 +471,8 @@ public class StrengthGameTests {
 					menu.getSlot(BubbleShieldMenu.CORE_SLOT).mayPlace(new ItemStack(ModItems.AEGIS_CORE)),
 					"the core slot should accept an aegis core");
 
-			// Hotbar slots 0..2 map to menu slots 30..32 (3 projector slots + 27 inventory).
-			int hotbarStart = 3 + 27;
+			// Hotbar slots 0..2 map to menu slots 31..33 (4 projector slots + 27 inventory).
+			int hotbarStart = 4 + 27;
 			player.getInventory().setItem(0, new ItemStack(ModItems.AEGIS_CORE));
 			menu.quickMoveStack(player, hotbarStart);
 			helper.assertTrue(

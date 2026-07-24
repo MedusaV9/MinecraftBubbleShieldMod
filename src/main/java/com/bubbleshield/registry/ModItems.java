@@ -26,6 +26,8 @@ public final class ModItems {
 	public static final ResourceKey<Item> AEGIS_CORE_KEY = ResourceKey.create(Registries.ITEM, BubbleShield.id("aegis_core"));
 	public static final ResourceKey<Item> FLUX_CAPACITOR_KEY = ResourceKey.create(Registries.ITEM, BubbleShield.id("flux_capacitor"));
 	public static final ResourceKey<Item> PATCH_KIT_KEY = ResourceKey.create(Registries.ITEM, BubbleShield.id("patch_kit"));
+	public static final ResourceKey<Item> REINFORCED_PLATING_KEY = ResourceKey.create(Registries.ITEM, BubbleShield.id("reinforced_plating"));
+	public static final ResourceKey<Item> BLAST_WARD_KEY = ResourceKey.create(Registries.ITEM, BubbleShield.id("blast_ward"));
 
 	/**
 	 * An item whose hover tooltip carries one static translatable line —
@@ -118,6 +120,37 @@ public final class ModItems {
 		)
 	);
 
+	/**
+	 * Augment-slot defense module: while socketed, every shield hit gains 30%
+	 * plating damage resistance, stacking multiplicatively with the tier DR under
+	 * the 70% combined cap. Mutually exclusive with the blast ward (one augment slot).
+	 */
+	public static final Item REINFORCED_PLATING = Registry.register(
+		BuiltInRegistries.ITEM,
+		REINFORCED_PLATING_KEY,
+		new TooltipItem(
+			new Item.Properties()
+				.stacksTo(1)
+				.setId(REINFORCED_PLATING_KEY)
+		)
+	);
+
+	/**
+	 * Augment-slot defense module: while socketed, intercepted EXPLOSIVE projectiles
+	 * (fireballs, wither skulls, wind charges) deal 60% less shield damage, applied
+	 * to the raw damage BEFORE the tier/plating DR pipeline. Mutually exclusive with
+	 * the reinforced plating (one augment slot).
+	 */
+	public static final Item BLAST_WARD = Registry.register(
+		BuiltInRegistries.ITEM,
+		BLAST_WARD_KEY,
+		new TooltipItem(
+			new Item.Properties()
+				.stacksTo(1)
+				.setId(BLAST_WARD_KEY)
+		)
+	);
+
 	private ModItems() {
 	}
 
@@ -130,6 +163,8 @@ public final class ModItems {
 				output.accept(AEGIS_CORE);
 				output.accept(FLUX_CAPACITOR);
 				output.accept(PATCH_KIT);
+				output.accept(REINFORCED_PLATING);
+				output.accept(BLAST_WARD);
 			});
 	}
 }

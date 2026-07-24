@@ -42,7 +42,8 @@
 			"com.bubbleshield.gametest.BeamGameTests",
 			"com.bubbleshield.gametest.ShapeGameTests",
 			"com.bubbleshield.gametest.StrengthGameTests",
-			"com.bubbleshield.gametest.RecoveryGameTests"
+			"com.bubbleshield.gametest.RecoveryGameTests",
+			"com.bubbleshield.gametest.AugmentGameTests"
 		]
 	},
 	"mixins": [

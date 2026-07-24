@@ -71,6 +71,21 @@ public final class ShieldLogic {
 	public static final float[] TIER_DR_BY_TIER = {0.0F, 0.25F, 0.40F, 0.50F};
 	/** Combined (tier x plating) damage resistance never exceeds 70%. */
 	public static final float MAX_COMBINED_DR = 0.70F;
+	/**
+	 * Reinforced plating (augment slot): extra damage resistance on EVERY shield hit,
+	 * stacking multiplicatively with the tier DR under {@link #MAX_COMBINED_DR}
+	 * (see {@link #appliedDamage}).
+	 */
+	public static final float PLATING_DR = 0.30F;
+	/**
+	 * Blast ward (augment slot): EXPLOSIVE projectile shield-damage — the
+	 * fireball/wither-skull/wind-charge class ({@link #HURTING_PROJECTILE_DAMAGE}) —
+	 * is reduced 60% (x0.4). Canonical DR stacking order:
+	 * {@code effective = raw x (blastWard && explosive ? 0.4 : 1)} FIRST (see
+	 * {@link #blastWardedDamage}), THEN {@link #appliedDamage} (tier/plating DR,
+	 * combined cap unchanged at 70%, last-stand halving last).
+	 */
+	public static final float BLAST_WARD_MULTIPLIER = 0.4F;
 	public static final int TICKS_PER_FUEL_SECOND = 20;
 	/** Upper bound on the combined (ECO x capacitor) passive-drain interval; see {@link #drainIntervalTicks}. */
 	public static final int MAX_DRAIN_INTERVAL_TICKS = 80;
@@ -141,18 +156,35 @@ public final class ShieldLogic {
 
 	/**
 	 * The single damage pipeline every shield hit goes through: the receiving
-	 * shield's tier DR and (future) plating DR stack multiplicatively, capped at
-	 * {@link #MAX_COMBINED_DR} (70%), and a (future) last-stand state halves what
-	 * remains. Linked-split hits split the RAW damage first, then each receiving
-	 * shield applies its own DR to its share.
+	 * shield's tier DR and plating DR ({@link #PLATING_DR} while reinforced plating
+	 * is socketed) stack multiplicatively, capped at {@link #MAX_COMBINED_DR} (70%),
+	 * and a (future) last-stand state halves what remains. Linked-split hits split
+	 * the RAW damage first, then each receiving shield applies its own DR to its
+	 * share.
 	 *
-	 * @param platingDr additional plating damage resistance in [0, 1); always 0 until a later WP.
+	 * <p>Canonical stacking order with the blast ward:
+	 * {@code effective = raw x (blastWard && explosive ? 0.4 : 1)}
+	 * ({@link #blastWardedDamage}, applied BEFORE this pipeline) {@code ->
+	 * appliedDamage(effective, tier, platingDr, lastStand)}.
+	 *
+	 * @param platingDr additional plating damage resistance in [0, 1); {@link #PLATING_DR} or 0.
 	 * @param lastStand halves the applied damage when true; always false until a later WP.
 	 */
 	public static float appliedDamage(float raw, int tier, float platingDr, boolean lastStand) {
 		float tierDr = TIER_DR_BY_TIER[Math.clamp(tier, 0, TIER_DR_BY_TIER.length - 1)];
 		float combinedDr = Math.min(MAX_COMBINED_DR, 1.0F - (1.0F - tierDr) * (1.0F - platingDr));
 		return raw * (1.0F - combinedDr) * (lastStand ? 0.5F : 1.0F);
+	}
+
+	/**
+	 * The blast ward's pre-pipeline reduction: EXPLOSIVE projectile raw damage
+	 * (the {@link #HURTING_PROJECTILE_DAMAGE} class) is multiplied by
+	 * {@link #BLAST_WARD_MULTIPLIER} (x0.4, i.e. -60%) while a blast ward is
+	 * socketed — BEFORE {@link #appliedDamage} (tier/plating DR, cap unchanged).
+	 * Non-explosive damage (arrows, tridents, thrown items) is never warded.
+	 */
+	public static float blastWardedDamage(float raw, boolean blastWard) {
+		return blastWard ? raw * BLAST_WARD_MULTIPLIER : raw;
 	}
 
 	/** Heal per regen pulse for the given tier (before the linked/out-of-combat multipliers). */
@@ -625,7 +657,12 @@ public final class ShieldLogic {
 				if (!projectile.deflect(ProjectileDeflection.REVERSE, null, EntityReference.of(owner), false)) {
 					projectile.discard();
 				}
-				damage = HURTING_PROJECTILE_DAMAGE;
+				// Blast ward: the explosive class is warded x0.4 at interception —
+				// BEFORE the linked split and the DR pipeline (canonical order, see
+				// blastWardedDamage). The ward changes only the damage math; the
+				// interception itself (deflect-or-discard, so nothing explodes
+				// inside the bubble) is unchanged.
+				damage = blastWardedDamage(HURTING_PROJECTILE_DAMAGE, self.hasBlastWard());
 			} else if (projectile instanceof ThrowableItemProjectile || projectile instanceof ShulkerBullet) {
 				projectile.discard();
 				damage = THROWN_DAMAGE;
@@ -671,14 +708,14 @@ public final class ShieldLogic {
 				ModCriteria.fireShieldsLinked(level, state.ownerUuid);
 
 				float split = damage / linked.size();
-				broke = applyDamage(state, appliedDamage(split, tier, 0.0F, false), level.getGameTime(), breakCooldownTicks);
+				broke = applyDamage(state, appliedDamage(split, tier, self.platingDr(), false), level.getGameTime(), breakCooldownTicks);
 				for (BubbleShieldBlockEntity partner : linked) {
 					if (partner != self) {
 						partner.applyShieldDamage(split);
 					}
 				}
 			} else {
-				broke = applyDamage(state, appliedDamage(damage, tier, 0.0F, false), level.getGameTime(), breakCooldownTicks);
+				broke = applyDamage(state, appliedDamage(damage, tier, self.platingDr(), false), level.getGameTime(), breakCooldownTicks);
 			}
 
 			changed = true;

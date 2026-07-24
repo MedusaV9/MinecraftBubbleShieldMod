@@ -79,10 +79,19 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 				.build()
 		);
 
+		// Effects and name share the fourth row (46px effects + 2px gap + 40px name
+		// = 88px): the name button moved here from the left column (8, 30), whose
+		// spot now hosts the augment slot (frame drawn in extractBackground).
 		this.addRenderableWidget(
 			Button.builder(Component.translatable("gui.bubbleshield.effects"), button ->
 				this.minecraft.gui.setScreen(new EffectPickerScreen(this, this.menu))
-			).bounds(x, this.topPos + 54, width, 13).build()
+			).bounds(x, this.topPos + 54, 46, 13).build()
+		);
+
+		this.addRenderableWidget(
+			Button.builder(Component.translatable("gui.bubbleshield.name"), button ->
+				this.minecraft.gui.setScreen(new ShieldNameScreen(this, this.menu.pos()))
+			).bounds(x + 48, this.topPos + 54, 40, 13).build()
 		);
 
 		// Whitelist and beam share the fifth row, split exactly like the shape/mode
@@ -100,16 +109,6 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 				.build()
 		);
 
-		// Left column, between the fuel (y=20) and tier (y=44) labels: a free 13px spot.
-		// Width 44 ends the button at x=52, safely left of the device slot column
-		// (the capacitor/fuel/core frames start at x=55, hit-regions at x=56): a 64px
-		// button used to reach x=72 and steal clicks on the capacitor slot's bottom
-		// edge (y 30..33 of its 17..32 hit-region).
-		this.addRenderableWidget(
-			Button.builder(Component.translatable("gui.bubbleshield.name"), button ->
-				this.minecraft.gui.setScreen(new ShieldNameScreen(this, this.menu.pos()))
-			).bounds(this.leftPos + 8, this.topPos + 30, 44, 13).build()
-		);
 	}
 
 	private void toggleActive() {
@@ -243,6 +242,13 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 		graphics.fill(cx, cy, cx + 18, cy + 18, 0xFF373737);
 		graphics.fill(cx + 1, cy + 1, cx + 18, cy + 18, 0xFFFFFFFF);
 		graphics.fill(cx + 1, cy + 1, cx + 17, cy + 17, 0xFF8B8B8B);
+		// And for the augment (defense module) slot at (9, 30) in the left column —
+		// the spot the name button occupied before it moved to the right column.
+		int ax = this.leftPos + 8;
+		int ay = this.topPos + 29;
+		graphics.fill(ax, ay, ax + 18, ay + 18, 0xFF373737);
+		graphics.fill(ax + 1, ay + 1, ax + 18, ay + 18, 0xFFFFFFFF);
+		graphics.fill(ax + 1, ay + 1, ax + 17, ay + 17, 0xFF8B8B8B);
 	}
 
 	/** Left-column labels must end before the device slot frames, which start at x = 55. */
@@ -264,7 +270,9 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 		}
 
 		graphics.text(this.font, fuel, 8, 20, LABEL_COLOR, false);
-		graphics.text(this.font, Component.translatable("gui.bubbleshield.tier", this.menu.tier()), 8, 44, LABEL_COLOR, false);
+		// y = 48 (was 44): the augment slot frame at (8, 29) reaches down to y = 46,
+		// so the tier label starts below it (48..55 stays clear of the health row at 56).
+		graphics.text(this.font, Component.translatable("gui.bubbleshield.tier", this.menu.tier()), 8, 48, LABEL_COLOR, false);
 
 		// Health arrives as permille + whole max HP (the old health*10 slot overflowed
 		// above 3276.7 HP); display "HP: cur/max" with the same graceful degrade as

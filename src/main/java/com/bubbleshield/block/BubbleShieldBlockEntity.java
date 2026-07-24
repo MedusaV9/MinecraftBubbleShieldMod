@@ -75,6 +75,12 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	/** One-slot flux-capacitor inventory; its content drives {@link #hasCapacitor()}. */
 	private final SimpleContainer capacitorContainer = this.deviceContainer();
 	/**
+	 * One-slot augment (defense module) inventory; its content drives
+	 * {@link #hasPlating()} / {@link #hasBlastWard()}. Single slot by design:
+	 * exactly ONE module fits, so plating vs blast ward is an either/or choice.
+	 */
+	private final SimpleContainer augmentContainer = this.deviceContainer();
+	/**
 	 * Inputs applied by the last {@link #refreshMaxHealth()} pass (tier, target radius,
 	 * strength percent); {@code lastTier = -1} forces a recompute on the first tick,
 	 * including the first tick after load (see {@code loadAdditional}).
@@ -220,6 +226,10 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		return this.capacitorContainer;
 	}
 
+	public SimpleContainer getAugmentContainer() {
+		return this.augmentContainer;
+	}
+
 	/**
 	 * @return true while a flux capacitor sits in the capacitor slot: the active shield's
 	 * passive drain halves and regeneration pulses no longer burn the extra fuel-second
@@ -227,6 +237,31 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	 */
 	public boolean hasCapacitor() {
 		return this.capacitorContainer.getItem(0).is(ModItems.FLUX_CAPACITOR);
+	}
+
+	/**
+	 * @return true while reinforced plating sits in the augment slot: every shield
+	 * hit gains {@link ShieldLogic#PLATING_DR} extra damage resistance, stacking
+	 * multiplicatively with the tier DR under the 70% combined cap
+	 * (see {@link ShieldLogic#appliedDamage}).
+	 */
+	public boolean hasPlating() {
+		return this.augmentContainer.getItem(0).is(ModItems.REINFORCED_PLATING);
+	}
+
+	/**
+	 * @return true while a blast ward sits in the augment slot: intercepted EXPLOSIVE
+	 * projectiles (fireballs, wither skulls, wind charges) deal 60% less shield
+	 * damage, applied to the RAW damage before the DR pipeline
+	 * (see {@link ShieldLogic#blastWardedDamage}).
+	 */
+	public boolean hasBlastWard() {
+		return this.augmentContainer.getItem(0).is(ModItems.BLAST_WARD);
+	}
+
+	/** The plating damage resistance fed into {@link ShieldLogic#appliedDamage}: 0.30 when socketed, else 0. */
+	public float platingDr() {
+		return this.hasPlating() ? ShieldLogic.PLATING_DR : 0.0F;
 	}
 
 	/**
@@ -804,16 +839,17 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 
 	/**
 	 * Applies RAW damage to the shield through the single damage pipeline
-	 * ({@link ShieldLogic#appliedDamage}: this shield's own tier DR, future plating
-	 * DR/last-stand hooks), breaking it (deactivate + tier-scaled cooldown) when
-	 * health is depleted. Linked-split shares also arrive here raw: the split happens
-	 * first, then each receiving shield discounts its share by its own DR.
+	 * ({@link ShieldLogic#appliedDamage}: this shield's own tier DR, its own plating
+	 * DR when reinforced plating is socketed, future last-stand hook), breaking it
+	 * (deactivate + tier-scaled cooldown) when health is depleted. Linked-split
+	 * shares also arrive here raw: the split happens first, then each receiving
+	 * shield discounts its share by its own DR.
 	 */
 	public void applyShieldDamage(float amount) {
 		long gameTime = this.level != null ? this.level.getGameTime() : 0L;
 		boolean wasActive = this.shieldState.active;
 		int tier = this.tier();
-		float applied = ShieldLogic.appliedDamage(amount, tier, 0.0F, false);
+		float applied = ShieldLogic.appliedDamage(amount, tier, this.platingDr(), false);
 		boolean broke = ShieldLogic.applyDamage(this.shieldState, applied, gameTime, ShieldLogic.breakCooldownTicks(tier));
 		if (broke && this.level instanceof ServerLevel serverLevel) {
 			serverLevel.playSound(null, this.worldPosition, SoundEvents.SHIELD_BREAK.value(), SoundSource.BLOCKS, 1.0F, 1.0F);
@@ -1136,6 +1172,7 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 			Containers.dropContents(this.level, pos, this.fuelContainer);
 			Containers.dropContents(this.level, pos, this.coreContainer);
 			Containers.dropContents(this.level, pos, this.capacitorContainer);
+			Containers.dropContents(this.level, pos, this.augmentContainer);
 		}
 	}
 
@@ -1164,6 +1201,7 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		this.fuelContainer.storeAsItemList(output.list("fuel_items", ItemStack.CODEC));
 		this.coreContainer.storeAsItemList(output.list("core_items", ItemStack.CODEC));
 		this.capacitorContainer.storeAsItemList(output.list("capacitor_items", ItemStack.CODEC));
+		this.augmentContainer.storeAsItemList(output.list("augment_items", ItemStack.CODEC));
 	}
 
 	@Override
@@ -1180,6 +1218,7 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		this.fuelContainer.fromItemList(input.listOrEmpty("fuel_items", ItemStack.CODEC));
 		this.coreContainer.fromItemList(input.listOrEmpty("core_items", ItemStack.CODEC));
 		this.capacitorContainer.fromItemList(input.listOrEmpty("capacitor_items", ItemStack.CODEC));
+		this.augmentContainer.fromItemList(input.listOrEmpty("augment_items", ItemStack.CODEC));
 		// Force the max-health recompute on the next tick (covers cores/diameters/
 		// strength edited while unloaded AND maps a legacy save's health fraction
 		// onto the current max-health model).
