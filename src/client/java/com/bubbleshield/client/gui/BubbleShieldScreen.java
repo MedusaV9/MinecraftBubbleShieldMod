@@ -52,7 +52,8 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 	public BubbleShieldScreen(BubbleShieldMenu menu, Inventory inventory, Component title) {
 		super(menu, inventory, title, 176, 166);
 		// E1: the vanilla "Inventory" label row (y = 72) is reclaimed for the power
-		// readout stack — up to five 8px rows at y = 48..80 in the left column.
+		// readout stack — up to four 8px rows at y = 48..80 in the left column
+		// (see the pixel budget at extractLabels).
 		this.inventoryLabelY = -1000;
 	}
 
@@ -347,22 +348,36 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 
 	/** Left-column labels must end before the device slot frames, which start at x = 55. */
 	private static final int LABEL_MAX_WIDTH = 55 - 8 - 1;
-	/** E1 readout stack: first row y, and the per-row advance (font height 8 + 0 gap). */
+	/**
+	 * E1 readout stack: first row y, and the per-row advance (font height 8 + 0
+	 * gap). Pixel budget: the player inventory slots start at y = 84 (the menu's
+	 * addStandardInventorySlots(inventory, 8, 84)), so the stack may hold at most
+	 * FOUR rows — 48/56/64/72, the deepest glyph ending at 72 + 8 = 80 &lt; 84. A
+	 * fifth row at y = 80 would reach y = 88, under the inventory. extractLabels
+	 * holds the four-row bound by construction: threats share the tier row, and
+	 * the cooldown row (broken-only: DATA_COOLDOWN_SECONDS syncs 0 while active)
+	 * never coexists with the regen/drain rows (active-only).
+	 */
 	private static final int READOUT_TOP = 48;
 	private static final int READOUT_ROW_HEIGHT = 8;
 
 	/**
 	 * The left-column degrade pattern (shared by every readout row): the full
-	 * localized label when it fits, the compact form when the prefix does not,
-	 * and an elided compact form as the last resort.
+	 * localized label when it fits, the localized compact form when the prefix
+	 * does not, and an elided compact form as the last resort.
 	 */
 	private String fitLabel(String full, String compact) {
+		return this.fitLabel(full, compact, LABEL_MAX_WIDTH);
+	}
+
+	/** {@link #fitLabel(String, String)} against an explicit width budget. */
+	private String fitLabel(String full, String compact, int maxWidth) {
 		String text = full;
-		if (this.font.width(text) > LABEL_MAX_WIDTH) {
+		if (this.font.width(text) > maxWidth) {
 			text = compact;
 		}
-		if (this.font.width(text) > LABEL_MAX_WIDTH) {
-			text = this.font.plainSubstrByWidth(text, LABEL_MAX_WIDTH - this.font.width("...")) + "...";
+		if (this.font.width(text) > maxWidth) {
+			text = this.font.plainSubstrByWidth(text, maxWidth - this.font.width("...")) + "...";
 		}
 
 		return text;
@@ -377,30 +392,50 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 		// does not, and an elided value only for absurdly large numbers.
 		graphics.text(this.font,
 				this.fitLabel(Component.translatable("gui.bubbleshield.fuel", this.menu.fuelSeconds()).getString(),
-						this.menu.fuelSeconds() + "s"),
+						Component.translatable("gui.bubbleshield.fuel.compact", this.menu.fuelSeconds()).getString()),
 				8, 20, LABEL_COLOR, false);
 
 		// E1 power readout: a dynamic stack of 8px rows from y = 48 (the augment
 		// slot frame at (8, 29) reaches down to y = 46) into the reclaimed vanilla
-		// inventory-label row. Conditional rows keep the stack at <= 5 rows in
-		// practice: the cooldown row only exists while broken, when the regen/
-		// drain/threat rows (active-only) are all absent, and vice versa.
+		// inventory-label row. At most FOUR rows render (48/56/64/72; deepest
+		// glyph ends at 80, above the inventory slots at y = 84 — see READOUT_TOP):
+		// threats merge into the tier row, and the cooldown row (broken-only)
+		// never coexists with the regen/drain rows (active-only).
 		int y = READOUT_TOP;
 
 		// Tier + combined DR on ONE row ("T2 · DR 58%"): the DR percent comes from
-		// the same ShieldLogic.combinedDr the damage pipeline applies.
+		// the same ShieldLogic.combinedDr the damage pipeline applies. While
+		// threats are present (active-only census), the red "!N" badge joins this
+		// row's tail ("T2 · DR 58% !3") instead of a fifth standalone row, which
+		// would sit at y = 80 and reach y = 88 — under the player inventory. The
+		// badge is a separate draw so it keeps its warning tint; the "!" prefix
+		// stays the color-independent cue.
 		int dr = this.combinedDrPercent();
-		graphics.text(this.font,
-				this.fitLabel(Component.translatable("gui.bubbleshield.tier_dr", this.menu.tier(), dr).getString(),
-						"T" + this.menu.tier() + " " + dr + "%"),
-				8, y, LABEL_COLOR, false);
+		String tierFull = Component.translatable("gui.bubbleshield.tier_dr", this.menu.tier(), dr).getString();
+		String tierCompact = Component.translatable("gui.bubbleshield.tier_dr.compact", this.menu.tier(), dr).getString();
+		int threats = this.menu.threatCount();
+		if (threats > 0) {
+			// The badge claims the row's tail first (elided only for absurd
+			// counts); the tier/DR label degrades within the remaining width.
+			String badgeText = Component.translatable("gui.bubbleshield.threats.compact", threats).getString();
+			String badge = this.fitLabel(badgeText, badgeText);
+			int gap = this.font.width(" ");
+			String tierText = this.fitLabel(tierFull, tierCompact,
+					Math.max(0, LABEL_MAX_WIDTH - gap - this.font.width(badge)));
+			graphics.text(this.font, tierText, 8, y, LABEL_COLOR, false);
+			graphics.text(this.font, badge, 8 + this.font.width(tierText) + gap, y, THREAT_COLOR, false);
+		} else {
+			graphics.text(this.font, this.fitLabel(tierFull, tierCompact), 8, y, LABEL_COLOR, false);
+		}
 		y += READOUT_ROW_HEIGHT;
 
-		// Health arrives as permille + whole max HP (the old health*10 slot overflowed
-		// above 3276.7 HP); display "HP: cur/max" with the usual degrade.
-		String healthValue = this.menu.currentHealth() + "/" + this.menu.maxHealth();
+		// Health: the exact whole-HP figure from the appended DATA_HEALTH_WHOLE
+		// slot (fix 5) over the whole max — the permille slot stays synced for
+		// ratio/progress uses but quantizes absolute HP to max/1000 steps.
+		String healthValue = this.menu.currentHealthWhole() + "/" + this.menu.maxHealth();
 		graphics.text(this.font,
-				this.fitLabel(Component.translatable("gui.bubbleshield.health", healthValue).getString(), healthValue),
+				this.fitLabel(Component.translatable("gui.bubbleshield.health", healthValue).getString(),
+						Component.translatable("gui.bubbleshield.health.compact", healthValue).getString()),
 				8, y, LABEL_COLOR, false);
 		y += READOUT_ROW_HEIGHT;
 
@@ -408,7 +443,8 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 		if (this.menu.cooldownSeconds() > 0) {
 			String clock = ShieldLogic.formatMinutesSeconds(this.menu.cooldownSeconds());
 			graphics.text(this.font,
-					this.fitLabel(Component.translatable("gui.bubbleshield.cooldown", clock).getString(), clock),
+					this.fitLabel(Component.translatable("gui.bubbleshield.cooldown", clock).getString(),
+							Component.translatable("gui.bubbleshield.cooldown.compact", clock).getString()),
 					8, y, LABEL_COLOR, false);
 			y += READOUT_ROW_HEIGHT;
 		}
@@ -418,7 +454,7 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 		if (regenX10 > 0) {
 			graphics.text(this.font,
 					this.fitLabel(Component.translatable("gui.bubbleshield.regen", perMinute(regenX10)).getString(),
-							"+" + perMinute(regenX10) + "/min"),
+							Component.translatable("gui.bubbleshield.regen.compact", perMinute(regenX10)).getString()),
 					8, y, LABEL_COLOR, false);
 			y += READOUT_ROW_HEIGHT;
 		}
@@ -428,19 +464,8 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 		if (this.menu.isActive() && drainX10 > 0) {
 			graphics.text(this.font,
 					this.fitLabel(Component.translatable("gui.bubbleshield.drain", perMinute(drainX10)).getString(),
-							"-" + perMinute(drainX10) + "/min"),
+							Component.translatable("gui.bubbleshield.drain.compact", perMinute(drainX10)).getString()),
 					8, y, LABEL_COLOR, false);
-			y += READOUT_ROW_HEIGHT;
-		}
-
-		// Threats: hidden at 0; the "!" prefix (baked into the lang string and the
-		// compact form) carries the warning so the red tint is never the only cue.
-		int threats = this.menu.threatCount();
-		if (threats > 0) {
-			graphics.text(this.font,
-					this.fitLabel(Component.translatable("gui.bubbleshield.threats", threats).getString(),
-							"! " + threats),
-					8, y, THREAT_COLOR, false);
 		}
 	}
 

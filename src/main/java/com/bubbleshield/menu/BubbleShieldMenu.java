@@ -72,7 +72,16 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 	 * is computable from {@link #DATA_TIER}).
 	 */
 	public static final int DATA_REVIVE_AVAILABLE = 18;
-	public static final int DATA_COUNT = 19;
+	/**
+	 * Fix 5 (APPENDED slot — never renumber): the current health in WHOLE HP
+	 * (rounded, capped at 32767), synced directly so the GUI's "HP: cur/max" row
+	 * shows the exact server figure. The permille slot
+	 * ({@link #DATA_HEALTH_PERMILLE}) stays for compat and ratio/progress uses,
+	 * but reconstructing absolute HP from it loses up to max/2000 HP to
+	 * quantization (e.g. ±3 HP at 6000 max HP) — this slot does not.
+	 */
+	public static final int DATA_HEALTH_WHOLE = 19;
+	public static final int DATA_COUNT = 20;
 
 	public static final int FUEL_SLOT = 0;
 	public static final int CORE_SLOT = 1;
@@ -187,9 +196,19 @@ public class BubbleShieldMenu extends AbstractContainerMenu {
 		return this.data.get(DATA_MAX_HEALTH);
 	}
 
-	/** @return the current health in whole HP, reconstructed from permille x max. */
+	/**
+	 * @return the current health in whole HP, reconstructed from permille x max.
+	 *     The reconstruction quantizes (up to max/2000 HP off); display code
+	 *     should read the exact {@link #currentHealthWhole()} instead. Kept for
+	 *     ratio-consistency checks against the permille slot.
+	 */
 	public int currentHealth() {
 		return Math.round(this.healthPermille() * this.maxHealth() / 1000.0F);
+	}
+
+	/** @return the exact current health in whole HP (rounded, capped at 32767) from {@link #DATA_HEALTH_WHOLE}. */
+	public int currentHealthWhole() {
+		return this.data.get(DATA_HEALTH_WHOLE);
 	}
 
 	/** @return the synced regeneration rate in HP per minute x10 (0 when none). */

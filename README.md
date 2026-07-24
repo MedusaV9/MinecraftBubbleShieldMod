@@ -2,8 +2,10 @@
 
 A [Fabric](https://fabricmc.net/) mod for Minecraft 26.2 that adds deployable **bubble shields**: translucent
 force-field bubbles in ten shapes (spheres, domes, cylinders, cubes, diamonds, rings, pyramids, lenses,
-hourglasses and stars) projected from a furnace-like block that keep hostile players, hostile mobs and
-their projectiles out while letting your friends walk right through.
+hourglasses and stars) projected from a furnace-like block. Every shield intercepts hostile projectiles;
+depending on the mode it also keeps hostile players and mobs out — **Defense** blocks and expels both,
+**Pulse** blocks entry (and zaps mobs already inside), **Eco** blocks players only — while always letting
+your friends walk right through.
 
 ## What is a Bubble Shield?
 
@@ -22,7 +24,8 @@ raise a shield around it:
   **Auto** (each effect resolves to its own coherent preset) or one of the **8 rendered styles**: storm,
   pulse, helix, prism, void, ember, runic and frost (each with its own hand-written beam shader).
 - **Whitelist**: the owner and any whitelisted players (added by name in the GUI, matched case-insensitively
-  by name or UUID, up to **64 entries**) pass through freely; everyone else is pushed back at the boundary.
+  by name or UUID, up to **64 combined name/UUID entries**) pass through freely; everyone else is pushed
+  back at the boundary.
   The shield surface dissolves in a bubble around approaching whitelisted players.
 - **Health**: max health scales with the bubble's **size and tier** — from 125 for a tiny uncored shield up
   to thousands of HP for a huge Aegis-cored one (see the tier table below). Projectile hits damage the
@@ -80,7 +83,9 @@ Regeneration pulses once per 2 seconds of active runtime while fueled: **out of 
 10 seconds) tiers 1–3 heal at **3x** their rate, while tier 0 only regenerates out of combat at all. Eco
 mode suppresses regeneration, resonance-linked shields heal **1.25x** per pulse, and each pulse burns one
 extra fuel-second on top of the normal drain (unless a Flux Capacitor is installed). Removing the core
-drops the tier (and rescales health) immediately.
+drops the tier immediately; across any max-health change (core swap, resize, strength gamerule) the
+current HP is preserved as an **absolute value** — clamped into the new maximum, never proportionally
+rescaled.
 
 Besides crafting, structure loot carries the shield gear: End City treasure and Ancient City chests each
 have an extra 1-in-10 chance to contain a **Resonant Core**, End City treasure a 1-in-20 chance for an
@@ -105,11 +110,13 @@ A fourth slot takes exactly **one** defense module — a strategic either/or cho
 
 - **Patch Kit** (2 amethyst shards + slime ball + copper ingot, crafts 2, stacks to 16): right-click an
   **active** projector to restore **150 shield HP** (owner or whitelisted players only; the kit is consumed
-  only when it actually heals), or a **broken** (cooling-down) projector to cut the remaining cooldown by
-  **20% of the full break cooldown** — repeated kits stack.
-- **Emergency revive**: while the projector is on break cooldown with at least **400 fuel-seconds** stored,
-  the owner's Activate button becomes *Revive (-400 fuel)* — pressing it consumes the 400 fuel-seconds,
-  clears the cooldown and restarts the shield at **50% health**.
+  only when at least 1 HP is missing), or a **broken** (cooling-down) projector to cut the remaining
+  cooldown by **20% of the full break cooldown** — repeated kits stack.
+- **Emergency revive**: while the projector is on break cooldown (with at least 10 seconds remaining) and
+  the tier-scaled fee of **400 + 200 x tier fuel-seconds** (400/600/800/1000 for tiers 0–3) is stored, the
+  owner's Activate button becomes *Revive (-N fuel)* — pressing it consumes the fee and restarts the shield
+  at **50% health**. Only **one revive per break cooldown**: the cooldown clock keeps running quietly in
+  the background rather than being cleared.
 
 ### The shield fights back
 
@@ -158,8 +165,9 @@ radius).
 
 Projectiles from non-whitelisted shooters are intercepted at the surface, by type:
 
-- **Arrows** (and anything unclassified): absorbed (removed) — or **riposted** back at the shooter at
-  tier 1+ — 3 shield damage.
+- **Arrows**: **riposted** straight back at the shooter at tier 1+ when the shooter is resolvable;
+  absorbed (removed) at tier 0 or when ownerless (e.g. dispenser-fired) — 3 shield damage either way.
+- **Any other unclassified projectile**: always absorbed, 3 damage.
 - **Tridents**: too heavy to absorb — **reverse-deflected** back out, 4 damage.
 - **Fireballs, wither skulls, wind charges**: reverse-deflected (no explosion inside), 10 damage (x0.4 with
   a Blast Ward).

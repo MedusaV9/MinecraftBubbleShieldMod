@@ -2,6 +2,7 @@ package com.bubbleshield.gametest;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import com.bubbleshield.BubbleShield;
 import com.bubbleshield.block.BubbleShieldBlockEntity;
@@ -24,10 +25,13 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
 import net.minecraft.network.protocol.common.ServerboundCustomPayloadPacket;
+import net.minecraft.network.protocol.game.ClientboundSoundPacket;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.BossEvent;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -222,8 +226,7 @@ public class UxGameTests {
 	/** Drains the capture channel, returning the ShieldSyncS2C payloads for the given projector. */
 	private static List<ShieldPayloads.ShieldSyncS2C> drainShieldSyncs(MockPlayers.CapturingMockPlayer capture, BlockPos absPos) {
 		List<ShieldPayloads.ShieldSyncS2C> syncs = new ArrayList<>();
-		Object message;
-		while ((message = capture.channel().readOutbound()) != null) {
+		for (Object message : capture.drainPackets()) {
 			if (message instanceof ClientboundCustomPayloadPacket packet
 					&& packet.payload() instanceof ShieldPayloads.ShieldSyncS2C sync
 					&& sync.pos().equals(absPos)) {
@@ -310,9 +313,51 @@ public class UxGameTests {
 	}
 
 	/**
+	 * Drains the capture channel, counting the sound packets carrying exactly
+	 * {@code sound}. NOTE the drain is destructive across ALL packet types: to
+	 * count several sounds out of one window, drain once and use
+	 * {@link #countSoundPackets} per sound instead of calling this repeatedly.
+	 */
+	private static int drainSoundPackets(MockPlayers.CapturingMockPlayer capture, SoundEvent sound) {
+		return countSoundPackets(capture.drainPackets(), sound);
+	}
+
+	/** Counts the sound packets among {@code packets} carrying exactly {@code sound}. */
+	private static int countSoundPackets(List<Object> packets, SoundEvent sound) {
+		int count = 0;
+		for (Object message : packets) {
+			if (message instanceof ClientboundSoundPacket packet && packet.getSound().value() == sound) {
+				count++;
+			}
+		}
+
+		return count;
+	}
+
+	/** Drains the capture channel, returning the system-chat lines in send order. */
+	private static List<String> drainChatLines(MockPlayers.CapturingMockPlayer capture) {
+		List<String> lines = new ArrayList<>();
+		for (Object message : capture.drainPackets()) {
+			if (message instanceof ClientboundSystemChatPacket chat) {
+				lines.add(chat.content().getString());
+			}
+		}
+
+		return lines;
+	}
+
+	/** Asserts that one of the captured chat lines is exactly {@code expected}. */
+	private static void assertChatLine(GameTestHelper helper, List<String> chat, String expected) {
+		helper.assertTrue(chat.contains(expected), "the feedback should contain '" + expected + "', got " + chat);
+	}
+
+	/**
 	 * (E3d) The ready ping: an UNREVIVED break cooldown expiring naturally while
 	 * the projector is loaded flips {@code readyAnnounced} exactly once — false
-	 * for the whole cooldown, true at expiry, and (structurally) never re-fired:
+	 * for the whole cooldown, true EXACTLY on the {@code cooldownUntil} tick
+	 * (the block entity ticks before the gametest callbacks of the same server
+	 * tick, so the wait-until below catches the transition tick itself), with
+	 * exactly ONE bell sound packet on the wire that tick and none afterward:
 	 * the tick condition requires {@code !readyAnnounced}, so once true it can
 	 * never trigger again.
 	 */
@@ -324,42 +369,147 @@ public class UxGameTests {
 		helper.assertTrue(state.readyAnnounced, "the flag defaults to true (nothing to announce)");
 		helper.assertTrue(be.tryActivate(), "shield should activate");
 
+		// A capture player inside the ping's ~16-block audible radius (the ping
+		// is a volume-0.8 playSound at the projector), parked outside the bubble
+		// footprint so the broken-then-idle projector never interacts with it.
+		MockPlayers.CapturingMockPlayer capture = MockPlayers.createCapturingMockPlayer(helper, GameType.CREATIVE);
+		Vec3 center = Vec3.atCenterOf(helper.absolutePos(PROJECTOR_POS));
+		capture.player().snapTo(center.x + 6.0, center.y, center.z);
+
 		be.applyShieldDamage(1000.0F);
 		helper.assertTrue(!state.active, "the shield should have broken");
 		helper.assertTrue(!state.readyAnnounced, "a break must arm the ready ping");
 
 		// Shorten the tier-0 15-minute cooldown to something tickable.
-		state.cooldownUntil = helper.getLevel().getGameTime() + 30L;
+		long expiresAt = helper.getLevel().getGameTime() + 30L;
+		state.cooldownUntil = expiresAt;
 
 		helper.startSequence()
-				.thenExecuteAfter(10, () -> helper.assertTrue(!state.readyAnnounced,
-						"the flag must stay false while the cooldown is still running"))
-				.thenExecuteAfter(40, () -> helper.assertTrue(state.readyAnnounced,
-						"natural expiry should fire the ready ping and set the flag"))
-				.thenExecuteAfter(20, () -> helper.assertTrue(state.readyAnnounced && !state.active,
-						"extra ticks after the ping change nothing (no double-fire, no self-activation)"))
+				.thenExecuteAfter(10, () -> {
+					helper.assertTrue(!state.readyAnnounced,
+							"the flag must stay false while the cooldown is still running");
+					// Drop the break/nova packet noise; the projector is inactive
+					// from here on (no census, no alarm), so every BELL_RESONATE
+					// arriving after this drain must be the one-shot ready ping.
+					drainSoundPackets(capture, SoundEvents.BELL_RESONATE);
+				})
+				.thenWaitUntil(() -> helper.assertTrue(state.readyAnnounced,
+						"waiting for the natural cooldown expiry"))
+				.thenExecute(() -> {
+					// The wait-until above triggers on the first tick the flag reads
+					// true — which must be exactly the cooldownUntil tick.
+					long flippedAt = helper.getLevel().getGameTime();
+					helper.assertTrue(flippedAt == expiresAt,
+							"the ready ping must fire exactly on the expiry tick " + expiresAt + ", fired at " + flippedAt);
+					int bells = drainSoundPackets(capture, SoundEvents.BELL_RESONATE);
+					helper.assertTrue(bells == 1,
+							"exactly ONE bell sound packet must be sent on the expiry tick, got " + bells);
+				})
+				.thenExecuteAfter(20, () -> {
+					helper.assertTrue(state.readyAnnounced && !state.active,
+							"extra ticks after the ping change nothing (no double-fire, no self-activation)");
+					int bells = drainSoundPackets(capture, SoundEvents.BELL_RESONATE);
+					helper.assertTrue(bells == 0, "no further bell may be sent after the one-shot ping, got " + bells);
+				})
 				.thenSucceed();
 	}
 
 	/**
+	 * (E3c / fix 9h) The audible transition cues fire on REAL transitions only,
+	 * asserted on the wire: exactly ONE {@code BEACON_ACTIVATE} sound packet on
+	 * the inactive-to-active flip, silence for a no-op re-activation of an
+	 * already-active shield, exactly ONE {@code BEACON_DEACTIVATE} on the
+	 * deliberate power-down, and silence again for a no-op deactivation. All
+	 * transitions run synchronously, so each phase drains the wire ONCE and
+	 * counts both cue sounds out of that single window (a drain is destructive
+	 * across all packet types).
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 100, padding = 16)
+	public void beaconTransitionSounds(GameTestHelper helper) {
+		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
+		be.addFuelSeconds(PLENTY_OF_FUEL);
+
+		MockPlayers.CapturingMockPlayer capture = MockPlayers.createCapturingMockPlayer(helper, GameType.CREATIVE);
+		Vec3 center = Vec3.atCenterOf(helper.absolutePos(PROJECTOR_POS));
+		// Inside the volume-1.0 16-block audible radius, outside the bubble.
+		capture.player().snapTo(center.x + 6.0, center.y, center.z);
+		capture.drainPackets();
+
+		helper.assertTrue(be.tryActivate(), "shield should activate");
+		List<Object> onActivate = capture.drainPackets();
+		helper.assertTrue(countSoundPackets(onActivate, SoundEvents.BEACON_DEACTIVATE) == 0,
+				"an activation must not send a deactivate cue");
+		int activates = countSoundPackets(onActivate, SoundEvents.BEACON_ACTIVATE);
+		helper.assertTrue(activates == 1,
+				"exactly ONE activate cue must be sent on the real transition, got " + activates);
+
+		// No-op re-activations of an already-active shield: still "successful",
+		// but never audible (and setActive(true) routes through tryActivate).
+		helper.assertTrue(be.tryActivate(), "re-activating an active shield reports success");
+		be.setActive(true);
+		List<Object> onNoopActivate = capture.drainPackets();
+		helper.assertTrue(countSoundPackets(onNoopActivate, SoundEvents.BEACON_ACTIVATE) == 0
+						&& countSoundPackets(onNoopActivate, SoundEvents.BEACON_DEACTIVATE) == 0,
+				"a no-op activate must stay silent");
+
+		be.setActive(false);
+		List<Object> onDeactivate = capture.drainPackets();
+		helper.assertTrue(countSoundPackets(onDeactivate, SoundEvents.BEACON_ACTIVATE) == 0,
+				"a deactivation must not send an activate cue");
+		int deactivates = countSoundPackets(onDeactivate, SoundEvents.BEACON_DEACTIVATE);
+		helper.assertTrue(deactivates == 1,
+				"exactly ONE deactivate cue must be sent on the real transition, got " + deactivates);
+
+		be.setActive(false);
+		List<Object> onNoopDeactivate = capture.drainPackets();
+		helper.assertTrue(countSoundPackets(onNoopDeactivate, SoundEvents.BEACON_DEACTIVATE) == 0
+						&& countSoundPackets(onNoopDeactivate, SoundEvents.BEACON_ACTIVATE) == 0,
+				"a no-op deactivate must stay silent");
+		helper.succeed();
+	}
+
+	/**
 	 * (E4) {@code /bubbleshield log}: the localized empty notice on a fresh
-	 * projector (result 1), one line per threat-log entry afterwards (result 2),
-	 * and the read-only guarantee — the ownerless projector is never claimed.
+	 * projector (result 1), one line per threat-log entry afterwards (result 2) —
+	 * with the REAL chat packets asserted verbatim (fix 9b): each line carries the
+	 * exact "Ns ago" age, the attacker name and the %.1f damage figure, oldest
+	 * entry first — and the read-only guarantee: the ownerless projector is never
+	 * claimed.
 	 */
 	@GameTest(environment = ISOLATED_ENVIRONMENT, padding = 16)
 	public void commandLogPrintsThreatLog(GameTestHelper helper) {
 		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
 		ShieldState state = be.getShieldState();
-		ServerPlayer player = MockPlayers.createUniqueMockPlayer(helper);
+		MockPlayers.CapturingMockPlayer mock = MockPlayers.createCapturingMockPlayer(helper, GameType.CREATIVE);
+		ServerPlayer player = mock.player();
 		try {
+			drainChatLines(mock);
 			int empty = dispatcher(helper).execute("bubbleshield log", player.createCommandSourceStack());
 			helper.assertTrue(empty == 1, "an empty log should print the localized notice (result 1), got " + empty);
+			assertChatLine(helper, drainChatLines(mock), "No recorded attacks");
 
 			long gameTime = helper.getLevel().getGameTime();
 			state.recordThreat("Griefer", 4.5F, gameTime - 100L);
 			state.recordThreat("Raider", 2.25F, gameTime - 40L);
 			int lines = dispatcher(helper).execute("bubbleshield log", player.createCommandSourceStack());
 			helper.assertTrue(lines == 2, "two recorded threats should print two lines, got " + lines);
+
+			// The execution ran synchronously on the tick that recorded the
+			// entries, so the ages and the Locale.ROOT %.1f damage figures are
+			// exact, oldest entry first. The ages are recomputed from the
+			// entries actually stored (recordThreat clamps game times at 0, so
+			// on a young level clock "-100 ticks" may land closer than 5 s).
+			List<String> chat = drainChatLines(mock);
+			helper.assertTrue(chat.size() == 2, "exactly two log lines should reach the player, got " + chat);
+			List<ShieldState.ThreatLogEntry> entries = state.threatLog();
+			String oldest = Math.max(0L, (gameTime - entries.get(0).gameTime()) / 20L)
+					+ "s ago: Griefer (-" + String.format(Locale.ROOT, "%.1f", 4.5F) + ")";
+			String newest = Math.max(0L, (gameTime - entries.get(1).gameTime()) / 20L)
+					+ "s ago: Raider (-" + String.format(Locale.ROOT, "%.1f", 2.25F) + ")";
+			helper.assertTrue(oldest.equals(chat.get(0)),
+					"the first line must be the oldest entry '" + oldest + "', got '" + chat.get(0) + "'");
+			helper.assertTrue(newest.equals(chat.get(1)),
+					"the second line must be the newest entry '" + newest + "', got '" + chat.get(1) + "'");
 
 			helper.assertTrue(state.ownerUuid == null,
 					"log is read-only: the ownerless projector must never be claimed");
@@ -374,10 +524,12 @@ public class UxGameTests {
 
 	/**
 	 * (E4) {@code /bubbleshield status} executes successfully (result 1) and its
-	 * feedback actually mentions the HP readout — asserted against the system-chat
-	 * packets REALLY sent to the invoking player's connection.
+	 * feedback carries the full stat sheet — asserted as EXACT lines (fix 9b),
+	 * built from the same live state/{@code ContainerData} sources the command
+	 * reads on the same tick: HP cur/max, tier + combined DR, regen, drain with
+	 * the time-to-empty projection, cooldown-or-ready, strength% and threats.
 	 */
-	@GameTest(environment = ISOLATED_ENVIRONMENT, padding = 16)
+	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 100, padding = 16)
 	public void commandStatusExecutesAndMentionsHp(GameTestHelper helper) {
 		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
 		be.addFuelSeconds(PLENTY_OF_FUEL);
@@ -386,34 +538,54 @@ public class UxGameTests {
 
 		MockPlayers.CapturingMockPlayer mock = MockPlayers.createCapturingMockPlayer(helper, GameType.CREATIVE);
 		ServerPlayer player = mock.player();
-		try {
-			// Flush the join/setup packet noise before the command under test.
-			while (mock.channel().readOutbound() != null) {
-				// drain
+		// Let the first-tick recompute land so the asserted figures are the
+		// settled tier-1 values (250/250 HP), not the placement defaults.
+		helper.runAfterDelay(2, () -> {
+			ShieldState state = be.getShieldState();
+			var data = be.getMenuData();
+			try {
+				drainChatLines(mock);
+
+				// Snapshot the live figures on THIS tick; the command reads the
+				// same sources synchronously below, so nothing can drift between.
+				String expectHp = "HP: " + Math.round(state.health) + "/" + Math.round(state.maxHealth);
+				String expectTier = "Tier: " + be.tier() + " (DR "
+						+ Math.round(ShieldLogic.combinedDr(be.tier(), be.platingDr()) * 100.0F) + "%)";
+				String expectRegen = "Regen: "
+						+ String.format(Locale.ROOT, "%.1f", data.get(BubbleShieldMenu.DATA_REGEN_PER_MIN_X10) / 10.0F) + "/min";
+				int drainX10 = data.get(BubbleShieldMenu.DATA_DRAIN_PER_MIN_X10);
+				String expectDrain = "Drain: " + String.format(Locale.ROOT, "%.1f", drainX10 / 10.0F) + "/min (empty in "
+						+ ShieldLogic.formatMinutesSeconds(state.fuelSeconds * 600L / drainX10) + ")";
+				String expectStrength = "Strength: " + be.strengthPercent() + "%";
+				String expectThreats = "Threats: " + data.get(BubbleShieldMenu.DATA_THREAT_COUNT);
+				// Pin the concrete tier-1 diameter-8 figures too, so the live
+				// snapshot cannot silently degrade into asserting garbage.
+				helper.assertTrue(expectHp.equals("HP: 250/250"), "the settled tier-1 HP line should be 250/250, got '" + expectHp + "'");
+				helper.assertTrue(expectTier.equals("Tier: 1 (DR 25%)"), "the tier line should read tier 1 / DR 25%, got '" + expectTier + "'");
+				helper.assertTrue(drainX10 == 600, "the diameter-8 baseline drain slot should read 600, got " + drainX10);
+
+				int result = dispatcher(helper).execute("bubbleshield status", player.createCommandSourceStack());
+				helper.assertTrue(result == 1, "status should succeed (result 1), got " + result);
+
+				List<String> chat = drainChatLines(mock);
+				assertChatLine(helper, chat, expectHp);
+				assertChatLine(helper, chat, expectTier);
+				assertChatLine(helper, chat, expectRegen);
+				assertChatLine(helper, chat, expectDrain);
+				assertChatLine(helper, chat, "Cooldown: ready");
+				assertChatLine(helper, chat, expectStrength);
+				assertChatLine(helper, chat, expectThreats);
+
+				helper.assertTrue(state.ownerUuid == null,
+						"status is read-only: the ownerless projector must never be claimed");
+			} catch (CommandSyntaxException e) {
+				helper.assertTrue(false, "status should parse and execute: " + e.getMessage());
+			} finally {
+				MockPlayers.removeMockPlayer(helper, player);
 			}
 
-			int result = dispatcher(helper).execute("bubbleshield status", player.createCommandSourceStack());
-			helper.assertTrue(result == 1, "status should succeed (result 1), got " + result);
-
-			boolean mentionsHp = false;
-			Object message;
-			while ((message = mock.channel().readOutbound()) != null) {
-				if (message instanceof ClientboundSystemChatPacket chat
-						&& chat.content().getString().contains("HP")) {
-					mentionsHp = true;
-				}
-			}
-
-			helper.assertTrue(mentionsHp, "the status feedback should include the HP line");
-			helper.assertTrue(be.getShieldState().ownerUuid == null,
-					"status is read-only: the ownerless projector must never be claimed");
-		} catch (CommandSyntaxException e) {
-			helper.assertTrue(false, "status should parse and execute: " + e.getMessage());
-		} finally {
-			MockPlayers.removeMockPlayer(helper, player);
-		}
-
-		helper.succeed();
+			helper.succeed();
+		});
 	}
 
 	/**
@@ -489,10 +661,18 @@ public class UxGameTests {
 	}
 
 	/**
-	 * (C8) The new loot injections: End City treasure surfaces an Aegis Core
-	 * (1-in-20; 400 misses would be a ~1e-9 fluke) and Ancient City chests a
-	 * 1-2 stack of Patch Kits (1-in-8; 200 misses ~3e-12), while an untouched
-	 * table (simple dungeon) yields neither.
+	 * (C8) The new loot injections: End City treasure surfaces an Aegis Core and
+	 * Ancient City chests a 1-2 stack of Patch Kits, while an untouched table
+	 * (simple dungeon) yields neither.
+	 *
+	 * <p>Fix 9j determinism bound: the loot draws use the level's live
+	 * {@code RandomSource} (the {@code LootParams} chest context offers no seed
+	 * hook), so instead of seeding, the draw counts are sized for a false-failure
+	 * probability below 1e-12 per assertion: the Aegis pool is 1-in-20 per chest
+	 * ({@code CoreLootInjector}), so 560 all-miss draws are a 0.95^560 &asymp;
+	 * 3.3e-13 fluke; the Patch Kit pool is 1-in-8, so 250 misses are 0.875^250
+	 * &asymp; 3.2e-15. The untouched-table checks assert an exact 0 and carry no
+	 * probabilistic risk.
 	 */
 	@GameTest(environment = ISOLATED_ENVIRONMENT)
 	public void lootInjectionSeedsAegisCoresAndPatchKits(GameTestHelper helper) {
@@ -500,12 +680,12 @@ public class UxGameTests {
 		Vec3 origin = Vec3.atCenterOf(helper.absolutePos(PROJECTOR_POS));
 
 		LootTable endCity = level.getServer().reloadableRegistries().getLootTable(BuiltInLootTables.END_CITY_TREASURE);
-		helper.assertTrue(countItemDraws(helper, level, endCity, origin, 400, ModItems.AEGIS_CORE) >= 1,
-				"end city treasure should yield at least one aegis core in 400 draws");
+		helper.assertTrue(countItemDraws(helper, level, endCity, origin, 560, ModItems.AEGIS_CORE) >= 1,
+				"end city treasure should yield at least one aegis core in 560 draws");
 
 		LootTable ancientCity = level.getServer().reloadableRegistries().getLootTable(BuiltInLootTables.ANCIENT_CITY);
-		helper.assertTrue(countItemDraws(helper, level, ancientCity, origin, 200, ModItems.PATCH_KIT) >= 1,
-				"ancient city chests should yield at least one patch kit stack in 200 draws");
+		helper.assertTrue(countItemDraws(helper, level, ancientCity, origin, 250, ModItems.PATCH_KIT) >= 1,
+				"ancient city chests should yield at least one patch kit stack in 250 draws");
 
 		LootTable untouched = level.getServer().reloadableRegistries().getLootTable(BuiltInLootTables.SIMPLE_DUNGEON);
 		helper.assertTrue(countItemDraws(helper, level, untouched, origin, 50, ModItems.AEGIS_CORE) == 0,

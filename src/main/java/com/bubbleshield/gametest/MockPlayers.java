@@ -90,6 +90,50 @@ public final class MockPlayers {
 	 */
 	public record CapturingMockPlayer(ServerPlayer player, EmbeddedChannel channel) {
 		/**
+		 * Drains everything the server has sent this player since the previous
+		 * drain, oldest first (raw messages: packets plus the odd pipeline
+		 * configuration task object). The embedded wire needs two nudges before
+		 * reading, or same-tick packets are invisible and surface in a LATER
+		 * drain where they get misattributed:
+		 *
+		 * <ul>
+		 *   <li>join-window sends: {@code placeNewPlayer} runs before the
+		 *       Connection observes {@code channelActive}, so its packets queue
+		 *       in the Connection's internal pendingActions until the NEXT send
+		 *       replays them. {@code runOnceConnected(no-op)} triggers exactly
+		 *       that replay ({@code flushQueue}) with no side effects.</li>
+		 *   <li>suspended flushes: {@code MinecraftServer.tickChildren} calls
+		 *       {@code suspendFlushing()} on every listed player for the whole
+		 *       in-tick window -- level ticks AND the gametest callbacks run
+		 *       inside it, {@code resumeFlushing()} only comes at end of tick --
+		 *       so in-tick sends are write()s without flush(), and an
+		 *       EmbeddedChannel only exposes FLUSHED messages to readOutbound().
+		 *       {@code flushOutbound()} makes them readable immediately.</li>
+		 * </ul>
+		 *
+		 * <p>Gametest callbacks run on the server thread, which doubles as the
+		 * embedded event loop, so both nudges complete synchronously.
+		 */
+		public List<Object> drainPackets() {
+			this.channel.runPendingTasks();
+			Connection connection = this.channel.pipeline().get(Connection.class);
+			if (connection != null) {
+				connection.runOnceConnected(c -> {
+				});
+			}
+
+			this.channel.flushOutbound();
+
+			List<Object> packets = new ArrayList<>();
+			Object message;
+			while ((message = this.channel.readOutbound()) != null) {
+				packets.add(message);
+			}
+
+			return packets;
+		}
+
+		/**
 		 * Drains every packet captured since the previous drain and returns the
 		 * particle packets among them (other packet types -- sounds, entity data,
 		 * chunk data... -- are discarded). Call once to flush setup noise, then
@@ -97,8 +141,7 @@ public final class MockPlayers {
 		 */
 		public List<ClientboundLevelParticlesPacket> drainParticlePackets() {
 			List<ClientboundLevelParticlesPacket> packets = new ArrayList<>();
-			Object message;
-			while ((message = this.channel.readOutbound()) != null) {
+			for (Object message : drainPackets()) {
 				if (message instanceof ClientboundLevelParticlesPacket particles) {
 					packets.add(particles);
 				}

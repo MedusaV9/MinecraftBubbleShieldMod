@@ -31,11 +31,18 @@ public class AdvancementGameTests {
 	 * batch runs at the runner's 50-tests-per-batch limit, so these tests get their
 	 * own batch instead of splitting/reshuffling the pre-existing suite (see
 	 * ColorGameTests.ISOLATED_ENVIRONMENT for the full story; mocks are now uniquely
-	 * named via {@link MockPlayers}). advancementMaximalist also lives here — see its
-	 * own javadoc for why its diameter-200 shield must not share a batch with tests
-	 * that park mock players across ticks.
+	 * named via {@link MockPlayers}). advancementMaximalist does NOT live here — its
+	 * diameter-200 shield gets the singleton {@link #MAXIMAL_ENVIRONMENT} so its
+	 * ~100-block expel sweep can never touch a concurrently batched test.
 	 */
 	private static final String ISOLATED_ENVIRONMENT = "bubbleshield:advancement";
+	/**
+	 * Singleton environment for {@link #advancementMaximalist} alone,
+	 * {@code data/bubbleshield/test_environment/advancement_maximal.json}: its
+	 * diameter-200 activation sweeps ~100 blocks — several structures over in any
+	 * shared batch grid — so it must never share a batch with ANY other test.
+	 */
+	private static final String MAXIMAL_ENVIRONMENT = "bubbleshield:advancement_maximal";
 	private static final BlockPos PROJECTOR_POS = new BlockPos(4, 2, 4);
 	/** 2 blocks east of {@link #PROJECTOR_POS}: overlaps it at radius 8 (2 &lt; 8 + 8). */
 	private static final BlockPos LINKED_PARTNER_POS = new BlockPos(6, 2, 4);
@@ -104,15 +111,14 @@ public class AdvancementGameTests {
 	}
 
 	/**
-	 * Runs in the isolated advancement batch, NOT the shared default one: the
+	 * Runs alone in its singleton {@link #MAXIMAL_ENVIRONMENT} batch: the
 	 * diameter-200 activation's {@code expelBlockedPlayers} sweep reaches ~100 blocks
-	 * — several structures over in the shared test grid (structures sit ~45 blocks
+	 * — several structures over in any shared test grid (structures sit ~45 blocks
 	 * apart) — and would teleport away mock players that concurrent tests (boss bar
-	 * membership, behavior auras) park inside their own bubbles across ticks. Every
-	 * test in the advancement batch creates and removes its mocks within a single
-	 * synchronous tick, so the sweep can never hit a foreign player there.
+	 * membership, behavior auras) park inside their own bubbles across ticks. A
+	 * batch of one means the sweep can never hit a foreign player or structure.
 	 */
-	@GameTest(environment = ISOLATED_ENVIRONMENT, padding = 16)
+	@GameTest(environment = MAXIMAL_ENVIRONMENT, padding = 16)
 	public void advancementMaximalist(GameTestHelper helper) {
 		// A diameter-16 activation must NOT complete maximalist (fresh player)...
 		BubbleShieldBlockEntity be = placeProjector(helper, 8.0F);

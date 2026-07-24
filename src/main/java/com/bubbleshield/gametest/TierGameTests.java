@@ -118,6 +118,16 @@ public class TierGameTests {
 		});
 	}
 
+	/**
+	 * Fix 9c: exact regen pulse math, pinned on the 40-tick accumulator boundary.
+	 * With {@code regenAccum}/{@code drainDebtMicros} zeroed on a known tick T, a
+	 * tier-1 IN-COMBAT shield (the damage below opens the 200-tick combat gate,
+	 * so no x3 out-of-combat multiplier can leak in) pulses exactly +3.0 HP at
+	 * T+40 and T+80 — nothing at T+39 — while the fuel ledger stays exact: the
+	 * diameter-8 runtime drain pays 1 fuel-second per 20 ticks (T+20/40/60/80)
+	 * and each pulse burns its 1 fuel-second surcharge on top (no capacitor), so
+	 * the totals read 1 at T+39, 3 at T+40 and 6 at T+80.
+	 */
 	@GameTest(maxTicks = 200, padding = 16)
 	public void shieldRegenerates(GameTestHelper helper) {
 		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
@@ -127,37 +137,57 @@ public class TierGameTests {
 		be.addFuelSeconds(PLENTY_OF_FUEL);
 		helper.assertTrue(be.tryActivate(), "shield should activate");
 
-		// Let the first tick's max-health recompute land (tier 1 at diameter 8:
-		// 400 x 0.625 = 250) BEFORE damaging, so the damaged value is exact.
-		helper.runAfterDelay(2, () -> {
-			helper.assertTrue(state.maxHealth == 250.0F, "tier 1 at diameter 8 should have maxHealth 250, got " + state.maxHealth);
-			be.applyShieldDamage(30.0F);
+		int[] fuelAtReset = new int[1];
+		helper.startSequence()
+				// Let the first tick's max-health recompute land (tier 1 at
+				// diameter 8: 400 x 0.625 = 250) BEFORE damaging, so every
+				// figure below is exact.
+				.thenExecuteAfter(2, () -> {
+					helper.assertTrue(state.maxHealth == 250.0F, "tier 1 at diameter 8 should have maxHealth 250, got " + state.maxHealth);
+					// 30 raw is 22.5 after tier 1's 25% DR; 227.5/250 = 91% also
+					// keeps the shield far from the last-stand drain doubling.
+					be.applyShieldDamage(30.0F);
+					helper.assertTrue(state.health == 227.5F, "damaged health should be 227.5, got " + state.health);
 
-			float damagedHealth = state.health;
-			int fuelBefore = state.fuelSeconds;
-			long startTime = helper.getLevel().getGameTime();
-			// 30 raw is 22.5 after tier 1's 25% DR.
-			helper.assertTrue(damagedHealth == 227.5F, "damaged health should be 227.5, got " + damagedHealth);
-
-			// 90 ticks cover at least two 40-tick regen pulses; each pulse heals 3.0
-			// (tier 1, in combat: the damage above opened the 200-tick combat gate)
-			// and burns one fuel-second on top of the 1-per-20-ticks runtime drain.
-			helper.runAfterDelay(90, () -> {
-				helper.assertTrue(state.active, "shield should still be active");
-				helper.assertTrue(
-						state.health > damagedHealth,
-						"a tier-1 fueled shield should regenerate above " + damagedHealth + ", got " + state.health);
-
-				long elapsed = helper.getLevel().getGameTime() - startTime;
-				int fuelUsed = fuelBefore - state.fuelSeconds;
-				long runtimeBaseline = elapsed / 20 + 1;
-				helper.assertTrue(
-						fuelUsed > runtimeBaseline,
-						"regen pulses should drain extra fuel: used " + fuelUsed + " over " + elapsed
-								+ " ticks, runtime baseline " + runtimeBaseline);
-				helper.succeed();
-			});
-		});
+					// Zero both accumulators ON a known tick T (this callback runs
+					// after the same tick's block-entity tick): from here the
+					// pulse fires exactly every 40 active ticks and the runtime
+					// drain pays exactly 1 fuel-second every 20 (diameter 8 = 1
+					// unit, plain 20-tick interval, debt accrual 50000 micros/tick).
+					state.regenAccum = 0;
+					state.drainDebtMicros = 0L;
+					fuelAtReset[0] = state.fuelSeconds;
+				})
+				// T+39: one tick BEFORE the boundary — not a single pulse yet.
+				.thenExecuteAfter(39, () -> {
+					helper.assertTrue(state.regenAccum == 39,
+							"the accumulator should sit at 39 one tick before the boundary, got " + state.regenAccum);
+					helper.assertTrue(state.health == 227.5F,
+							"no pulse may land before the 40-tick boundary, health is " + state.health);
+					int used = fuelAtReset[0] - state.fuelSeconds;
+					helper.assertTrue(used == 1,
+							"fuel ledger at T+39: exactly the 1 runtime fuel-second paid at T+20, used " + used);
+				})
+				// T+40: the boundary tick — exactly one +3.0 pulse plus its surcharge.
+				.thenExecuteAfter(1, () -> {
+					helper.assertTrue(state.regenAccum == 0,
+							"the boundary tick must reset the accumulator, got " + state.regenAccum);
+					helper.assertTrue(state.health == 230.5F,
+							"the first pulse must heal exactly 3.0 on the boundary (227.5 + 3), got " + state.health);
+					int used = fuelAtReset[0] - state.fuelSeconds;
+					helper.assertTrue(used == 3,
+							"fuel ledger at T+40: 2 runtime (T+20, T+40) + 1 pulse surcharge = 3, used " + used);
+				})
+				// T+80: the second boundary — the cumulative ledger stays exact.
+				.thenExecuteAfter(40, () -> {
+					helper.assertTrue(state.active, "shield should still be active");
+					helper.assertTrue(state.health == 233.5F,
+							"two pulses must total exactly +6.0 (227.5 + 6), got " + state.health);
+					int used = fuelAtReset[0] - state.fuelSeconds;
+					helper.assertTrue(used == 6,
+							"fuel ledger at T+80: 4 runtime + 2 pulse surcharges = 6, used " + used);
+				})
+				.thenSucceed();
 	}
 
 	@GameTest(padding = 16)

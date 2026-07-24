@@ -335,10 +335,17 @@ public class WorldIntegrationGameTests {
 	}
 
 	/**
-	 * (c) The loot injection: 200 fresh-context draws of the Ancient City and End City
-	 * treasure tables each surface at least one Resonant Core (the injected pool is a
-	 * 1-in-10 per chest; 200 misses would be a ~7e-10 fluke), while an untouched table
-	 * (simple dungeon) yields none in 50 draws.
+	 * (c) The loot injection: fresh-context draws of the Ancient City and End City
+	 * treasure tables each surface at least one Resonant Core, while an untouched
+	 * table (simple dungeon) yields none in 50 draws.
+	 *
+	 * <p>Fix 9j determinism bound: the draws use the level's live
+	 * {@code RandomSource} (the chest {@code LootParams} context offers no seed
+	 * hook), so the draw count is sized for a false-failure probability below
+	 * 1e-12 per assertion: the injected pool is 1-in-10 per chest
+	 * ({@code CoreLootInjector}), so 270 all-miss draws are a 0.9^270 &asymp;
+	 * 4.4e-13 fluke. The untouched-table check asserts an exact 0 and carries no
+	 * probabilistic risk.
 	 */
 	@GameTest(environment = ISOLATED_ENVIRONMENT)
 	public void lootInjectionSeedsCores(GameTestHelper helper) {
@@ -346,12 +353,12 @@ public class WorldIntegrationGameTests {
 		Vec3 origin = Vec3.atCenterOf(helper.absolutePos(PROJECTOR_POS));
 
 		LootTable ancientCity = level.getServer().reloadableRegistries().getLootTable(BuiltInLootTables.ANCIENT_CITY);
-		helper.assertTrue(countCoreDraws(level, ancientCity, origin, 200) >= 1,
-				"ancient city chests should yield at least one resonant core in 200 draws");
+		helper.assertTrue(countCoreDraws(level, ancientCity, origin, 270) >= 1,
+				"ancient city chests should yield at least one resonant core in 270 draws");
 
 		LootTable endCity = level.getServer().reloadableRegistries().getLootTable(BuiltInLootTables.END_CITY_TREASURE);
-		helper.assertTrue(countCoreDraws(level, endCity, origin, 200) >= 1,
-				"end city treasure should yield at least one resonant core in 200 draws");
+		helper.assertTrue(countCoreDraws(level, endCity, origin, 270) >= 1,
+				"end city treasure should yield at least one resonant core in 270 draws");
 
 		LootTable untouched = level.getServer().reloadableRegistries().getLootTable(BuiltInLootTables.SIMPLE_DUNGEON);
 		helper.assertTrue(countCoreDraws(level, untouched, origin, 50) == 0,
@@ -461,8 +468,7 @@ public class WorldIntegrationGameTests {
 	/** Drains the capture channel, returning the ShieldSyncS2C payloads for the given projector. */
 	private static List<ShieldPayloads.ShieldSyncS2C> drainSyncPayloads(MockPlayers.CapturingMockPlayer capture, BlockPos absPos) {
 		List<ShieldPayloads.ShieldSyncS2C> syncs = new ArrayList<>();
-		Object message;
-		while ((message = capture.channel().readOutbound()) != null) {
+		for (Object message : capture.drainPackets()) {
 			if (message instanceof ClientboundCustomPayloadPacket packet
 					&& packet.payload() instanceof ShieldPayloads.ShieldSyncS2C sync
 					&& sync.pos().equals(absPos)) {

@@ -3,6 +3,7 @@ package com.bubbleshield.gametest;
 import com.bubbleshield.block.BubbleShieldBlockEntity;
 import com.bubbleshield.net.ServerNet;
 import com.bubbleshield.registry.ModBlocks;
+import com.bubbleshield.registry.ModItems;
 import com.bubbleshield.shield.ShieldState;
 
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
@@ -13,14 +14,27 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.ProblemReporter;
+import net.minecraft.world.BossEvent;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Coverage for milestone V3: the in-shield boss bar (membership, progress) and the
- * owner-set custom shield name (persistence, sanitization).
+ * Coverage for milestone V3: the in-shield boss bar (membership, progress,
+ * last-stand overlay round trip) and the owner-set custom shield name
+ * (persistence, sanitization).
  */
 public class BossBarNameGameTests {
+	/**
+	 * A dedicated (but otherwise vanilla-default) test environment,
+	 * {@code data/bubbleshield/test_environment/bossbar.json}, following the
+	 * {@link ColorGameTests} pattern. The vanilla runner batches tests by
+	 * environment (50 per batch, ticked in parallel); without this, the default
+	 * environment would hold 51 tests and spill into a second implicit batch,
+	 * reshuffling which tests overlap in time. Moving this class out keeps the
+	 * default batch at 47.
+	 */
+	private static final String ISOLATED_ENVIRONMENT = "bubbleshield:bossbar";
 	private static final BlockPos PROJECTOR_POS = new BlockPos(4, 2, 4);
 	private static final int PLENTY_OF_FUEL = 600;
 
@@ -31,7 +45,7 @@ public class BossBarNameGameTests {
 		return be;
 	}
 
-	@GameTest(maxTicks = 200, padding = 16)
+	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 200, padding = 16)
 	public void bossBarTracksPlayersInside(GameTestHelper helper) {
 		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
 		be.addFuelSeconds(PLENTY_OF_FUEL);
@@ -67,7 +81,7 @@ public class BossBarNameGameTests {
 		});
 	}
 
-	@GameTest(maxTicks = 200, padding = 16)
+	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 200, padding = 16)
 	public void bossBarProgressTracksDamage(GameTestHelper helper) {
 		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
 		be.addFuelSeconds(PLENTY_OF_FUEL);
@@ -99,7 +113,50 @@ public class BossBarNameGameTests {
 		});
 	}
 
-	@GameTest(padding = 16)
+	/**
+	 * (E3b / fix 9g) The overlay is a live SHAPE cue, not a latch: dropping below
+	 * the 25% last-stand threshold switches PROGRESS to NOTCHED_10, and a REAL
+	 * patch-kit repair (through {@code applyPatchKit}) back above the threshold
+	 * reverts it to PROGRESS on the next tick.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 200, padding = 16)
+	public void bossBarOverlayRevertsAfterRepair(GameTestHelper helper) {
+		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
+		ShieldState state = be.getShieldState();
+		be.addFuelSeconds(PLENTY_OF_FUEL);
+		ServerPlayer owner = MockPlayers.createUniqueMockPlayer(helper);
+		be.setOwner(owner);
+		helper.assertTrue(be.tryActivate(), "shield should activate");
+
+		helper.startSequence()
+				.thenExecuteAfter(2, () -> {
+					helper.assertTrue(state.maxHealth == 125.0F, "tier 0 at diameter 8 should have maxHealth 125, got " + state.maxHealth);
+					ServerBossEvent event = be.getBossEvent();
+					helper.assertTrue(event != null, "an active shield should have created its boss event");
+					helper.assertTrue(event.getOverlay() == BossEvent.BossBarOverlay.PROGRESS,
+							"a full shield uses the PROGRESS overlay");
+
+					// 20/125 = 16%: into last stand (tier 0, no DR on the way down).
+					be.applyShieldDamage(105.0F);
+					helper.assertTrue(state.health == 20.0F, "damaged health should be 20, got " + state.health);
+				})
+				.thenExecuteAfter(2, () -> {
+					helper.assertTrue(be.getBossEvent().getOverlay() == BossEvent.BossBarOverlay.NOTCHED_10,
+							"below the 25% threshold the overlay must switch to NOTCHED_10");
+
+					// The REAL repair path: one kit heals min(150, missing 105) -> 125/125.
+					helper.assertTrue(be.applyPatchKit(owner, new ItemStack(ModItems.PATCH_KIT)),
+							"the owner's patch kit should apply to the active shield");
+					helper.assertTrue(state.health == 125.0F,
+							"the kit should heal back to full (capped at max), got " + state.health);
+				})
+				.thenExecuteAfter(2, () -> helper.assertTrue(
+						be.getBossEvent().getOverlay() == BossEvent.BossBarOverlay.PROGRESS,
+						"back above 25% the overlay must revert to PROGRESS"))
+				.thenSucceed();
+	}
+
+	@GameTest(environment = ISOLATED_ENVIRONMENT, padding = 16)
 	public void nameNbtRoundTrip(GameTestHelper helper) {
 		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
 		be.getShieldState().customName = "Home Base";
@@ -124,7 +181,7 @@ public class BossBarNameGameTests {
 		helper.succeed();
 	}
 
-	@GameTest(padding = 16)
+	@GameTest(environment = ISOLATED_ENVIRONMENT, padding = 16)
 	public void nameSanitization(GameTestHelper helper) {
 		// A 33-char request is capped at the 32-char limit, never stored verbatim.
 		String tooLong = "A".repeat(33);

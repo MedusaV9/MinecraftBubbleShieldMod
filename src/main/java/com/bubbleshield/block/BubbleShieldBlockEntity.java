@@ -161,6 +161,9 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 				// with its own fuel/cost check (it can compute the tier-scaled
 				// cost from DATA_TIER) for the Revive button face.
 				case BubbleShieldMenu.DATA_REVIVE_AVAILABLE -> BubbleShieldBlockEntity.this.reviveAvailable() ? 1 : 0;
+				// Fix 5: exact current health in whole HP (rounded), for the GUI's
+				// "HP: cur/max" row — the permille slot quantizes to max/1000 steps.
+				case BubbleShieldMenu.DATA_HEALTH_WHOLE -> Mth.clamp(Math.round(state.health), 0, Short.MAX_VALUE);
 				default -> 0;
 			};
 		}

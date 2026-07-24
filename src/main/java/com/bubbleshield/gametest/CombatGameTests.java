@@ -26,6 +26,7 @@ import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
 import net.minecraft.world.entity.boss.wither.WitherBoss;
 import net.minecraft.world.entity.monster.cubemob.Slime;
 import net.minecraft.world.entity.monster.zombie.Zombie;
+import net.minecraft.world.entity.projectile.arrow.AbstractArrow;
 import net.minecraft.world.entity.projectile.arrow.Arrow;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -355,8 +356,10 @@ public class CombatGameTests {
 	/**
 	 * (B2) The riposte at tier 1: the intercepted arrow survives, is re-owned to
 	 * the SHIELD owner (so the original shooter is a valid target and kill credit
-	 * goes to the defender) and flies back toward its shooter — while the shield
-	 * still pays the exact post-DR price (3 raw x 0.75 = 2.25).
+	 * goes to the defender), flies back toward its shooter at the deterministic
+	 * {@link ShieldLogic#RIPOSTE_SPEED} with pickup DISALLOWED (fix 9d: no free
+	 * arrow fountain at the shooter's feet) — while the shield still pays the
+	 * exact post-DR price (3 raw x 0.75 = 2.25).
 	 */
 	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 200, padding = 16)
 	public void riposteTierOneReflectsAtShooter(GameTestHelper helper) {
@@ -385,13 +388,185 @@ public class CombatGameTests {
 					"the riposte must still cost the exact post-DR 2.25, health is " + state.health);
 			helper.assertTrue(!arrow.isRemoved(), "tier 1 must REFLECT the arrow, not absorb it");
 			helper.assertTrue(arrow.getOwner() == owner, "the reflected arrow must be re-owned to the shield owner");
+			helper.assertTrue(arrow.pickup == AbstractArrow.Pickup.DISALLOWED,
+					"the reflected arrow's pickup must be DISALLOWED (not farmable), got " + arrow.pickup);
 			Vec3 toShooter = shooter.position().subtract(arrow.position());
 			helper.assertTrue(
 					arrow.getDeltaMovement().dot(toShooter) > 0.0,
 					"the reflected arrow should be moving back toward its shooter");
+			// This callback runs later on the SAME server tick as the block
+			// entity's interception (gametests tick after level ticking), so on
+			// the first passing evaluation the re-aimed velocity is still the
+			// exact riposte launch vector — before drag/gravity touch it.
+			double speed = arrow.getDeltaMovement().length();
+			helper.assertTrue(Math.abs(speed - ShieldLogic.RIPOSTE_SPEED) <= 0.02,
+					"the reflected arrow should launch at RIPOSTE_SPEED " + ShieldLogic.RIPOSTE_SPEED + ", got " + speed);
 			// Keep the reflected arrow inside this structure (batch hygiene).
 			arrow.discard();
 		});
+	}
+
+	/**
+	 * (B2 / fix 9e) The OWNERLESS-arrow branch at tier 1: the riposte gate needs a
+	 * resolvable shooter, so a dispenser-style arrow with no owner is plain
+	 * ABSORBED — removed, no reflection, no owner re-attribution (and no NPE on
+	 * the null shooter) — for the exact post-DR 2.25 (3 raw x 0.75), and with no
+	 * shooter there is nothing to append to the threat log.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 200, padding = 16)
+	public void tierOneDispenserArrowIsAbsorbed(GameTestHelper helper) {
+		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
+		ShieldState state = be.getShieldState();
+		be.getCoreContainer().setItem(0, new ItemStack(ModItems.RESONANT_CORE));
+		ServerPlayer owner = MockPlayers.createUniqueMockPlayer(helper);
+		be.setOwner(owner);
+		be.addFuelSeconds(PLENTY_OF_FUEL);
+		helper.assertTrue(be.tryActivate(), "shield should activate");
+
+		// No setOwner call: the dispenser-fired (ownerless) case.
+		Arrow arrow = helper.spawn(EntityTypes.ARROW, arrowSpawnAboveBoundary());
+		arrow.setDeltaMovement(0.0, -1.5, 0.0);
+
+		helper.succeedWhen(() -> {
+			helper.assertTrue(state.maxHealth == 250.0F, "tier 1 at diameter 8 should have maxHealth 250, got " + state.maxHealth);
+			helper.assertTrue(
+					Math.abs(state.health - 247.75F) <= TOLERANCE,
+					"the ownerless arrow must cost the exact post-DR 2.25, health is " + state.health);
+			helper.assertTrue(arrow.isRemoved(),
+					"an ownerless arrow must be ABSORBED even at tier 1 (the riposte needs a resolvable shooter)");
+			helper.assertTrue(state.threatLog().isEmpty(),
+					"no resolvable shooter means nothing lands in the threat log, got " + state.threatLog().size() + " entries");
+		});
+	}
+
+	/**
+	 * (B6b / fix 9f) The siege-alarm rate limit around {@link ShieldLogic#triggerAlarm}:
+	 * an alarm EVENT at T opens the comparator override for EXACTLY
+	 * {@link ShieldLogic#ALARM_WINDOW_TICKS} real ticks (15 at T+99, back to the
+	 * health-based value at T+100), re-triggers up to T+299 are refused without
+	 * touching the window, and the boundary re-trigger at exactly T+300
+	 * ({@link ShieldLogic#ALARM_REARM_TICKS}) fires a fresh event.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 250, padding = 16)
+	public void alarmRearmRateLimit(GameTestHelper helper) {
+		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
+		ShieldState state = be.getShieldState();
+		be.addFuelSeconds(PLENTY_OF_FUEL);
+		helper.assertTrue(be.tryActivate(), "shield should activate");
+
+		long[] firstEvent = new long[1];
+		helper.startSequence()
+				.thenExecuteAfter(2, () -> {
+					// 75/125 = 60% -> the health-based comparator reads 9, so the
+					// 15-override is unambiguous (a FULL shield would read 15 anyway).
+					be.applyShieldDamage(50.0F);
+					helper.assertTrue(state.health == 75.0F, "damaged health should be 75, got " + state.health);
+
+					long now = helper.getLevel().getGameTime();
+					firstEvent[0] = now;
+					helper.assertTrue(
+							ShieldLogic.triggerAlarm(helper.getLevel(), helper.absolutePos(PROJECTOR_POS), state, now, 4.0),
+							"the first alarm event must fire");
+					helper.assertTrue(state.alarmUntilGameTime == now + ShieldLogic.ALARM_WINDOW_TICKS,
+							"the event must open exactly the " + ShieldLogic.ALARM_WINDOW_TICKS + "-tick window");
+					helper.assertTrue(analogSignal(helper) == 15,
+							"the open window must override the comparator to 15, got " + analogSignal(helper));
+
+					// Rate limit: same-tick and boundary-minus-one re-triggers are
+					// refused and must not touch the open window.
+					helper.assertTrue(
+							!ShieldLogic.triggerAlarm(helper.getLevel(), helper.absolutePos(PROJECTOR_POS), state, now, 4.0),
+							"an immediate re-trigger must be rate-limited");
+					helper.assertTrue(
+							!ShieldLogic.triggerAlarm(helper.getLevel(), helper.absolutePos(PROJECTOR_POS), state,
+									now + ShieldLogic.ALARM_REARM_TICKS - 1, 4.0),
+							"a re-trigger " + (ShieldLogic.ALARM_REARM_TICKS - 1) + " ticks after the event must still be rate-limited");
+					helper.assertTrue(state.alarmUntilGameTime == now + ShieldLogic.ALARM_WINDOW_TICKS,
+							"refused re-triggers must leave the window untouched");
+				})
+				// Real-time window edge: still alarmed (15) on the window's last tick ...
+				.thenExecuteAfter(ShieldLogic.ALARM_WINDOW_TICKS - 1, () -> {
+					long now = helper.getLevel().getGameTime();
+					helper.assertTrue(now == firstEvent[0] + ShieldLogic.ALARM_WINDOW_TICKS - 1,
+							"sequence drift: expected T+" + (ShieldLogic.ALARM_WINDOW_TICKS - 1) + ", at T+" + (now - firstEvent[0]));
+					helper.assertTrue(state.isAlarmed(now), "T+99 is the window's last alarmed tick");
+					helper.assertTrue(analogSignal(helper) == 15,
+							"the comparator must still read 15 on the window's last tick, got " + analogSignal(helper));
+				})
+				// ... and back to the health-based 9 EXACTLY at T+100.
+				.thenExecuteAfter(1, () -> {
+					long now = helper.getLevel().getGameTime();
+					helper.assertTrue(now == firstEvent[0] + ShieldLogic.ALARM_WINDOW_TICKS,
+							"sequence drift: expected T+" + ShieldLogic.ALARM_WINDOW_TICKS + ", at T+" + (now - firstEvent[0]));
+					helper.assertTrue(!state.isAlarmed(now), "the window must close exactly at T+100");
+					helper.assertTrue(analogSignal(helper) == 9,
+							"75/125 reads the health-based 9 after the window, got " + analogSignal(helper));
+
+					// The rearm boundary itself, pinned via the pure gameTime
+					// parameter: exactly ALARM_REARM_TICKS after the first event a
+					// new event fires and opens its own full window.
+					helper.assertTrue(
+							ShieldLogic.triggerAlarm(helper.getLevel(), helper.absolutePos(PROJECTOR_POS), state,
+									firstEvent[0] + ShieldLogic.ALARM_REARM_TICKS, 4.0),
+							"a re-trigger exactly " + ShieldLogic.ALARM_REARM_TICKS + " ticks after the event must fire");
+					helper.assertTrue(
+							state.alarmUntilGameTime == firstEvent[0] + ShieldLogic.ALARM_REARM_TICKS + ShieldLogic.ALARM_WINDOW_TICKS,
+							"the second event must open its own full window");
+				})
+				.thenSucceed();
+	}
+
+	/**
+	 * (B6a / fix 9i) The census identity matrix: with the OWNER, a WHITELISTED
+	 * friend and a STRANGER player all parked inside the census ring
+	 * (radius + 8 = 12), plus one hostile INSIDE the ring and one OUTSIDE it, the
+	 * count settles at exactly 2 — the stranger and the in-ring hostile. The
+	 * owner, the friend and the out-of-ring hostile never register, across
+	 * multiple census passes.
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 200, padding = 16)
+	public void threatCensusIdentityMatrix(GameTestHelper helper) {
+		BubbleShieldBlockEntity be = placeProjector(helper, 4.0F);
+		be.addFuelSeconds(PLENTY_OF_FUEL);
+
+		ServerPlayer owner = MockPlayers.createUniqueMockPlayer(helper);
+		be.setOwner(owner);
+		ServerPlayer friend = MockPlayers.createUniqueMockPlayer(helper);
+		be.whitelistAdd(helper.getLevel().getServer(), friend.getGameProfile().name());
+		ServerPlayer stranger = MockPlayers.createUniqueMockPlayer(helper);
+
+		Vec3 center = shieldCenter(helper);
+		// All three players outside the radius-4 bubble (no barrier pushes to
+		// blur the geometry) but well inside the 12-block census ring.
+		owner.snapTo(center.x + 6.0, center.y, center.z);
+		friend.snapTo(center.x - 6.0, center.y, center.z);
+		stranger.snapTo(center.x, center.y, center.z + 6.0);
+
+		// One hostile inside the ring (7 < 12) ...
+		Zombie inRing = spawnFrozenZombie(helper, new Vec3(4.5, 9.5, 4.5));
+		// ... and one OUTSIDE it: 13 blocks above the center beats the ring while
+		// staying inside this test's own padded cell; no-gravity because it hangs
+		// in the open air above the arena ceiling.
+		Zombie outOfRing = spawnFrozenZombie(helper, new Vec3(4.5, 15.5, 4.5));
+		outOfRing.setNoGravity(true);
+
+		helper.assertTrue(be.tryActivate(), "shield should activate");
+		helper.startSequence()
+				.thenWaitUntil(() -> helper.assertTrue(
+						be.threatCount() == 2 && be.getMenuData().get(BubbleShieldMenu.DATA_THREAT_COUNT) == 2,
+						"the census must count exactly the stranger + the in-ring hostile (2), got " + be.threatCount()))
+				// Two more once-per-second census passes: the count must HOLD at 2
+				// (the owner, the friend and the far hostile never join it).
+				.thenExecuteAfter(2 * ShieldLogic.THREAT_CENSUS_PERIOD_TICKS + 2, () -> {
+					try {
+						helper.assertTrue(be.threatCount() == 2,
+								"the identity matrix must stay at exactly 2 across later censuses, got " + be.threatCount());
+					} finally {
+						inRing.discard();
+						outOfRing.discard();
+					}
+				})
+				.thenSucceed();
 	}
 
 	/**
