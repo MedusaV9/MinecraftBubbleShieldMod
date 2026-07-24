@@ -1,11 +1,13 @@
 package com.bubbleshield.block;
 
 import com.bubbleshield.registry.ModBlockEntities;
+import com.bubbleshield.registry.ModItems;
 import com.bubbleshield.shield.ShieldState;
 import com.mojang.serialization.MapCodec;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
@@ -59,6 +61,36 @@ public class BubbleShieldBlock extends BaseEntityBlock {
 		}
 
 		return InteractionResult.SUCCESS;
+	}
+
+	/**
+	 * C3 patch kit: a held patch kit takes precedence over the menu-open fallback —
+	 * but ONLY when it actually takes effect (heal an active shield / shorten a break
+	 * cooldown, owner/whitelisted only; see
+	 * {@link BubbleShieldBlockEntity#applyPatchKit}). A no-op kit (full health,
+	 * no cooldown, or an unauthorized user) returns {@code TRY_WITH_EMPTY_HAND} so
+	 * the interaction falls through to {@link #useWithoutItem} and the menu opens
+	 * exactly as it does for every other held item. Sneak-use keeps the vanilla
+	 * convention: block interaction is skipped entirely while sneaking with an item,
+	 * so a sneaking player places blocks/uses the item rather than patching.
+	 */
+	@Override
+	protected InteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hitResult) {
+		if (stack.is(ModItems.PATCH_KIT)) {
+			if (level.isClientSide()) {
+				// Optimistic swing; the server below is authoritative (and falls back
+				// to opening the menu itself when the kit turns out to be a no-op).
+				return InteractionResult.SUCCESS;
+			}
+
+			if (level.getBlockEntity(pos) instanceof BubbleShieldBlockEntity blockEntity && blockEntity.applyPatchKit(player, stack)) {
+				return InteractionResult.SUCCESS;
+			}
+
+			return InteractionResult.TRY_WITH_EMPTY_HAND;
+		}
+
+		return super.useItemOn(stack, state, level, pos, player, hand, hitResult);
 	}
 
 	@Override

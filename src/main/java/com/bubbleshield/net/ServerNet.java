@@ -210,7 +210,12 @@ public final class ServerNet {
 
 			if (payload.active()) {
 				// Credit the requesting player with the shield_activated criterion on success.
-				shield.tryActivate(ctx.player());
+				// A7: when the plain activation fails, offer the emergency revive — it
+				// only fires when the failure was SOLELY the break cooldown and the
+				// owner has at least REVIVE_FUEL_COST stored fuel-seconds to pay.
+				if (!shield.tryActivate(ctx.player())) {
+					shield.tryEmergencyRevive(ctx.player());
+				}
 			} else {
 				shield.setActive(false);
 			}

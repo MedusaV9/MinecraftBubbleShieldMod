@@ -99,8 +99,29 @@ public final class ShieldLogic {
 	public static final float ECO_RADIUS_FACTOR = 0.75F;
 	/** An active shield with cycleEffect enabled re-rolls its effect once per this many ticks. */
 	public static final int EFFECT_CYCLE_PERIOD_TICKS = 600;
+	/**
+	 * A7 emergency revive: an owner may skip a running break cooldown by paying this
+	 * many stored fuel-seconds; the shield reactivates at
+	 * {@link #REVIVE_HEALTH_FRACTION} of its max health. Shared with the client GUI
+	 * so the Activate button can flip to its "Revive (-400 fuel)" face exactly when
+	 * the server would accept the request.
+	 */
+	public static final int REVIVE_FUEL_COST = 400;
+	/** Health fraction a revived shield restarts at (see {@link #REVIVE_FUEL_COST}). */
+	public static final float REVIVE_HEALTH_FRACTION = 0.5F;
+	/** C3 patch kit: HP restored per kit used on an ACTIVE projector (capped at max health). */
+	public static final float PATCH_KIT_HEAL = 150.0F;
 
 	private ShieldLogic() {
+	}
+
+	/**
+	 * C3 patch kit on a broken (cooling-down) projector: each kit cuts the REMAINING
+	 * cooldown by 20% of the tier's FULL break cooldown (so repeated uses stack
+	 * linearly). All table values are divisible by 5, so the integer division is exact.
+	 */
+	public static long patchKitCooldownReduction(int tier) {
+		return breakCooldownTicks(tier) / 5L;
 	}
 
 	/**

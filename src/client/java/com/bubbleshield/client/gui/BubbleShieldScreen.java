@@ -4,6 +4,7 @@ import com.bubbleshield.BubbleShield;
 import com.bubbleshield.menu.BubbleShieldMenu;
 import com.bubbleshield.net.ShieldPayloads;
 import com.bubbleshield.shield.BeamStyle;
+import com.bubbleshield.shield.ShieldLogic;
 import com.bubbleshield.shield.ShieldMode;
 import com.bubbleshield.shield.ShieldShape;
 
@@ -20,6 +21,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Inventory;
+
+import org.jspecify.annotations.Nullable;
 
 /**
  * Furnace-like screen for the bubble shield projector. Uses the 26.2 extractor-based
@@ -56,6 +59,7 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 				.bounds(x, this.topPos + 12, width, 13)
 				.build()
 		);
+		this.activateButton.setTooltip(this.activateTooltip());
 
 		this.diameterSlider = this.addRenderableWidget(new DiameterSlider(x, this.topPos + 26, width, 13, this.menu));
 
@@ -109,11 +113,35 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 	}
 
 	private void toggleActive() {
+		// During a break cooldown the "activate" request doubles as the A7 emergency
+		// revive: the server accepts it when the sender owns the shield and at least
+		// REVIVE_FUEL_COST fuel-seconds are stored (and simply ignores it otherwise),
+		// so the same payload serves both button faces.
 		ClientPlayNetworking.send(new ShieldPayloads.SetActiveC2S(this.menu.pos(), !this.menu.isActive()));
 	}
 
+	/**
+	 * A7: true while the projector is in break cooldown AND holds at least the
+	 * revive fee — exactly when the server-side SetActiveC2S handler would accept
+	 * an emergency revive, so the Activate button flips to its "Revive" face.
+	 */
+	private boolean reviveAffordable() {
+		return !this.menu.isActive()
+				&& this.menu.cooldownSeconds() > 0
+				&& this.menu.fuelSeconds() >= ShieldLogic.REVIVE_FUEL_COST;
+	}
+
 	private Component activateLabel() {
-		return Component.translatable(this.menu.isActive() ? "gui.bubbleshield.deactivate" : "gui.bubbleshield.activate");
+		if (this.menu.isActive()) {
+			return Component.translatable("gui.bubbleshield.deactivate");
+		}
+
+		return Component.translatable(this.reviveAffordable() ? "gui.bubbleshield.revive" : "gui.bubbleshield.activate");
+	}
+
+	/** The revive face carries the cost/health tooltip; the plain faces carry none. */
+	private @Nullable Tooltip activateTooltip() {
+		return this.reviveAffordable() ? Tooltip.create(Component.translatable("gui.bubbleshield.revive.tooltip")) : null;
 	}
 
 	/**
@@ -187,6 +215,7 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 		super.containerTick();
 		// The active flag is server-authoritative and arrives via data slots.
 		this.activateButton.setMessage(this.activateLabel());
+		this.activateButton.setTooltip(this.activateTooltip());
 		// ContainerData arrives after init(), so the slider must re-sync once the
 		// real diameter shows up (and whenever the server changes it).
 		this.diameterSlider.syncFromMenu();

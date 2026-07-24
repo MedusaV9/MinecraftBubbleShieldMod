@@ -677,6 +677,120 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	}
 
 	/**
+	 * A7 emergency revive: skips a RUNNING break cooldown for
+	 * {@link ShieldLogic#REVIVE_FUEL_COST} stored fuel-seconds, reactivating the
+	 * shield at {@link ShieldLogic#REVIVE_HEALTH_FRACTION} of its max health.
+	 * Only applies when a plain {@link #tryActivate} would fail SOLELY because of
+	 * the cooldown (fuel is present — and at least the revive cost) and the
+	 * initiator passes the same ownership rule as every other mutating request
+	 * ({@link ServerNet#isOwner}: an ownerless projector is claimed by the first
+	 * interacting player). Called from the SetActiveC2S handler after a failed
+	 * tryActivate; redstone edges never revive (no initiating player).
+	 *
+	 * @return true if the shield was revived (it is active afterwards).
+	 */
+	public boolean tryEmergencyRevive(ServerPlayer initiator) {
+		if (!(this.level instanceof ServerLevel serverLevel)) {
+			return false;
+		}
+
+		ShieldState state = this.shieldState;
+		long gameTime = serverLevel.getGameTime();
+		// The ONLY canActivate failure the revive may bypass is the cooldown:
+		// an active shield has nothing to revive, an elapsed cooldown needs no
+		// revive, and the fuel gate is strictly TIGHTENED (>= 400, not > 0).
+		if (state.active || gameTime >= state.cooldownUntil || state.fuelSeconds < ShieldLogic.REVIVE_FUEL_COST) {
+			return false;
+		}
+
+		if (!ServerNet.isOwner(initiator, this)) {
+			return false;
+		}
+
+		// Clear the cooldown, then run the REAL activation path (game event, expel,
+		// chunk ticket, shield_activated criterion) before charging the fee: with
+		// exactly 400 fuel the fee would zero the tank and canActivate would refuse.
+		state.cooldownUntil = gameTime;
+		// The cooldown is gone; the pending "shield ready again" ping is moot.
+		state.readyAnnounced = true;
+		if (!this.tryActivate(initiator)) {
+			this.markUpdated();
+			return false;
+		}
+
+		state.fuelSeconds -= ShieldLogic.REVIVE_FUEL_COST;
+		state.health = ShieldLogic.REVIVE_HEALTH_FRACTION * state.maxHealth;
+		serverLevel.playSound(null, this.worldPosition, SoundEvents.RESPAWN_ANCHOR_CHARGE, SoundSource.BLOCKS, 1.0F, 0.8F);
+		this.markUpdated();
+		return true;
+	}
+
+	/**
+	 * C3 patch kit application (the block routes a patch-kit {@code useItemOn}
+	 * here BEFORE the menu-open fallback). Owner/whitelisted only — the same
+	 * subjects the barrier admits ({@link ShieldLogic#shouldBlock}), with an
+	 * ownerless projector claimed by the first interacting player like every
+	 * other mutating path. Two effects:
+	 * <ul>
+	 * <li>ACTIVE shield: restore {@link ShieldLogic#PATCH_KIT_HEAL} HP, capped at
+	 * max health; the kit is only consumed when at least 1 HP was actually healed.</li>
+	 * <li>Broken (cooling-down) shield: cut the remaining cooldown by 20% of the
+	 * tier's FULL cooldown ({@link ShieldLogic#patchKitCooldownReduction}), never
+	 * below 1 remaining tick; the kit is only consumed when it reduced something.</li>
+	 * </ul>
+	 *
+	 * @return true if the kit took effect (one item was consumed from {@code stack});
+	 * false leaves the stack untouched and lets the interaction fall through.
+	 */
+	public boolean applyPatchKit(Player player, ItemStack stack) {
+		if (!(this.level instanceof ServerLevel serverLevel) || !stack.is(ModItems.PATCH_KIT)) {
+			return false;
+		}
+
+		ShieldState state = this.shieldState;
+		UUID uuid = player.getUUID();
+		boolean allowed = !ShieldLogic.shouldBlock(state, player.getGameProfile().name(), uuid, uuid.equals(state.ownerUuid));
+		if (!allowed && player instanceof ServerPlayer serverPlayer) {
+			// Mirrors the settings paths: the first interacting player claims an
+			// ownerless projector (isOwner only ever claims when ownerUuid == null).
+			allowed = ServerNet.isOwner(serverPlayer, this);
+		}
+
+		if (!allowed) {
+			return false;
+		}
+
+		long gameTime = serverLevel.getGameTime();
+		if (state.active) {
+			float healed = Math.min(ShieldLogic.PATCH_KIT_HEAL, state.maxHealth - state.health);
+			if (healed < 1.0F) {
+				return false;
+			}
+
+			state.health += healed;
+		} else if (gameTime < state.cooldownUntil) {
+			long remaining = state.cooldownUntil - gameTime;
+			long reduced = Math.max(1L, remaining - ShieldLogic.patchKitCooldownReduction(this.tier()));
+			if (reduced >= remaining) {
+				return false;
+			}
+
+			state.cooldownUntil = gameTime + reduced;
+		} else {
+			// Inactive without a cooldown: nothing to patch.
+			return false;
+		}
+
+		stack.shrink(1);
+		serverLevel.playSound(null, this.worldPosition, SoundEvents.AMETHYST_BLOCK_CHIME, SoundSource.BLOCKS, 1.0F, 1.2F);
+		Vec3 center = Vec3.atCenterOf(this.worldPosition);
+		serverLevel.sendParticles(ParticleTypes.HAPPY_VILLAGER, true, false,
+				center.x, center.y + 0.8, center.z, 8, 0.4, 0.4, 0.4, 0.0);
+		this.markUpdated();
+		return true;
+	}
+
+	/**
 	 * Records the given player as the shield's owner and whitelists them.
 	 * Called on placement and when the first player interacts with an ownerless shield.
 	 */

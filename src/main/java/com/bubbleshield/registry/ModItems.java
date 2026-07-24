@@ -25,6 +25,7 @@ public final class ModItems {
 	public static final ResourceKey<Item> PRISMATIC_CORE_KEY = ResourceKey.create(Registries.ITEM, BubbleShield.id("prismatic_core"));
 	public static final ResourceKey<Item> AEGIS_CORE_KEY = ResourceKey.create(Registries.ITEM, BubbleShield.id("aegis_core"));
 	public static final ResourceKey<Item> FLUX_CAPACITOR_KEY = ResourceKey.create(Registries.ITEM, BubbleShield.id("flux_capacitor"));
+	public static final ResourceKey<Item> PATCH_KIT_KEY = ResourceKey.create(Registries.ITEM, BubbleShield.id("patch_kit"));
 
 	/**
 	 * An item whose hover tooltip carries one static translatable line —
@@ -102,6 +103,21 @@ public final class ModItems {
 		)
 	);
 
+	/**
+	 * C3 repair consumable: right-click an ACTIVE owned/whitelisted projector to
+	 * restore 150 shield HP (capped at max), or a broken (cooling-down) one to cut
+	 * the remaining break cooldown by 20% of the tier's full cooldown.
+	 */
+	public static final Item PATCH_KIT = Registry.register(
+		BuiltInRegistries.ITEM,
+		PATCH_KIT_KEY,
+		new TooltipItem(
+			new Item.Properties()
+				.stacksTo(16)
+				.setId(PATCH_KIT_KEY)
+		)
+	);
+
 	private ModItems() {
 	}
 
@@ -113,6 +129,7 @@ public final class ModItems {
 				output.accept(PRISMATIC_CORE);
 				output.accept(AEGIS_CORE);
 				output.accept(FLUX_CAPACITOR);
+				output.accept(PATCH_KIT);
 			});
 	}
 }
