@@ -12,9 +12,10 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * Tiny client-side store of recent shield surface events, fed by
- * {@link ImpactFxManager}'s {@code ImpactBatchS2C} receiver and consumed by future
- * surface-reaction work (WP-Dyn: mesh deformation reads {@link #impactsAt} per
- * rendered shield). Deliberately minimal API: add, read, prune, clear.
+ * {@link ImpactFxManager}'s {@code ImpactBatchS2C} receiver (plus
+ * {@link ApertureTracker}'s zero-latency local PASSAGE appends) and consumed by
+ * WP-Dyn's mesh deformation ({@code ShieldRenderer} reads {@link #impactsAt}
+ * per rendered shield). Deliberately minimal API: add, read, prune, clear.
  *
  * <p>Per shield the deque keeps at most {@link #MAX_PER_SHIELD} newest impacts
  * (matching the wire batch cap), each expiring {@link #TTL_TICKS} client ticks

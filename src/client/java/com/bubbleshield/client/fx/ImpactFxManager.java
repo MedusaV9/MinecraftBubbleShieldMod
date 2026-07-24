@@ -51,12 +51,14 @@ public final class ImpactFxManager {
 
 	private static void endClientTick(Minecraft mc) {
 		ImpactTracker.endClientTick(mc);
+		ApertureTracker.endClientTick(mc);
 		ContactFlash.tick(mc);
 		ProximityHum.tick(mc);
 	}
 
 	private static void resetAll() {
 		ImpactTracker.clear();
+		ApertureTracker.clear();
 		ContactFlash.reset();
 		ProximityHum.stop();
 	}

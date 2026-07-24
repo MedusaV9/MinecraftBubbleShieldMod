@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.bubbleshield.client.fx.ApertureTracker;
 import com.bubbleshield.client.fx.ImpactTracker;
 import com.bubbleshield.net.ShieldPayloads;
 import com.bubbleshield.shield.ShieldGeometry;
@@ -199,8 +200,10 @@ public final class ClientShieldManager {
 			GlobalPos pos = new GlobalPos(payload.dimension(), payload.pos());
 			SHIELDS.remove(pos);
 			// Fabric allows one global receiver per payload type, so the impact
-			// store's per-shield cleanup rides this receiver rather than its own.
+			// and aperture stores' per-shield cleanup rides this receiver rather
+			// than their own.
 			ImpactTracker.remove(pos);
+			ApertureTracker.remove(pos);
 		}));
 
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> client.execute(SHIELDS::clear));
