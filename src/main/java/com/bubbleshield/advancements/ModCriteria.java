@@ -28,6 +28,8 @@ public final class ModCriteria {
 		BuiltInRegistries.TRIGGER_TYPES, BubbleShield.id("shield_recolored"), new ShieldRecoloredTrigger());
 	public static final ShieldsLinkedTrigger SHIELDS_LINKED = Registry.register(
 		BuiltInRegistries.TRIGGER_TYPES, BubbleShield.id("shields_linked"), new ShieldsLinkedTrigger());
+	public static final DamageAbsorbedTrigger DAMAGE_ABSORBED = Registry.register(
+		BuiltInRegistries.TRIGGER_TYPES, BubbleShield.id("damage_absorbed"), new DamageAbsorbedTrigger());
 
 	private ModCriteria() {
 	}
@@ -57,6 +59,23 @@ public final class ModCriteria {
 		ServerPlayer owner = level.getServer().getPlayerList().getPlayer(ownerUuid);
 		if (owner != null) {
 			SHIELDS_LINKED.trigger(owner);
+		}
+	}
+
+	/**
+	 * Fires {@link #DAMAGE_ABSORBED} for the shield's owner if they are online,
+	 * carrying the projector's lifetime absorbed total (C7 "unbroken"). Same
+	 * owner-resolution rule as {@link #fireShieldBroken}: no owner or an offline
+	 * owner resolves to nobody and awards nothing.
+	 */
+	public static void fireDamageAbsorbed(ServerLevel level, @Nullable UUID ownerUuid, float absorbedTotal) {
+		if (ownerUuid == null) {
+			return;
+		}
+
+		ServerPlayer owner = level.getServer().getPlayerList().getPlayer(ownerUuid);
+		if (owner != null) {
+			DAMAGE_ABSORBED.trigger(owner, absorbedTotal);
 		}
 	}
 }

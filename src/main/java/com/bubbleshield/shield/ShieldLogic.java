@@ -202,9 +202,31 @@ public final class ShieldLogic {
 	 * call site (B3).
 	 */
 	public static float appliedDamage(float raw, int tier, float platingDr, boolean lastStand) {
+		return raw * (1.0F - combinedDr(tier, platingDr)) * (lastStand ? 0.5F : 1.0F);
+	}
+
+	/**
+	 * The combined tier-x-plating damage resistance in [0, {@link #MAX_COMBINED_DR}]:
+	 * the exact fraction {@link #appliedDamage} negates (before the last-stand
+	 * halving). Pure; shared by the damage pipeline, the GUI's DR readout and the
+	 * {@code /bubbleshield status} line so the displayed percent can never drift
+	 * from the math.
+	 */
+	public static float combinedDr(int tier, float platingDr) {
 		float tierDr = TIER_DR_BY_TIER[Math.clamp(tier, 0, TIER_DR_BY_TIER.length - 1)];
-		float combinedDr = Math.min(MAX_COMBINED_DR, 1.0F - (1.0F - tierDr) * (1.0F - platingDr));
-		return raw * (1.0F - combinedDr) * (lastStand ? 0.5F : 1.0F);
+		return Math.min(MAX_COMBINED_DR, 1.0F - (1.0F - tierDr) * (1.0F - platingDr));
+	}
+
+	/**
+	 * Formats a duration in whole seconds as "m:ss" (e.g. 605 -&gt; "10:05");
+	 * negative inputs clamp to "0:00". Shared by the GUI cooldown label, the
+	 * Activate button's "Ready in ..." tooltip and the {@code /bubbleshield status}
+	 * time readouts.
+	 */
+	public static String formatMinutesSeconds(long totalSeconds) {
+		long clamped = Math.max(0L, totalSeconds);
+		long seconds = clamped % 60L;
+		return (clamped / 60L) + ":" + (seconds < 10L ? "0" : "") + seconds;
 	}
 
 	/**
@@ -939,6 +961,9 @@ public final class ShieldLogic {
 			}
 
 			triggerAlarm(level, pos, state, gameTime, preHitRadius);
+			// C7 "unbroken": lifetime absorbed damage feeds the damage_absorbed
+			// criterion for the (online) owner; idempotent once awarded.
+			ModCriteria.fireDamageAbsorbed(level, state.ownerUuid, state.absorbedTotal);
 
 			changed = true;
 			// The hit shrank the shield: later projectiles in this same volley must
@@ -948,7 +973,15 @@ public final class ShieldLogic {
 			// overrideLimiter=true lifts the 32-block send limit so the hit burst is
 			// visible to players far from the projector on large bubbles.
 			level.sendParticles(ParticleTypes.CRIT, true, false, current.x, current.y, current.z, 20, 0.3, 0.3, 0.3, 0.1);
-			level.playSound(null, pos, SoundEvents.SHIELD_BLOCK.value(), SoundSource.BLOCKS, 1.0F, 1.0F);
+			// E2: the block sound's pitch rises as the shield weakens —
+			// 0.8 + 0.6 x (1 - healthFrac), evaluated on the POST-hit health (a
+			// breaking hit counts as fraction 0: applyDamage already restored the
+			// health for the next activation, so the pre-reset fraction is gone).
+			float postHitFrac = broke || state.maxHealth <= 0.0F
+					? 0.0F
+					: Mth.clamp(state.health / state.maxHealth, 0.0F, 1.0F);
+			level.playSound(null, pos, SoundEvents.SHIELD_BLOCK.value(), SoundSource.BLOCKS, 1.0F,
+					0.8F + 0.6F * (1.0F - postHitFrac));
 			if (broke) {
 				onShieldBreak(level, pos, state, preHitRadius);
 			}

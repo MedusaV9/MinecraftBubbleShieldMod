@@ -1,0 +1,30 @@
+{
+  "parent": "bubbleshield:shield_raised",
+  "criteria": {
+    "tier1_shield_activated": {
+      "conditions": {
+        "tier": {
+          "min": 1
+        }
+      },
+      "trigger": "bubbleshield:shield_activated"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancements.bubbleshield.reinforced.description"
+    },
+    "icon": {
+      "id": "bubbleshield:resonant_core"
+    },
+    "title": {
+      "translate": "advancements.bubbleshield.reinforced.title"
+    }
+  },
+  "requirements": [
+    [
+      "tier1_shield_activated"
+    ]
+  ],
+  "sends_telemetry_event": false
+}

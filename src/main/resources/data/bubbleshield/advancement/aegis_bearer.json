@@ -1,0 +1,31 @@
+{
+  "parent": "bubbleshield:bastion",
+  "criteria": {
+    "tier3_shield_activated": {
+      "conditions": {
+        "tier": {
+          "min": 3
+        }
+      },
+      "trigger": "bubbleshield:shield_activated"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancements.bubbleshield.aegis_bearer.description"
+    },
+    "frame": "goal",
+    "icon": {
+      "id": "bubbleshield:aegis_core"
+    },
+    "title": {
+      "translate": "advancements.bubbleshield.aegis_bearer.title"
+    }
+  },
+  "requirements": [
+    [
+      "tier3_shield_activated"
+    ]
+  ],
+  "sends_telemetry_event": false
+}

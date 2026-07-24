@@ -1,0 +1,30 @@
+{
+  "parent": "bubbleshield:reinforced",
+  "criteria": {
+    "tier2_shield_activated": {
+      "conditions": {
+        "tier": {
+          "min": 2
+        }
+      },
+      "trigger": "bubbleshield:shield_activated"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancements.bubbleshield.bastion.description"
+    },
+    "icon": {
+      "id": "bubbleshield:prismatic_core"
+    },
+    "title": {
+      "translate": "advancements.bubbleshield.bastion.title"
+    }
+  },
+  "requirements": [
+    [
+      "tier2_shield_activated"
+    ]
+  ],
+  "sends_telemetry_event": false
+}

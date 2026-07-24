@@ -89,9 +89,11 @@ public class BossBarNameGameTests {
 				helper.assertTrue(
 						Math.abs(event.getProgress() - 0.76F) < 0.02F,
 						"the boss bar should track applyShieldDamage (95/125), got " + event.getProgress());
+				// E7: the name carries the health readout quantized to 5% steps —
+				// 95/125 = 76% quantizes to 75%.
 				helper.assertTrue(
-						"Home Base".equals(event.getName().getString()),
-						"the boss bar should show the custom name, got " + event.getName().getString());
+						"Home Base \u00b7 75%".equals(event.getName().getString()),
+						"the boss bar should show the custom name + quantized percent, got " + event.getName().getString());
 				helper.succeed();
 			});
 		});

@@ -430,6 +430,17 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 				this.threatCount = 0;
 			}
 
+			// E3d ready ping: exactly once, when an UNREVIVED break cooldown expires
+			// naturally while the projector is loaded (this ticker running IS the
+			// loaded check). A revive pre-empts it (tryEmergencyRevive sets the flag
+			// true), and the flag defaults true so pre-feature saves never ping.
+			if (!this.shieldState.active && !this.shieldState.readyAnnounced
+					&& serverLevel.getGameTime() >= this.shieldState.cooldownUntil) {
+				this.shieldState.readyAnnounced = true;
+				serverLevel.playSound(null, this.worldPosition, SoundEvents.BELL_RESONATE, SoundSource.BLOCKS, 0.8F, 1.5F);
+				this.markUpdated();
+			}
+
 			// B6: refresh the comparator when the alarm window EXPIRES. The trigger
 			// side already refreshes through markUpdated; the expiry is pure clock
 			// passage that no mutation path would otherwise notice, leaving a stale
@@ -557,7 +568,14 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		// ServerBossEvent's setters only broadcast on an actual change.
 		event.setName(this.bossBarName());
 		event.setColor(color);
-		event.setProgress(state.maxHealth > 0.0F ? Mth.clamp(state.health / state.maxHealth, 0.0F, 1.0F) : 0.0F);
+		float healthFrac = state.maxHealth > 0.0F ? Mth.clamp(state.health / state.maxHealth, 0.0F, 1.0F) : 0.0F;
+		event.setProgress(healthFrac);
+		// E3b: below the 25% last-stand threshold the bar switches to the notched
+		// overlay as a shape cue (never color-only); ServerBossEvent.setOverlay
+		// only broadcasts on an actual change.
+		event.setOverlay(healthFrac < ShieldLogic.LAST_STAND_FRACTION
+				? BossEvent.BossBarOverlay.NOTCHED_10
+				: BossEvent.BossBarOverlay.PROGRESS);
 
 		Vec3 center = Vec3.atCenterOf(this.worldPosition);
 		double radius = this.currentRadius();
@@ -580,22 +598,29 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	}
 
 	/**
-	 * The boss bar display name: the owner-set custom name, or the effect name when
-	 * unset. While the B6 siege-alarm window is open, the localized UNDER ATTACK
-	 * suffix is appended; {@code updateBossBar} recomputes this every tick and
-	 * {@link ServerBossEvent#setName} only broadcasts when the computed component
-	 * actually differs (WP2 coalescing pattern), so the suffix appearing/reverting
-	 * costs exactly one packet each.
+	 * The boss bar display name: the owner-set custom name (or the effect name when
+	 * unset) plus the E7 health readout " · NN%", QUANTIZED to 5% steps so the name
+	 * component — and with it the setName broadcast — only changes when the health
+	 * crosses a 5% boundary (per-hit re-sends stay coalesced away). While the B6
+	 * siege-alarm window is open, the localized UNDER ATTACK suffix is appended
+	 * after the percent ("&lt;name&gt; · NN% — UNDER ATTACK!"); {@code updateBossBar}
+	 * recomputes this every tick and {@link ServerBossEvent#setName} only
+	 * broadcasts when the computed component actually differs (WP2 coalescing
+	 * pattern), so a suffix change costs exactly one packet.
 	 */
 	private Component bossBarName() {
 		String customName = this.shieldState.customName;
 		Component base = customName.isEmpty()
 				? Component.translatable(EffectRegistry.get(this.shieldState.effectId).nameKey())
 				: Component.literal(customName);
+		ShieldState state = this.shieldState;
+		float healthFrac = state.maxHealth > 0.0F ? Mth.clamp(state.health / state.maxHealth, 0.0F, 1.0F) : 0.0F;
+		int percent = Math.round(healthFrac * 20.0F) * 5;
+		var named = Component.empty().append(base).append(Component.literal(" \u00b7 " + percent + "%"));
 		long gameTime = this.level != null ? this.level.getGameTime() : 0L;
 		return this.shieldState.isAlarmed(gameTime)
-				? Component.empty().append(base).append(Component.translatable("gui.bubbleshield.bossbar.alarm"))
-				: base;
+				? named.append(Component.translatable("gui.bubbleshield.bossbar.alarm"))
+				: named;
 	}
 
 	/**
@@ -758,6 +783,9 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 			// Only a REAL inactive->active transition is a sculk-audible activation;
 			// re-activating an already-active shield never reaches this branch.
 			this.level.gameEvent(GameEvent.BLOCK_ACTIVATE, this.worldPosition, GameEvent.Context.of(this.getBlockState()));
+			// E3c: the audible activation cue (the revive path additionally plays
+			// its own RESPAWN_ANCHOR_CHARGE on top).
+			this.level.playSound(null, this.worldPosition, SoundEvents.BEACON_ACTIVATE, SoundSource.BLOCKS, 1.0F, 1.2F);
 			// Expel non-whitelisted players already standing inside the freshly raised
 			// barrier — and, in DEFENSE mode, hostile monsters as well (A5;
 			// expelBlockedMonsters is a no-op for PULSE/ECO).
@@ -770,8 +798,10 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 
 			// Only a real inactive->active transition counts as an activation; a no-op
 			// re-activation of an already-active shield must not award the criterion.
+			// C7: the tier rides along so the Bulwark chain (reinforced/bastion/
+			// aegis_bearer) can gate on min-tier bounds.
 			if (initiator != null) {
-				ModCriteria.SHIELD_ACTIVATED.trigger(initiator, Math.round(this.shieldState.targetRadius * 2.0F), this.shieldState.effectId);
+				ModCriteria.SHIELD_ACTIVATED.trigger(initiator, Math.round(this.shieldState.targetRadius * 2.0F), this.shieldState.effectId, this.tier());
 			}
 		}
 
@@ -940,6 +970,13 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 			this.updateChunkTicket(serverLevel);
 		}
 
+		// C7 "unbroken": this direct path (linked shares, commands, tests) feeds
+		// the lifetime absorbed total into the criterion exactly like the
+		// interception path, so both damage roads count toward the advancement.
+		if (this.level instanceof ServerLevel serverLevel) {
+			ModCriteria.fireDamageAbsorbed(serverLevel, this.shieldState.ownerUuid, this.shieldState.absorbedTotal);
+		}
+
 		this.markUpdated();
 	}
 
@@ -1001,6 +1038,10 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 			// Only a real active->inactive transition is a sculk-audible deactivation.
 			if (this.level != null) {
 				this.level.gameEvent(GameEvent.BLOCK_DEACTIVATE, this.worldPosition, GameEvent.Context.of(this.getBlockState()));
+				// E3c: the audible deactivation cue for the deliberate GUI/redstone
+				// power-down. Fuel-out and break keep their own cues (silence vs the
+				// SHIELD_BREAK + nova pair).
+				this.level.playSound(null, this.worldPosition, SoundEvents.BEACON_DEACTIVATE, SoundSource.BLOCKS, 1.0F, 1.0F);
 			}
 
 			// Empty the boss bar immediately instead of waiting for the next tick.

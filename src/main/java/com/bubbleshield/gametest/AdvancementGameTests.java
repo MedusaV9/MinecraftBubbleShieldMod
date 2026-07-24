@@ -61,9 +61,13 @@ public class AdvancementGameTests {
 	@GameTest(padding = 16)
 	public void advancementJsonsLoad(GameTestHelper helper) {
 		// tree().get(...) is only non-null when the datapack JSON parsed and linked.
+		// Includes the C7 Bulwark chain (reinforced -> bastion -> aegis_bearer) and
+		// unbroken, whose criteria only parse when the tier bounds / the
+		// damage_absorbed trigger registered correctly.
 		for (String path : new String[] {
 				"root", "shield_raised", "maximalist", "bubble_burst", "friend_zone",
-				"christened", "full_spectrum", "linked_up"}) {
+				"christened", "full_spectrum", "linked_up",
+				"reinforced", "bastion", "aegis_bearer", "unbroken"}) {
 			advancement(helper, path);
 		}
 

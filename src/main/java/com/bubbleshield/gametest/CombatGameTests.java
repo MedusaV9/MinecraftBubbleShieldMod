@@ -631,13 +631,18 @@ public class CombatGameTests {
 		be.addFuelSeconds(PLENTY_OF_FUEL);
 		helper.assertTrue(be.tryActivate(), "shield should activate");
 
+		// E7: the boss bar name always carries the health readout quantized to 5%
+		// steps; one 3-damage arrow on the 125-HP shield (97.6%) still quantizes
+		// to 100%, so the percent part stays stable across this whole sequence and
+		// only the alarm suffix comes and goes ("<name> · NN% — UNDER ATTACK!").
+		String namedWithPercent = "Home Base \u00b7 100%";
 		helper.startSequence()
 				.thenExecuteAfter(2, () -> {
 					ServerBossEvent event = be.getBossEvent();
 					helper.assertTrue(event != null, "an active shield should have created its boss event");
 					helper.assertTrue(
-							"Home Base".equals(event.getName().getString()),
-							"before the alarm the boss bar shows the plain name, got '" + event.getName().getString() + "'");
+							namedWithPercent.equals(event.getName().getString()),
+							"before the alarm the boss bar shows name + percent, got '" + event.getName().getString() + "'");
 
 					Arrow arrow = helper.spawn(EntityTypes.ARROW, arrowSpawnAboveBoundary());
 					arrow.setDeltaMovement(0.0, -1.5, 0.0);
@@ -649,8 +654,8 @@ public class CombatGameTests {
 							"the interception should have opened the alarm window");
 					String name = be.getBossEvent().getName().getString();
 					helper.assertTrue(
-							name.startsWith("Home Base") && !name.equals("Home Base"),
-							"the alarmed boss bar should carry the UNDER ATTACK suffix, got '" + name + "'");
+							name.startsWith(namedWithPercent) && !name.equals(namedWithPercent),
+							"the alarmed boss bar should append the UNDER ATTACK suffix after the percent, got '" + name + "'");
 				})
 				.thenExecuteAfter(ShieldLogic.ALARM_WINDOW_TICKS + 10, () -> {
 					helper.assertTrue(
@@ -658,7 +663,7 @@ public class CombatGameTests {
 							"the alarm window should have expired");
 					String name = be.getBossEvent().getName().getString();
 					helper.assertTrue(
-							"Home Base".equals(name),
+							namedWithPercent.equals(name),
 							"the suffix must revert with the window, got '" + name + "'");
 				})
 				.thenSucceed();

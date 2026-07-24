@@ -1,12 +1,15 @@
 package com.bubbleshield.command;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
 import com.bubbleshield.block.BubbleShieldBlockEntity;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.EffectRegistry;
+import com.bubbleshield.menu.BubbleShieldMenu;
 import com.bubbleshield.net.ServerNet;
+import com.bubbleshield.shield.ShieldLogic;
 import com.bubbleshield.shield.ShieldState;
 
 import com.mojang.brigadier.Command;
@@ -26,7 +29,10 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code /bubbleshield} command: browse the effect catalogue ({@code list [page]},
- * {@code info <id>}) and retune the nearest owned projector ({@code set <id>}).
+ * {@code info <id>}), retune the nearest owned projector ({@code set <id>}), and read
+ * its telemetry ({@code log} — the B6 threat log; {@code status} — the full stat
+ * sheet). {@code log}/{@code status} are strictly READ-ONLY: unlike {@code set} they
+ * never claim an ownerless projector.
  *
  * <p>Server-authoritative like every other mutation path: {@code set} applies the same
  * owner/claim rule as the C2S payloads ({@link ServerNet#isOwner}) and clamps the
@@ -34,7 +40,7 @@ import org.jspecify.annotations.Nullable;
  * through translatable keys so EN/DE stay in lockstep with the rest of the mod.
  */
 public final class BubbleShieldCommand {
-	/** {@code set} only touches a projector within this distance of the sender. */
+	/** {@code set}/{@code log}/{@code status} only address a projector within this distance of the sender. */
 	public static final double MAX_TARGET_DISTANCE = 16.0;
 	/** {@code list} prints this many "id: Name" lines per page. */
 	public static final int LIST_PAGE_SIZE = 10;
@@ -57,7 +63,98 @@ public final class BubbleShieldCommand {
 				.then(Commands.literal("set")
 					.then(Commands.argument("id", IntegerArgumentType.integer())
 						.executes(ctx -> set(ctx.getSource(), IntegerArgumentType.getInteger(ctx, "id")))))
+				.then(Commands.literal("log")
+					.executes(ctx -> log(ctx.getSource())))
+				.then(Commands.literal("status")
+					.executes(ctx -> status(ctx.getSource())))
 		));
+	}
+
+	/**
+	 * E4 {@code /bubbleshield log}: prints the B6 threat log of the nearest owned
+	 * (or ownerless) projector within {@link #MAX_TARGET_DISTANCE} blocks, oldest
+	 * entry first, as localized "Ns ago: name (-D.D)" lines. Read-only: never
+	 * claims an ownerless projector.
+	 *
+	 * @return the number of log lines printed (1 for the localized empty notice).
+	 */
+	private static int log(CommandSourceStack source) throws CommandSyntaxException {
+		ServerPlayer player = source.getPlayerOrException();
+		BubbleShieldBlockEntity nearest = nearestRetunableProjector(player);
+		if (nearest == null) {
+			source.sendFailure(Component.translatable("command.bubbleshield.set.no_projector", (int) MAX_TARGET_DISTANCE));
+			return 0;
+		}
+
+		List<ShieldState.ThreatLogEntry> entries = nearest.getShieldState().threatLog();
+		if (entries.isEmpty()) {
+			source.sendSuccess(() -> Component.translatable("command.bubbleshield.log.empty"), false);
+			return Command.SINGLE_SUCCESS;
+		}
+
+		long gameTime = player.level().getGameTime();
+		for (ShieldState.ThreatLogEntry entry : entries) {
+			long secondsAgo = Math.max(0L, (gameTime - entry.gameTime()) / 20L);
+			String damage = String.format(Locale.ROOT, "%.1f", entry.damage());
+			source.sendSuccess(
+				() -> Component.translatable("command.bubbleshield.log.entry", secondsAgo, entry.attackerName(), damage),
+				false);
+		}
+
+		return entries.size();
+	}
+
+	/**
+	 * E4 {@code /bubbleshield status}: the nearest owned (or ownerless) projector's
+	 * full stat sheet — HP, tier + combined DR (the same
+	 * {@link ShieldLogic#combinedDr} the damage pipeline applies), regen/min,
+	 * drain/min with the time-to-empty projection, cooldown (or ready), strength
+	 * gamerule and live threat count. The rate/cooldown/threat values are read
+	 * through the projector's OWN menu {@code ContainerData} snapshot, so the
+	 * command can never drift from what the GUI shows. Read-only: never claims an
+	 * ownerless projector.
+	 */
+	private static int status(CommandSourceStack source) throws CommandSyntaxException {
+		ServerPlayer player = source.getPlayerOrException();
+		BubbleShieldBlockEntity nearest = nearestRetunableProjector(player);
+		if (nearest == null) {
+			source.sendFailure(Component.translatable("command.bubbleshield.set.no_projector", (int) MAX_TARGET_DISTANCE));
+			return 0;
+		}
+
+		ShieldState state = nearest.getShieldState();
+		int tier = nearest.tier();
+		int drPercent = Math.round(ShieldLogic.combinedDr(tier, nearest.platingDr()) * 100.0F);
+		var data = nearest.getMenuData();
+		int regenX10 = data.get(BubbleShieldMenu.DATA_REGEN_PER_MIN_X10);
+		int drainX10 = data.get(BubbleShieldMenu.DATA_DRAIN_PER_MIN_X10);
+		int cooldownSeconds = data.get(BubbleShieldMenu.DATA_COOLDOWN_SECONDS);
+		int threats = data.get(BubbleShieldMenu.DATA_THREAT_COUNT);
+
+		source.sendSuccess(() -> Component.translatable("command.bubbleshield.status.hp",
+				Math.round(state.health), Math.round(state.maxHealth)), false);
+		source.sendSuccess(() -> Component.translatable("command.bubbleshield.status.tier", tier, drPercent), false);
+		source.sendSuccess(() -> Component.translatable("command.bubbleshield.status.regen", perMinute(regenX10)), false);
+		if (drainX10 > 0) {
+			// Time-to-empty at the steady baseline drain: fuelSeconds / (drainX10/10 per minute).
+			long emptySeconds = state.fuelSeconds * 600L / drainX10;
+			source.sendSuccess(() -> Component.translatable("command.bubbleshield.status.drain",
+					perMinute(drainX10), ShieldLogic.formatMinutesSeconds(emptySeconds)), false);
+		} else {
+			source.sendSuccess(() -> Component.translatable("command.bubbleshield.status.drain_idle", perMinute(drainX10)), false);
+		}
+
+		source.sendSuccess(() -> cooldownSeconds > 0
+				? Component.translatable("command.bubbleshield.status.cooldown", ShieldLogic.formatMinutesSeconds(cooldownSeconds))
+				: Component.translatable("command.bubbleshield.status.cooldown_ready"), false);
+		source.sendSuccess(() -> Component.translatable("command.bubbleshield.status.strength", nearest.strengthPercent()), false);
+		source.sendSuccess(() -> Component.translatable("command.bubbleshield.status.threats", threats), false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	/** Formats a per-minute-x10 data-slot value as "X.X" (locale-stable). */
+	private static String perMinute(int x10) {
+		return String.format(Locale.ROOT, "%.1f", x10 / 10.0F);
 	}
 
 	/**

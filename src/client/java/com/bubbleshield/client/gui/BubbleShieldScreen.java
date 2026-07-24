@@ -1,8 +1,11 @@
 package com.bubbleshield.client.gui;
 
+import java.util.Locale;
+
 import com.bubbleshield.BubbleShield;
 import com.bubbleshield.menu.BubbleShieldMenu;
 import com.bubbleshield.net.ShieldPayloads;
+import com.bubbleshield.registry.ModItems;
 import com.bubbleshield.shield.BeamStyle;
 import com.bubbleshield.shield.ShieldLogic;
 import com.bubbleshield.shield.ShieldMode;
@@ -31,6 +34,11 @@ import org.jspecify.annotations.Nullable;
 public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu> {
 	private static final Identifier TEXTURE = BubbleShield.id("textures/gui/bubble_shield.png");
 	private static final int LABEL_COLOR = -12566464;
+	/**
+	 * E1: the threats row's red-ish accent (0xFFB02525). Color is never the only
+	 * cue — the label text itself carries a "!" prefix while threats are present.
+	 */
+	private static final int THREAT_COLOR = 0xFFB02525;
 
 	public static final int MIN_DIAMETER = 8;
 	public static final int MAX_DIAMETER = 200;
@@ -43,7 +51,9 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 
 	public BubbleShieldScreen(BubbleShieldMenu menu, Inventory inventory, Component title) {
 		super(menu, inventory, title, 176, 166);
-		this.inventoryLabelY = this.imageHeight - 94;
+		// E1: the vanilla "Inventory" label row (y = 72) is reclaimed for the power
+		// readout stack — up to five 8px rows at y = 48..80 in the left column.
+		this.inventoryLabelY = -1000;
 	}
 
 	@Override
@@ -60,6 +70,7 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 				.build()
 		);
 		this.activateButton.setTooltip(this.activateTooltip());
+		this.activateButton.active = this.activateButtonEnabled();
 
 		this.diameterSlider = this.addRenderableWidget(new DiameterSlider(x, this.topPos + 26, width, 13, this.menu));
 
@@ -138,9 +149,79 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 		return Component.translatable(this.reviveAffordable() ? "gui.bubbleshield.revive" : "gui.bubbleshield.activate");
 	}
 
-	/** The revive face carries the cost/health tooltip; the plain faces carry none. */
+	/**
+	 * E5: the Activate button is clickable exactly when the server would act on the
+	 * SetActiveC2S request — always while active (deactivate), during a cooldown
+	 * only when the revive is affordable, and otherwise only with fuel on board.
+	 */
+	private boolean activateButtonEnabled() {
+		if (this.menu.isActive() || this.reviveAffordable()) {
+			return true;
+		}
+
+		if (this.menu.cooldownSeconds() > 0) {
+			return false;
+		}
+
+		return this.menu.fuelSeconds() > 0;
+	}
+
+	/**
+	 * E5: one tooltip per button state — active: deactivate hint; cooling +
+	 * affordable: the A7 revive tooltip; cooling + unaffordable (disabled):
+	 * "Ready in m:ss"; no fuel (disabled): the refuel hint; ready: the
+	 * "Max HP N · DR NN% · -X fuel/min" summary.
+	 */
 	private @Nullable Tooltip activateTooltip() {
-		return this.reviveAffordable() ? Tooltip.create(Component.translatable("gui.bubbleshield.revive.tooltip")) : null;
+		if (this.menu.isActive()) {
+			return Tooltip.create(Component.translatable("gui.bubbleshield.deactivate.tooltip"));
+		}
+
+		if (this.reviveAffordable()) {
+			return Tooltip.create(Component.translatable("gui.bubbleshield.revive.tooltip"));
+		}
+
+		if (this.menu.cooldownSeconds() > 0) {
+			return Tooltip.create(Component.translatable("gui.bubbleshield.activate.tooltip.cooldown",
+					ShieldLogic.formatMinutesSeconds(this.menu.cooldownSeconds())));
+		}
+
+		if (this.menu.fuelSeconds() <= 0) {
+			return Tooltip.create(Component.translatable("gui.bubbleshield.activate.tooltip.no_fuel"));
+		}
+
+		return Tooltip.create(Component.translatable("gui.bubbleshield.activate.tooltip.ready",
+				this.menu.maxHealth(), this.combinedDrPercent(), this.projectedDrainPerMinute()));
+	}
+
+	/** E1: true while reinforced plating sits in the augment slot (client-visible via the menu slot). */
+	private boolean hasPlating() {
+		return this.menu.slots.get(BubbleShieldMenu.AUGMENT_SLOT).getItem().is(ModItems.REINFORCED_PLATING);
+	}
+
+	/**
+	 * E1: the combined tier x plating damage resistance percent, computed
+	 * client-side from the synced tier and the visible augment slot through the
+	 * SAME {@link ShieldLogic#combinedDr} the server damage pipeline uses.
+	 */
+	private int combinedDrPercent() {
+		return Math.round(ShieldLogic.combinedDr(this.menu.tier(), this.hasPlating() ? ShieldLogic.PLATING_DR : 0.0F) * 100.0F);
+	}
+
+	/** Formats a fuel/HP-per-minute-x10 value as "X.X" (locale-stable, like the data slots). */
+	private static String perMinute(int x10) {
+		return String.format(Locale.ROOT, "%.1f", x10 / 10.0F);
+	}
+
+	/**
+	 * E5 ready-summary tooltip: the drain the shield WOULD pay once activated. The
+	 * synced drain slot reads 0 while inactive, so this projects the baseline rate
+	 * client-side from the synced diameter/mode/capacitor via the same
+	 * {@link ShieldLogic} rules the server slot uses.
+	 */
+	private String projectedDrainPerMinute() {
+		int interval = ShieldLogic.drainIntervalTicks(this.menu.mode() == ShieldMode.ECO.ordinal(), this.menu.hasCapacitor());
+		return perMinute(12000 * ShieldLogic.drainUnits(this.menu.diameter() / 2.0F) / interval);
 	}
 
 	/**
@@ -215,6 +296,8 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 		// The active flag is server-authoritative and arrives via data slots.
 		this.activateButton.setMessage(this.activateLabel());
 		this.activateButton.setTooltip(this.activateTooltip());
+		// E5: the disabled (inactive) style tracks the server's accept conditions.
+		this.activateButton.active = this.activateButtonEnabled();
 		// ContainerData arrives after init(), so the slider must re-sync once the
 		// real diameter shows up (and whenever the server changes it).
 		this.diameterSlider.syncFromMenu();
@@ -253,6 +336,26 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 
 	/** Left-column labels must end before the device slot frames, which start at x = 55. */
 	private static final int LABEL_MAX_WIDTH = 55 - 8 - 1;
+	/** E1 readout stack: first row y, and the per-row advance (font height 8 + 0 gap). */
+	private static final int READOUT_TOP = 48;
+	private static final int READOUT_ROW_HEIGHT = 8;
+
+	/**
+	 * The left-column degrade pattern (shared by every readout row): the full
+	 * localized label when it fits, the compact form when the prefix does not,
+	 * and an elided compact form as the last resort.
+	 */
+	private String fitLabel(String full, String compact) {
+		String text = full;
+		if (this.font.width(text) > LABEL_MAX_WIDTH) {
+			text = compact;
+		}
+		if (this.font.width(text) > LABEL_MAX_WIDTH) {
+			text = this.font.plainSubstrByWidth(text, LABEL_MAX_WIDTH - this.font.width("...")) + "...";
+		}
+
+		return text;
+	}
 
 	@Override
 	protected void extractLabels(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
@@ -261,33 +364,73 @@ public class BubbleShieldScreen extends AbstractContainerScreen<BubbleShieldMenu
 		// y 16..33), so a wide value would render under the slot. Degrade gracefully:
 		// full "Fuel: Ns" label when it fits, the bare "Ns" value when the prefix
 		// does not, and an elided value only for absurdly large numbers.
-		String fuel = Component.translatable("gui.bubbleshield.fuel", this.menu.fuelSeconds()).getString();
-		if (this.font.width(fuel) > LABEL_MAX_WIDTH) {
-			fuel = this.menu.fuelSeconds() + "s";
-		}
-		if (this.font.width(fuel) > LABEL_MAX_WIDTH) {
-			fuel = this.font.plainSubstrByWidth(fuel, LABEL_MAX_WIDTH - this.font.width("...")) + "...";
-		}
+		graphics.text(this.font,
+				this.fitLabel(Component.translatable("gui.bubbleshield.fuel", this.menu.fuelSeconds()).getString(),
+						this.menu.fuelSeconds() + "s"),
+				8, 20, LABEL_COLOR, false);
 
-		graphics.text(this.font, fuel, 8, 20, LABEL_COLOR, false);
-		// y = 48 (was 44): the augment slot frame at (8, 29) reaches down to y = 46,
-		// so the tier label starts below it (48..55 stays clear of the health row at 56).
-		graphics.text(this.font, Component.translatable("gui.bubbleshield.tier", this.menu.tier()), 8, 48, LABEL_COLOR, false);
+		// E1 power readout: a dynamic stack of 8px rows from y = 48 (the augment
+		// slot frame at (8, 29) reaches down to y = 46) into the reclaimed vanilla
+		// inventory-label row. Conditional rows keep the stack at <= 5 rows in
+		// practice: the cooldown row only exists while broken, when the regen/
+		// drain/threat rows (active-only) are all absent, and vice versa.
+		int y = READOUT_TOP;
+
+		// Tier + combined DR on ONE row ("T2 · DR 58%"): the DR percent comes from
+		// the same ShieldLogic.combinedDr the damage pipeline applies.
+		int dr = this.combinedDrPercent();
+		graphics.text(this.font,
+				this.fitLabel(Component.translatable("gui.bubbleshield.tier_dr", this.menu.tier(), dr).getString(),
+						"T" + this.menu.tier() + " " + dr + "%"),
+				8, y, LABEL_COLOR, false);
+		y += READOUT_ROW_HEIGHT;
 
 		// Health arrives as permille + whole max HP (the old health*10 slot overflowed
-		// above 3276.7 HP); display "HP: cur/max" with the same graceful degrade as
-		// the fuel row: full label, bare "cur/max" value, then an elided value.
+		// above 3276.7 HP); display "HP: cur/max" with the usual degrade.
 		String healthValue = this.menu.currentHealth() + "/" + this.menu.maxHealth();
-		String health = Component.translatable("gui.bubbleshield.health", healthValue).getString();
-		if (this.font.width(health) > LABEL_MAX_WIDTH) {
-			health = healthValue;
-		}
-		if (this.font.width(health) > LABEL_MAX_WIDTH) {
-			health = this.font.plainSubstrByWidth(health, LABEL_MAX_WIDTH - this.font.width("...")) + "...";
+		graphics.text(this.font,
+				this.fitLabel(Component.translatable("gui.bubbleshield.health", healthValue).getString(), healthValue),
+				8, y, LABEL_COLOR, false);
+		y += READOUT_ROW_HEIGHT;
+
+		// E5: the cooldown renders m:ss and only occupies a row while one is running.
+		if (this.menu.cooldownSeconds() > 0) {
+			String clock = ShieldLogic.formatMinutesSeconds(this.menu.cooldownSeconds());
+			graphics.text(this.font,
+					this.fitLabel(Component.translatable("gui.bubbleshield.cooldown", clock).getString(), clock),
+					8, y, LABEL_COLOR, false);
+			y += READOUT_ROW_HEIGHT;
 		}
 
-		graphics.text(this.font, health, 8, 56, LABEL_COLOR, false);
-		graphics.text(this.font, Component.translatable("gui.bubbleshield.cooldown", this.menu.cooldownSeconds()), 8, 66, LABEL_COLOR, false);
+		// Regen: hidden when 0 (inactive, ECO, or a combat-gated tier 0).
+		int regenX10 = this.menu.regenPerMinuteTimes10();
+		if (regenX10 > 0) {
+			graphics.text(this.font,
+					this.fitLabel(Component.translatable("gui.bubbleshield.regen", perMinute(regenX10)).getString(),
+							"+" + perMinute(regenX10) + "/min"),
+					8, y, LABEL_COLOR, false);
+			y += READOUT_ROW_HEIGHT;
+		}
+
+		// Drain: hidden while inactive (the slot reads 0 then).
+		int drainX10 = this.menu.drainPerMinuteTimes10();
+		if (this.menu.isActive() && drainX10 > 0) {
+			graphics.text(this.font,
+					this.fitLabel(Component.translatable("gui.bubbleshield.drain", perMinute(drainX10)).getString(),
+							"-" + perMinute(drainX10) + "/min"),
+					8, y, LABEL_COLOR, false);
+			y += READOUT_ROW_HEIGHT;
+		}
+
+		// Threats: hidden at 0; the "!" prefix (baked into the lang string and the
+		// compact form) carries the warning so the red tint is never the only cue.
+		int threats = this.menu.threatCount();
+		if (threats > 0) {
+			graphics.text(this.font,
+					this.fitLabel(Component.translatable("gui.bubbleshield.threats", threats).getString(),
+							"! " + threats),
+					8, y, THREAT_COLOR, false);
+		}
 	}
 
 	/**
