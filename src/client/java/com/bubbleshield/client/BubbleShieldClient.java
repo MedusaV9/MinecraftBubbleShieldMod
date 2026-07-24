@@ -1,8 +1,10 @@
 package com.bubbleshield.client;
 
 import com.bubbleshield.BubbleShield;
+import com.bubbleshield.client.fx.ImpactFxManager;
 import com.bubbleshield.client.fx.ScreenEffectManager;
 import com.bubbleshield.client.gui.BubbleShieldScreen;
+import com.bubbleshield.client.hud.ShieldFlashElement;
 import com.bubbleshield.client.hud.ShieldHudElement;
 import com.bubbleshield.client.render.SceneCopy;
 import com.bubbleshield.client.render.ShieldPipelines;
@@ -22,7 +24,10 @@ public class BubbleShieldClient implements ClientModInitializer {
 		ShieldRenderer.register();
 		SceneCopy.register();
 		ScreenEffectManager.register();
+		ImpactFxManager.register();
 		HudElementRegistry.addLast(BubbleShield.id("shield_status"), new ShieldHudElement());
+		// The contact flash draws after (over) the status text, matching addLast order.
+		HudElementRegistry.addLast(BubbleShield.id("shield_flash"), new ShieldFlashElement());
 		MenuScreens.register(ModMenus.BUBBLE_SHIELD, BubbleShieldScreen::new);
 	}
 }

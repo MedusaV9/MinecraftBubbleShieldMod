@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.bubbleshield.client.fx.ImpactTracker;
 import com.bubbleshield.net.ShieldPayloads;
 import com.bubbleshield.shield.ShieldGeometry;
 import com.bubbleshield.shield.ShieldShape;
@@ -92,6 +93,31 @@ public final class ClientShieldManager {
 		public int beamStyle() {
 			return this.visual.beamStyle();
 		}
+
+		/**
+		 * Client-side mirror of {@code ShieldLogic.shouldBlock} over the synced
+		 * replica (owner, whitelist UUIDs, whitelist names — case-insensitive):
+		 * true when this shield's barrier blocks the given player. Drives the
+		 * contact-flash prediction; the server remains authoritative and its
+		 * CONTACT batch entries reconcile any misprediction.
+		 */
+		public boolean blocks(UUID uuid, String name) {
+			if (this.ownerUuid.isPresent() && this.ownerUuid.get().equals(uuid)) {
+				return false;
+			}
+
+			if (this.whitelist.contains(uuid)) {
+				return false;
+			}
+
+			for (String whitelisted : this.whitelistNames) {
+				if (whitelisted.equalsIgnoreCase(name)) {
+					return false;
+				}
+			}
+
+			return true;
+		}
 	}
 
 	private static final Map<GlobalPos, ClientShield> SHIELDS = new HashMap<>();
@@ -169,9 +195,13 @@ public final class ClientShieldManager {
 			))
 		));
 
-		ClientPlayNetworking.registerGlobalReceiver(ShieldPayloads.ShieldRemoveS2C.TYPE, (payload, context) -> context.client().execute(() ->
-			SHIELDS.remove(new GlobalPos(payload.dimension(), payload.pos()))
-		));
+		ClientPlayNetworking.registerGlobalReceiver(ShieldPayloads.ShieldRemoveS2C.TYPE, (payload, context) -> context.client().execute(() -> {
+			GlobalPos pos = new GlobalPos(payload.dimension(), payload.pos());
+			SHIELDS.remove(pos);
+			// Fabric allows one global receiver per payload type, so the impact
+			// store's per-shield cleanup rides this receiver rather than its own.
+			ImpactTracker.remove(pos);
+		}));
 
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> client.execute(SHIELDS::clear));
 

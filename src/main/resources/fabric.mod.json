@@ -45,7 +45,8 @@
 			"com.bubbleshield.gametest.RecoveryGameTests",
 			"com.bubbleshield.gametest.AugmentGameTests",
 			"com.bubbleshield.gametest.CombatGameTests",
-			"com.bubbleshield.gametest.UxGameTests"
+			"com.bubbleshield.gametest.UxGameTests",
+			"com.bubbleshield.gametest.VisualEventsGameTests"
 		]
 	},
 	"mixins": [

@@ -18,7 +18,9 @@ import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.util.Mth;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * Custom payloads for shield settings (C2S) and client-side shield replication (S2C).
@@ -216,6 +218,90 @@ public final class ShieldPayloads {
 		}
 	}
 
+	/**
+	 * One shield-surface visual event, 5 bytes on the wire (kind, quantized
+	 * outward unit direction, strength). {@code dx/dy/dz} are the outward unit
+	 * direction from the shield center to the event point, quantized as
+	 * {@code round(n * 127)}; {@code strength} is an UNSIGNED byte encoding
+	 * {@code round(min(damage, 25.5) * 10)} — read it back through
+	 * {@link #strengthUnsigned()} (a raw {@code byte} read would sign-flip
+	 * anything above 12.7, most notably the BREAK sentinel 255). Unknown kinds
+	 * (&ge; {@link #KIND_COUNT}) are skipped by the client so a newer server can
+	 * add kinds without breaking older clients.
+	 */
+	public record ImpactEntry(byte kind, byte dx, byte dy, byte dz, byte strength) {
+		public static final int KIND_IMPACT = 0;
+		public static final int KIND_BREAK = 1;
+		public static final int KIND_HEAL = 2;
+		public static final int KIND_CONTACT = 3;
+		public static final int KIND_PASSAGE_IN = 4;
+		public static final int KIND_PASSAGE_OUT = 5;
+		/** Exclusive upper bound of the known kinds; the client skips anything at or above it. */
+		public static final int KIND_COUNT = 6;
+		/** Strength saturates at 25.5 damage: the x10 byte encoding tops out at 255. */
+		public static final float MAX_STRENGTH = 25.5F;
+
+		public static final StreamCodec<ByteBuf, ImpactEntry> STREAM_CODEC = StreamCodec.composite(
+			ByteBufCodecs.BYTE, ImpactEntry::kind,
+			ByteBufCodecs.BYTE, ImpactEntry::dx,
+			ByteBufCodecs.BYTE, ImpactEntry::dy,
+			ByteBufCodecs.BYTE, ImpactEntry::dz,
+			ByteBufCodecs.BYTE, ImpactEntry::strength,
+			ImpactEntry::new
+		);
+
+		/**
+		 * Quantizes an event into its wire form: {@code dirUnit} should be a unit
+		 * vector (or {@link net.minecraft.world.phys.Vec3#ZERO} for directionless
+		 * events like BREAK), {@code strength} is the damage-scale value clamped
+		 * into [0, {@link #MAX_STRENGTH}] before the x10 byte encoding.
+		 */
+		public static ImpactEntry of(int kind, Vec3 dirUnit, float strength) {
+			return new ImpactEntry(
+					(byte) kind,
+					(byte) Math.round(dirUnit.x * 127.0),
+					(byte) Math.round(dirUnit.y * 127.0),
+					(byte) Math.round(dirUnit.z * 127.0),
+					(byte) Math.round(Mth.clamp(strength, 0.0F, MAX_STRENGTH) * 10.0F));
+		}
+
+		/** The strength byte read UNSIGNED (0..255); see the record javadoc. */
+		public int strengthUnsigned() {
+			return this.strength & 0xFF;
+		}
+
+		/** The dequantized outward unit direction (approximately unit length, or zero). */
+		public Vec3 dir() {
+			return new Vec3(this.dx / 127.0, this.dy / 127.0, this.dz / 127.0);
+		}
+	}
+
+	/**
+	 * A per-tick batch of visual events for the shield at {@code pos}: at most
+	 * {@link #MAX_ENTRIES} {@link ImpactEntry} rows, coalesced by
+	 * {@code BubbleShieldBlockEntity.flushImpacts} (one batch per shield per tick,
+	 * sent OUTSIDE the sync diff gate so pure events are never swallowed by an
+	 * unchanged snapshot). The dimension travels with the batch like
+	 * {@link ShieldSyncS2C} so cross-dimension events are never applied locally.
+	 */
+	public record ImpactBatchS2C(BlockPos pos, ResourceKey<Level> dimension, List<ImpactEntry> entries) implements CustomPacketPayload {
+		/** Hard cap on entries per batch; the bounded list codec rejects oversized payloads at decode time. */
+		public static final int MAX_ENTRIES = 8;
+		public static final CustomPacketPayload.Type<ImpactBatchS2C> TYPE = new CustomPacketPayload.Type<>(BubbleShield.id("impact_batch"));
+		public static final StreamCodec<RegistryFriendlyByteBuf, ImpactBatchS2C> CODEC = StreamCodec.composite(
+			BlockPos.STREAM_CODEC, ImpactBatchS2C::pos,
+			ResourceKey.streamCodec(Registries.DIMENSION), ImpactBatchS2C::dimension,
+			// Bounded like WhitelistModifyC2S's stringUtf8(16): decode-time rejection.
+			ImpactEntry.STREAM_CODEC.apply(ByteBufCodecs.list(MAX_ENTRIES)), ImpactBatchS2C::entries,
+			ImpactBatchS2C::new
+		);
+
+		@Override
+		public CustomPacketPayload.Type<ImpactBatchS2C> type() {
+			return TYPE;
+		}
+	}
+
 	public static void registerTypes() {
 		PayloadTypeRegistry.serverboundPlay().register(SetSettingsC2S.TYPE, SetSettingsC2S.CODEC);
 		PayloadTypeRegistry.serverboundPlay().register(WhitelistModifyC2S.TYPE, WhitelistModifyC2S.CODEC);
@@ -224,5 +310,6 @@ public final class ShieldPayloads {
 		PayloadTypeRegistry.serverboundPlay().register(SetActiveC2S.TYPE, SetActiveC2S.CODEC);
 		PayloadTypeRegistry.clientboundPlay().register(ShieldSyncS2C.TYPE, ShieldSyncS2C.CODEC);
 		PayloadTypeRegistry.clientboundPlay().register(ShieldRemoveS2C.TYPE, ShieldRemoveS2C.CODEC);
+		PayloadTypeRegistry.clientboundPlay().register(ImpactBatchS2C.TYPE, ImpactBatchS2C.CODEC);
 	}
 }

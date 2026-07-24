@@ -359,6 +359,37 @@ public final class ServerNet {
 		}
 	}
 
+	/**
+	 * WP-Evt: visual-event batches are only relevant to players who can SEE the
+	 * bubble, so the receiver set is distance-filtered to
+	 * {@code currentRadius + IMPACT_RECEIVE_MARGIN} of the center (unlike the
+	 * level-wide sync broadcast, whose replica must exist before a player
+	 * approaches). 32 blocks of margin comfortably covers the surface flash
+	 * draw distance while keeping volley spam off far-away connections.
+	 */
+	public static final double IMPACT_RECEIVE_MARGIN = 32.0;
+
+	/**
+	 * Sends one coalesced visual-event batch for the given shield to every player
+	 * within {@code currentRadius + }{@link #IMPACT_RECEIVE_MARGIN} of its center.
+	 * Called by {@code BubbleShieldBlockEntity.flushImpacts} (at most once per
+	 * shield per tick, OUTSIDE the sync diff gate).
+	 */
+	public static void broadcastImpacts(BubbleShieldBlockEntity shield, List<ShieldPayloads.ImpactEntry> entries) {
+		if (entries.isEmpty() || !(shield.getLevel() instanceof ServerLevel level)) {
+			return;
+		}
+
+		ShieldPayloads.ImpactBatchS2C payload = new ShieldPayloads.ImpactBatchS2C(shield.getBlockPos(), level.dimension(), entries);
+		Vec3 center = Vec3.atCenterOf(shield.getBlockPos());
+		double range = shield.currentRadius() + IMPACT_RECEIVE_MARGIN;
+		for (ServerPlayer player : PlayerLookup.level(level)) {
+			if (player.position().distanceTo(center) <= range) {
+				ServerPlayNetworking.send(player, payload);
+			}
+		}
+	}
+
 	/** Broadcasts to every player in the shield's level that the shield is gone. */
 	public static void broadcastRemove(BubbleShieldBlockEntity shield) {
 		if (!(shield.getLevel() instanceof ServerLevel level)) {

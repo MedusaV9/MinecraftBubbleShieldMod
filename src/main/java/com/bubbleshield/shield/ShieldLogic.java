@@ -12,14 +12,18 @@ import com.bubbleshield.effect.ContextProfile;
 import com.bubbleshield.effect.EffectDefinition;
 import com.bubbleshield.effect.EffectRegistry;
 import com.bubbleshield.effect.InsideEffectBehavior;
+import com.bubbleshield.effect.SurfaceSoundGroup;
 import com.bubbleshield.effect.behaviors.BehaviorSupport;
+import com.bubbleshield.net.ShieldPayloads;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.protocol.game.ClientboundSoundPacket;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -174,6 +178,13 @@ public final class ShieldLogic {
 	public static final float REVIVE_HEALTH_FRACTION = 0.5F;
 	/** C3 patch kit: HP restored per kit used on an ACTIVE projector (capped at max health). */
 	public static final float PATCH_KIT_HEAL = 150.0F;
+	/**
+	 * WP-Evt: strength of a CONTACT batch entry (a barrier press), byte-encoded
+	 * x10 to 25 — a gentle shimmer, far below a real hit's damage scale.
+	 */
+	public static final float CONTACT_IMPACT_STRENGTH = 2.5F;
+	/** WP-Evt: strength of a PASSAGE_IN/OUT batch entry (byte 25, like CONTACT). */
+	public static final float PASSAGE_IMPACT_STRENGTH = 2.5F;
 
 	private ShieldLogic() {
 	}
@@ -601,6 +612,31 @@ public final class ShieldLogic {
 				if (applyPlayerBarrier(center, barrierRadius, state, player)) {
 					GuardEnforcer.apply(level, center, state, player);
 					changed = true;
+					// WP-Evt CONTACT: a blocked player pressing the barrier flashes
+					// the wall and hears a personal squelch, at most once per
+					// CONTACT_RATE_TICKS per player. Only this steady-state loop
+					// emits — the activation-time expelBlockedPlayers pass stays
+					// silent by design (the raise cue already covers it).
+					if (self.tryContact(player.getUUID(), gameTime)) {
+						self.queueImpact(ShieldPayloads.ImpactEntry.KIND_CONTACT,
+								safeNormalize(player.position().subtract(center)), CONTACT_IMPACT_STRENGTH);
+						sendContactSound(level, player);
+					}
+				} else if (!player.isSpectator()) {
+					// WP-Evt PASSAGE: whitelisted (non-blocked) players shimmer the
+					// wall when they cross it, detected as an inside/outside flip
+					// between this tick and the last observation. The first
+					// observation only seeds the map (no flip, no entry).
+					UUID uuid = player.getUUID();
+					if (!shouldBlock(state, player.getGameProfile().name(), uuid, uuid.equals(state.ownerUuid))) {
+						boolean inside = ShieldGeometry.isInside(state.shape, center, barrierRadius, player.position());
+						Boolean was = self.swapWasInside(uuid, inside);
+						if (was != null && was != inside) {
+							self.queueImpact(
+									inside ? ShieldPayloads.ImpactEntry.KIND_PASSAGE_IN : ShieldPayloads.ImpactEntry.KIND_PASSAGE_OUT,
+									safeNormalize(player.position().subtract(center)), PASSAGE_IMPACT_STRENGTH);
+						}
+					}
 				}
 			}
 
@@ -755,6 +791,21 @@ public final class ShieldLogic {
 	 * online. The one-shot entity scan here is fine: a break happens at most once
 	 * per activation, not per tick.
 	 */
+	/**
+	 * WP-Evt: the block-entity-aware break overload BOTH break paths call (the
+	 * interception loop and {@code BubbleShieldBlockEntity.applyShieldDamage}):
+	 * runs the shared break routine, sweeps the transient visual-event state
+	 * (queued flashes/contact maps/delayed sounds for a bubble that just ceased
+	 * to exist), then queues the one entry that must survive everything — the
+	 * directionless BREAK at the saturated strength byte 255, which
+	 * {@code flushImpacts}' cap never drops.
+	 */
+	public static void onShieldBreak(ServerLevel level, BlockPos pos, ShieldState state, double preBreakRadius, BubbleShieldBlockEntity be) {
+		onShieldBreak(level, pos, state, preBreakRadius);
+		be.clearImpactState();
+		be.queueImpact(ShieldPayloads.ImpactEntry.KIND_BREAK, Vec3.ZERO, ShieldPayloads.ImpactEntry.MAX_STRENGTH);
+	}
+
 	public static void onShieldBreak(ServerLevel level, BlockPos pos, ShieldState state, double preBreakRadius) {
 		level.playSound(null, pos, SoundEvents.SHIELD_BREAK.value(), SoundSource.BLOCKS, 1.0F, 1.0F);
 		ModCriteria.fireShieldBroken(level, state.ownerUuid);
@@ -1024,6 +1075,16 @@ public final class ShieldLogic {
 				broke = applyDamage(state, applied, gameTime, breakCooldownTicks);
 			}
 
+			// WP-Evt IMPACT: one batch entry per interception on the INTERCEPTING
+			// shield only (linked partners took damage but have no local hit point
+			// to flash) — outward unit direction from the center to the hit point,
+			// strength = this shield's own post-DR share. Sitting right after the
+			// applied/broke computation covers the riposte/ward/linked branches
+			// uniformly; a breaking hit's entry is swept by onShieldBreak below,
+			// whose BREAK entry supersedes it.
+			self.queueImpact(ShieldPayloads.ImpactEntry.KIND_IMPACT,
+					safeNormalize(current.subtract(center)), applied);
+
 			// B6: every interception with a resolvable shooter lands in the threat
 			// log (this shield's own post-DR share), and every interception is an
 			// alarm event (rate-limited inside triggerAlarm).
@@ -1044,21 +1105,89 @@ public final class ShieldLogic {
 			// overrideLimiter=true lifts the 32-block send limit so the hit burst is
 			// visible to players far from the projector on large bubbles.
 			level.sendParticles(ParticleTypes.CRIT, true, false, current.x, current.y, current.z, 20, 0.3, 0.3, 0.3, 0.1);
-			// E2: the block sound's pitch rises as the shield weakens —
-			// 0.8 + 0.6 x (1 - healthFrac), evaluated on the POST-hit health (a
-			// breaking hit counts as fraction 0: applyDamage already restored the
-			// health for the next activation, so the pre-reset fraction is gone).
-			float postHitFrac = broke || state.maxHealth <= 0.0F
-					? 0.0F
-					: Mth.clamp(state.health / state.maxHealth, 0.0F, 1.0F);
-			level.playSound(null, pos, SoundEvents.SHIELD_BLOCK.value(), SoundSource.BLOCKS, 1.0F,
-					0.8F + 0.6F * (1.0F - postHitFrac));
+			// WP-Evt/S2 hit sounds, AT THE HIT POINT (the old site played the lone
+			// SHIELD_BLOCK at the projector, which on a big bubble was audibly
+			// nowhere near the hit) — rate-limited to ONE trio per shield per tick
+			// (the first impact of a same-tick volley wins):
+			//   1. HEAVY_CORE_HIT thump, pitch scaling with the RAW damage class;
+			//   2. the E2 SHIELD_BLOCK ring, keeping its health-scaled pitch —
+			//      0.8 + 0.6 x (1 - healthFrac) on the POST-hit health (a breaking
+			//      hit counts as fraction 0: applyDamage already restored the
+			//      health for the next activation, so the pre-reset fraction is
+			//      gone);
+			//   3. the effect family's surface-material layer (two sounds).
+			// Plus the delayed antipode wave tail on the far side of the bubble.
+			if (self.tryImpactSounds(gameTime)) {
+				level.playSound(null, current.x, current.y, current.z, SoundEvents.HEAVY_CORE_HIT,
+						SoundSource.BLOCKS, 1.2F, 0.6F + 0.3F * Math.min(damage, 10.0F) / 10.0F);
+				float postHitFrac = broke || state.maxHealth <= 0.0F
+						? 0.0F
+						: Mth.clamp(state.health / state.maxHealth, 0.0F, 1.0F);
+				level.playSound(null, current.x, current.y, current.z, SoundEvents.SHIELD_BLOCK.value(),
+						SoundSource.BLOCKS, 1.0F, 0.8F + 0.6F * (1.0F - postHitFrac));
+				playFamilyLayer(level, current, SurfaceSoundGroup.of(EffectRegistry.get(state.effectId).surface()));
+				self.queueAntipodeWaveTail(current, preHitRadius);
+			}
+
 			if (broke) {
-				onShieldBreak(level, pos, state, preHitRadius);
+				onShieldBreak(level, pos, state, preHitRadius, self);
 			}
 		}
 
 		return changed;
+	}
+
+	/**
+	 * S2: the per-family surface-material layer of the impact trio, played at the
+	 * hit point on top of the HEAVY_CORE_HIT thump and the SHIELD_BLOCK ring —
+	 * each {@link SurfaceSoundGroup} contributes its own characteristic pair.
+	 */
+	private static void playFamilyLayer(ServerLevel level, Vec3 hit, SurfaceSoundGroup group) {
+		switch (group) {
+			case ENERGY -> {
+				level.playSound(null, hit.x, hit.y, hit.z, SoundEvents.SCULK_BLOCK_CHARGE, SoundSource.BLOCKS, 0.8F, 1.3F);
+				level.playSound(null, hit.x, hit.y, hit.z, SoundEvents.WARDEN_SONIC_CHARGE, SoundSource.BLOCKS, 0.4F, 1.6F);
+			}
+			case CRYSTAL -> {
+				level.playSound(null, hit.x, hit.y, hit.z, SoundEvents.AMETHYST_CLUSTER_BREAK, SoundSource.BLOCKS, 0.9F, 0.7F);
+				level.playSound(null, hit.x, hit.y, hit.z, SoundEvents.AMETHYST_BLOCK_CHIME, SoundSource.BLOCKS, 0.5F, 0.6F);
+			}
+			case ORGANIC -> {
+				level.playSound(null, hit.x, hit.y, hit.z, SoundEvents.SLIME_BLOCK_HIT, SoundSource.BLOCKS, 1.0F, 0.6F);
+				level.playSound(null, hit.x, hit.y, hit.z, SoundEvents.HONEY_BLOCK_SLIDE, SoundSource.BLOCKS, 0.4F, 0.8F);
+			}
+			case TECH -> {
+				level.playSound(null, hit.x, hit.y, hit.z, SoundEvents.NETHERITE_BLOCK_HIT, SoundSource.BLOCKS, 1.0F, 0.9F);
+				level.playSound(null, hit.x, hit.y, hit.z, SoundEvents.COPPER_BULB_TURN_ON, SoundSource.BLOCKS, 0.5F, 0.7F);
+			}
+			case VOID -> {
+				level.playSound(null, hit.x, hit.y, hit.z, SoundEvents.ENDER_CHEST_CLOSE, SoundSource.BLOCKS, 0.7F, 0.5F);
+				level.playSound(null, hit.x, hit.y, hit.z, SoundEvents.PORTAL_TRIGGER, SoundSource.BLOCKS, 0.3F, 0.4F);
+			}
+		}
+	}
+
+	/**
+	 * S2 CONTACT personal sound: the pressing player alone hears a slime squelch
+	 * at their own position (the payload-driven flash is theirs alone too).
+	 * 26.2 removed {@code Player.playNotifySound}, so this sends the
+	 * {@link ClientboundSoundPacket} directly, exactly like the vanilla raid horn.
+	 */
+	private static void sendContactSound(ServerLevel level, Player player) {
+		if (player instanceof ServerPlayer serverPlayer) {
+			serverPlayer.connection.send(new ClientboundSoundPacket(
+					BuiltInRegistries.SOUND_EVENT.wrapAsHolder(SoundEvents.SLIME_BLOCK_HIT), SoundSource.BLOCKS,
+					player.getX(), player.getY(), player.getZ(), 0.8F, 0.5F, level.getRandom().nextLong()));
+		}
+	}
+
+	/**
+	 * WP-Evt: a safe unit vector for impact-entry directions — degenerate inputs
+	 * (an event exactly at the center) quantize to the zero direction, which the
+	 * client already treats as "directionless" (the BREAK convention).
+	 */
+	private static Vec3 safeNormalize(Vec3 direction) {
+		return direction.lengthSqr() < 1.0E-6 ? Vec3.ZERO : direction.normalize();
 	}
 
 	/**

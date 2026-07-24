@@ -18,7 +18,11 @@ import com.bubbleshield.shield.ShieldMode;
 import com.bubbleshield.shield.ShieldShape;
 import com.bubbleshield.shield.ShieldState;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -37,6 +41,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
@@ -223,6 +228,40 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	 * pure clock passage that no mutation path would otherwise notice.
 	 */
 	private boolean lastAlarmed;
+
+	/**
+	 * WP-Evt: contact events (payload entry + personal notify sound) fire at most
+	 * once per this many ticks per pressing player (see {@link #tryContact}).
+	 */
+	public static final int CONTACT_RATE_TICKS = 10;
+	/** WP-Evt: at most this many delayed sounds queue per shield (see {@link #queueAntipodeWaveTail}). */
+	public static final int MAX_PENDING_SOUNDS = 4;
+
+	/**
+	 * A delayed positional sound: queued by the S2 antipode wave tail and drained
+	 * by {@link #serverTick} once the level clock reaches {@code dueTick}.
+	 */
+	public record PendingSound(long dueTick, Vec3 pos, SoundEvent sound, float vol, float pitch) {
+	}
+
+	/**
+	 * WP-Evt transient visual-event state — like {@link #lastSentState}, none of
+	 * this is ever persisted: pending {@link ShieldPayloads.ImpactEntry} rows
+	 * coalesce into at most one {@code ImpactBatchS2C} per tick
+	 * ({@link #flushImpacts}), the two maps back the CONTACT rate limit and the
+	 * PASSAGE inside/outside flip detection, and {@link #pendingSounds} holds the
+	 * delayed antipode wave tails. All of it is swept by {@link #clearImpactState}
+	 * on deactivate/break/removal.
+	 */
+	private final List<ShieldPayloads.ImpactEntry> pendingImpacts = new ArrayList<>();
+	private final Map<UUID, Long> lastContactTick = new HashMap<>();
+	private final Map<UUID, Boolean> wasInside = new HashMap<>();
+	private final List<PendingSound> pendingSounds = new ArrayList<>();
+	/**
+	 * S2 impact-sound rate limit: the game time the last hit-point sound trio
+	 * played at; one trio per shield per tick (the first impact of the tick wins).
+	 */
+	private long lastImpactSoundTick = Long.MIN_VALUE;
 
 	public BubbleShieldBlockEntity(BlockPos worldPosition, BlockState blockState) {
 		super(ModBlockEntities.BUBBLE_SHIELD_PROJECTOR, worldPosition, blockState);
@@ -441,6 +480,11 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 
 			if (wasActive && !this.shieldState.active) {
 				serverLevel.gameEvent(GameEvent.BLOCK_DEACTIVATE, this.worldPosition, GameEvent.Context.of(this.getBlockState()));
+				// WP-Evt: every deactivation path sweeps the transient visual-event
+				// state (a break already swept it inside onShieldBreak — idempotent;
+				// its queued BREAK entry deliberately survives the sweep, see
+				// clearImpactState, so the collapse flash still reaches clients).
+				this.clearImpactState();
 			}
 
 			// B6: the census only runs while active; a stale count must not linger
@@ -493,7 +537,177 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 			this.updateChunkTicket(serverLevel);
 			// D7c: at most one sync broadcast per shield per tick.
 			this.flushSync();
+			// WP-Evt, right after flushSync and deliberately OUTSIDE it: the sync's
+			// diff gate compares replicated snapshots, and pure visual events do not
+			// change the snapshot — routed through flushSync they would be eaten.
+			// Due sounds drain first so an antipode tail whose delay elapsed this
+			// tick is heard alongside (never after) the tick's impact batch.
+			this.drainPendingSounds(serverLevel);
+			this.flushImpacts();
 		}
+	}
+
+	// --- WP-Evt: transient visual events (impact batches) + delayed sounds ---
+
+	/**
+	 * Queues one visual event for the next {@link #flushImpacts} batch. Public:
+	 * besides the ShieldLogic emission sites this is the harness hook the
+	 * gametests (and the future capture tooling) drive events through.
+	 *
+	 * @param kind one of the {@link ShieldPayloads.ImpactEntry} KIND_* constants.
+	 * @param dirUnit outward unit direction from the shield center to the event
+	 * point ({@link Vec3#ZERO} for directionless events like BREAK).
+	 * @param strength damage-scale strength, byte-encoded x10 (saturates at 25.5).
+	 */
+	public void queueImpact(int kind, Vec3 dirUnit, float strength) {
+		this.pendingImpacts.add(ShieldPayloads.ImpactEntry.of(kind, dirUnit, strength));
+	}
+
+	/**
+	 * The CONTACT rate gate: true (and the tick is recorded) when the given
+	 * player's last accepted contact is at least {@link #CONTACT_RATE_TICKS} ago.
+	 */
+	public boolean tryContact(UUID uuid, long gameTime) {
+		Long last = this.lastContactTick.get(uuid);
+		if (last != null && gameTime - last < CONTACT_RATE_TICKS) {
+			return false;
+		}
+
+		this.lastContactTick.put(uuid, gameTime);
+		return true;
+	}
+
+	/**
+	 * Records the given (whitelisted) player's inside/outside state for the
+	 * PASSAGE flip detection.
+	 *
+	 * @return the previously stored state, or null on the first observation
+	 * (which never counts as a flip).
+	 */
+	public @Nullable Boolean swapWasInside(UUID uuid, boolean inside) {
+		return this.wasInside.put(uuid, inside);
+	}
+
+	/**
+	 * The S2 impact-sound rate gate: at most ONE hit-point sound trio per shield
+	 * per tick — the first impact of a same-tick volley wins.
+	 */
+	public boolean tryImpactSounds(long gameTime) {
+		if (this.lastImpactSoundTick == gameTime) {
+			return false;
+		}
+
+		this.lastImpactSoundTick = gameTime;
+		return true;
+	}
+
+	/**
+	 * S2 antipode wave tail: the impact's shockwave "travels through" the bubble
+	 * and rings out on the far side — a {@code WARDEN_SONIC_CHARGE} (0.5, 0.7)
+	 * queued at the hit point mirrored through the center
+	 * ({@code center - (hit - center)}), due {@code 2 + radius/8} ticks from now
+	 * (bigger bubbles take longer to traverse). The queue caps at
+	 * {@link #MAX_PENDING_SOUNDS}; overflow tails are dropped, and the queue is
+	 * cleared with the rest of the transient state on deactivate/break/removal.
+	 */
+	public void queueAntipodeWaveTail(Vec3 hitPos, double radius) {
+		if (this.pendingSounds.size() >= MAX_PENDING_SOUNDS || this.level == null) {
+			return;
+		}
+
+		Vec3 center = Vec3.atCenterOf(this.worldPosition);
+		Vec3 antipode = center.subtract(hitPos.subtract(center));
+		long dueTick = this.level.getGameTime() + 2L + (long) (radius / 8.0);
+		this.pendingSounds.add(new PendingSound(dueTick, antipode, SoundEvents.WARDEN_SONIC_CHARGE, 0.5F, 0.7F));
+	}
+
+	/** Plays and removes every queued {@link PendingSound} whose due tick has arrived. */
+	private void drainPendingSounds(ServerLevel level) {
+		if (this.pendingSounds.isEmpty()) {
+			return;
+		}
+
+		long gameTime = level.getGameTime();
+		Iterator<PendingSound> iterator = this.pendingSounds.iterator();
+		while (iterator.hasNext()) {
+			PendingSound sound = iterator.next();
+			if (gameTime >= sound.dueTick()) {
+				iterator.remove();
+				level.playSound(null, sound.pos().x, sound.pos().y, sound.pos().z,
+						sound.sound(), SoundSource.BLOCKS, sound.vol(), sound.pitch());
+			}
+		}
+	}
+
+	/**
+	 * WP-Evt: flushes the pending visual events into at most ONE
+	 * {@code ImpactBatchS2C} per shield per tick, sent to every player within
+	 * {@code currentRadius + }{@link ServerNet#IMPACT_RECEIVE_MARGIN} of the
+	 * center (see {@link ServerNet#broadcastImpacts}). Overflow beyond
+	 * {@link ShieldPayloads.ImpactBatchS2C#MAX_ENTRIES} keeps the OLDEST entries
+	 * (they describe what actually happened first), except that a BREAK entry is
+	 * never dropped: it replaces the newest kept entry, so the collapse flash
+	 * survives any same-tick volley spam.
+	 */
+	private void flushImpacts() {
+		if (this.pendingImpacts.isEmpty()) {
+			return;
+		}
+
+		List<ShieldPayloads.ImpactEntry> entries;
+		if (this.pendingImpacts.size() <= ShieldPayloads.ImpactBatchS2C.MAX_ENTRIES) {
+			entries = List.copyOf(this.pendingImpacts);
+		} else {
+			List<ShieldPayloads.ImpactEntry> kept =
+					new ArrayList<>(this.pendingImpacts.subList(0, ShieldPayloads.ImpactBatchS2C.MAX_ENTRIES));
+			if (kept.stream().noneMatch(entry -> entry.kind() == ShieldPayloads.ImpactEntry.KIND_BREAK)) {
+				this.pendingImpacts.stream()
+						.filter(entry -> entry.kind() == ShieldPayloads.ImpactEntry.KIND_BREAK)
+						.findFirst()
+						.ifPresent(breakEntry -> kept.set(ShieldPayloads.ImpactBatchS2C.MAX_ENTRIES - 1, breakEntry));
+			}
+
+			entries = List.copyOf(kept);
+		}
+
+		this.pendingImpacts.clear();
+		ServerNet.broadcastImpacts(this, entries);
+	}
+
+	/**
+	 * WP-Evt cleanup, run on every deactivation path (GUI/redstone power-down,
+	 * fuel-out, break) and on removal: pending entries, both contact/passage maps
+	 * and the delayed-sound queue are swept. Pending BREAK entries deliberately
+	 * SURVIVE the sweep — the break path clears state and queues its entry in the
+	 * same breath ({@code ShieldLogic.onShieldBreak}), and the generic
+	 * deactivation hook running later in the same tick must not eat it before
+	 * {@link #flushImpacts} ships the collapse flash.
+	 */
+	public void clearImpactState() {
+		this.pendingImpacts.removeIf(entry -> entry.kind() != ShieldPayloads.ImpactEntry.KIND_BREAK);
+		this.lastContactTick.clear();
+		this.wasInside.clear();
+		this.pendingSounds.clear();
+	}
+
+	/** Pending visual-event entry count; exposed for gametests. */
+	public int pendingImpactCount() {
+		return this.pendingImpacts.size();
+	}
+
+	/** Pending delayed-sound count; exposed for gametests. */
+	public int pendingSoundCount() {
+		return this.pendingSounds.size();
+	}
+
+	/** Tracked CONTACT rate-limit map size; exposed for gametests. */
+	public int contactTrackedCount() {
+		return this.lastContactTick.size();
+	}
+
+	/** Tracked PASSAGE inside/outside map size; exposed for gametests. */
+	public int passageTrackedCount() {
+		return this.wasInside.size();
 	}
 
 	/**
@@ -990,6 +1204,8 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 			}
 
 			state.health += healed;
+			// WP-Evt: the kit's mend flashes the surface (regen never does).
+			this.queueHealImpact(healed);
 		} else if (gameTime < state.cooldownUntil) {
 			long remaining = state.cooldownUntil - gameTime;
 			long reduced = Math.max(1L, remaining - ShieldLogic.patchKitCooldownReduction(state, this.tier()));
@@ -1010,6 +1226,17 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 				center.x, center.y + 0.8, center.z, 8, 0.4, 0.4, 0.4, 0.0);
 		this.markUpdated();
 		return true;
+	}
+
+	/**
+	 * WP-Evt HEAL emission, called from the ACTIVE-heal branch of
+	 * {@link #applyPatchKit} only: patch kits are the deliberate, player-visible
+	 * mend; the passive regen pulses deliberately emit nothing (they fire every
+	 * 2 s and would turn the surface into a permanent strobe). Directionless like
+	 * BREAK; strength is the actually-healed HP (byte-encoded x10, saturating).
+	 */
+	private void queueHealImpact(float healed) {
+		this.queueImpact(ShieldPayloads.ImpactEntry.KIND_HEAL, Vec3.ZERO, healed);
 	}
 
 	/**
@@ -1063,7 +1290,8 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		float applied = ShieldLogic.appliedDamage(warded, tier, this.platingDr(), ShieldLogic.isLastStand(this.shieldState));
 		boolean broke = ShieldLogic.applyDamage(this.shieldState, applied, gameTime, ShieldLogic.breakCooldownTicks(tier));
 		if (broke && this.level instanceof ServerLevel serverLevel) {
-			ShieldLogic.onShieldBreak(serverLevel, this.worldPosition, this.shieldState, preBreakRadius);
+			// WP-Evt: the BE-aware overload also queues the BREAK batch entry.
+			ShieldLogic.onShieldBreak(serverLevel, this.worldPosition, this.shieldState, preBreakRadius, this);
 			// A break here is a real active->inactive transition and must stay
 			// sculk-audible: this path covers linked-partner damage applied from
 			// ANOTHER shield's tick, which this shield's own serverTick snapshot
@@ -1149,6 +1377,11 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 			if (this.bossEvent != null) {
 				this.bossEvent.removeAllPlayers();
 			}
+
+			// WP-Evt: a deliberate power-down sweeps the transient visual-event
+			// state immediately (queued flashes/sounds for a bubble that no longer
+			// exists must never ship).
+			this.clearImpactState();
 
 			// D5/fix 7: the chunk ticket is NOT released here — it simply stops
 			// being re-armed and times out (~100 ticks); an explicit release would
@@ -1367,6 +1600,12 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		if (this.bossEvent != null) {
 			this.bossEvent.removeAllPlayers();
 		}
+
+		// WP-Evt: a removed projector flushes nothing ever again — sweep the
+		// transient event state INCLUDING any pending BREAK entry (the
+		// clearImpactState sweep alone preserves those for the break flash).
+		this.clearImpactState();
+		this.pendingImpacts.clear();
 
 		super.setRemoved();
 	}
