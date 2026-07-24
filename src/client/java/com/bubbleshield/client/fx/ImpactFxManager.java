@@ -1,5 +1,6 @@
 package com.bubbleshield.client.fx;
 
+import com.bubbleshield.client.ClientShieldManager;
 import com.bubbleshield.net.ShieldPayloads;
 
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLevelEvents;
@@ -38,6 +39,12 @@ public final class ImpactFxManager {
 				if (kind == ShieldPayloads.ImpactEntry.KIND_CONTACT) {
 					ContactFlash.onServerContact(pos, entry.dir());
 				}
+
+				// WP-Evt break ghost: the break's sync (active=false, radius 0)
+				// always lands BEFORE this batch, so the replica is armed here.
+				if (kind == ShieldPayloads.ImpactEntry.KIND_BREAK) {
+					ClientShieldManager.onBreakImpact(pos);
+				}
 			}
 		}));
 
@@ -54,6 +61,8 @@ public final class ImpactFxManager {
 		ApertureTracker.endClientTick(mc);
 		ContactFlash.tick(mc);
 		ProximityHum.tick(mc);
+		// Sweeps removed projectors whose replica was retained for the break ghost.
+		ClientShieldManager.endClientTick();
 	}
 
 	private static void resetAll() {

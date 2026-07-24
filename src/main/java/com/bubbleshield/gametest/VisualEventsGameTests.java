@@ -574,6 +574,43 @@ public class VisualEventsGameTests {
 	}
 
 	/**
+	 * (17) The BREAK batch must reach everyone who could SEE the full-size
+	 * bubble: the batch flushes AFTER the hit, when a break has already zeroed
+	 * currentRadius, so ranging on the post-hit radius strands the collapse
+	 * flash on a bare 32-block ring. The receiver range is
+	 * {@code max(targetRadius, currentRadius) + 32}; the mock parks VERTICALLY
+	 * at pre-break radius + 16 (46 blocks up — beyond the old 0 + 32 ring,
+	 * inside the fixed 30 + 32, and nowhere near any concurrent structure).
+	 */
+	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 200, padding = 16)
+	public void breakBatchReachesPreBreakRadiusMock(GameTestHelper helper) {
+		BubbleShieldBlockEntity be = placeProjector(helper, 30.0F);
+		be.addFuelSeconds(PLENTY_OF_FUEL);
+		ShieldState state = be.getShieldState();
+		Vec3 center = shieldCenter(helper);
+		MockPlayers.CapturingMockPlayer capture = MockPlayers.createCapturingMockPlayer(helper, GameType.CREATIVE);
+		capture.player().snapTo(center.x, center.y + 46.0, center.z);
+		BlockPos absPos = helper.absolutePos(PROJECTOR_POS);
+		helper.assertTrue(be.tryActivate(), "shield should activate");
+
+		helper.startSequence()
+				.thenExecuteAfter(2, () -> {
+					capture.drainPackets();
+					helper.assertTrue(ShieldLogic.currentRadius(state) == 30.0F,
+							"the full-health pre-break radius should be 30, got " + ShieldLogic.currentRadius(state));
+					// One breaking hit; the tier-0 D60 max health is far below this.
+					be.applyShieldDamage(100000.0F);
+					helper.assertTrue(!state.active, "the hit should break the shield");
+				})
+				.thenExecuteAfter(2, () -> {
+					List<ShieldPayloads.ImpactEntry> entries = entriesIn(capture.drainPackets(), absPos);
+					helper.assertTrue(countKind(entries, ShieldPayloads.ImpactEntry.KIND_BREAK) == 1,
+							"the BREAK batch must reach the mock at pre-break radius + 16, got " + entries);
+				})
+				.thenSucceed();
+	}
+
+	/**
 	 * (11) Impacts bypass the sync diff gate: a pure visual event (no replicated
 	 * state change) flushes its batch while ZERO ShieldSyncS2C go out in the same
 	 * window — partitioned from ONE destructive drain.
@@ -634,6 +671,14 @@ public class VisualEventsGameTests {
 					helper.assertTrue(be.pendingSoundCount() == 0, "deactivation must clear the delayed sounds");
 					helper.assertTrue(be.contactTrackedCount() == 0, "deactivation must clear the contact map");
 					helper.assertTrue(be.passageTrackedCount() == 0, "deactivation must clear the passage map");
+
+					// The public hook stays silent on a downed shield: a direct
+					// non-BREAK queueImpact is ignored (only BREAK may queue while
+					// inactive), so nothing can flush a flash for a bubble that
+					// does not exist.
+					be.queueImpact(ShieldPayloads.ImpactEntry.KIND_IMPACT, new Vec3(0.0, 1.0, 0.0), 5.0F);
+					helper.assertTrue(be.pendingImpactCount() == 0,
+							"a non-BREAK queueImpact while inactive must be ignored, got " + be.pendingImpactCount());
 				})
 				.thenExecuteAfter(4, () -> {
 					List<Object> packets = capture.drainPackets();
@@ -708,7 +753,11 @@ public class VisualEventsGameTests {
 							"an ENERGY-family hit must ring the sculk-charge layer");
 					helper.assertTrue(countSoundsNear(packets, SoundEvents.AMETHYST_CLUSTER_BREAK, center, 12.0) == 0,
 							"an ENERGY-family hit must not ring the amethyst layer");
-
+				})
+				// The second hit waits out the per-shield sound cooldown (4 ticks);
+				// a back-to-back spawn would land inside the first hit's window and
+				// (correctly) stay silent.
+				.thenExecuteAfter(BubbleShieldBlockEntity.IMPACT_SOUND_COOLDOWN_TICKS, () -> {
 					state.effectId = 4;
 					spawnDivingArrow(helper, arrowSpawnAboveBoundary());
 				})
@@ -772,11 +821,16 @@ public class VisualEventsGameTests {
 	}
 
 	/**
-	 * (15) The impact-sound rate limit: a same-tick 10-arrow volley rings at most
-	 * one sound trio per tick per shield, so the NEW hit-sound layer stays at
-	 * &le; 3 packets per second (in practice exactly 1 here; existing alarm/
-	 * ambient sounds are deliberately out of scope — the count keys on
-	 * HEAVY_CORE_HIT, which nothing else plays).
+	 * (15) The impact-sound rate limit under SUSTAINED fire: one arrow per tick
+	 * for 10 consecutive ticks rings at most ceil(10/4) = 3 full trios (the
+	 * per-shield cooldown is {@link BubbleShieldBlockEntity#IMPACT_SOUND_COOLDOWN_TICKS};
+	 * the old equality gate only merged same-tick volleys and let sustained fire
+	 * ring 20 trios per second). ALL new-layer sound packets are counted —
+	 * HEAVY_CORE_HIT thump, SHIELD_BLOCK ring and the CRYSTAL family pair
+	 * (effect 4: amethyst break + chime) — and every accepted window must ring
+	 * the FULL trio (first hit of the window wins; the rest stay silent).
+	 * Pre-existing sounds (alarm/heartbeat/ambient) are deliberately out of
+	 * scope: none of the four counted events is played by anything else here.
 	 */
 	@GameTest(environment = ISOLATED_ENVIRONMENT, maxTicks = 200, padding = 16)
 	public void impactSoundCapPerSecond(GameTestHelper helper) {
@@ -785,23 +839,40 @@ public class VisualEventsGameTests {
 		ShieldState state = be.getShieldState();
 		MockPlayers.CapturingMockPlayer capture = captureOutsideBubble(helper);
 		Vec3 center = shieldCenter(helper);
+		// Effect 4 ("sparkle") is CRYSTAL: its family pair (amethyst cluster break
+		// + chime) collides with nothing else in this test — unlike ENERGY, whose
+		// WARDEN_SONIC_CHARGE layer would double as the antipode tail sound.
+		state.effectId = 4;
 		helper.assertTrue(be.tryActivate(), "shield should activate");
 
-		helper.startSequence()
-				.thenExecuteAfter(2, () -> {
-					capture.drainPackets();
-					// 10 arrows, identical y/velocity: all cross on the same tick.
-					for (int i = 0; i < 10; i++) {
-						spawnDivingArrow(helper, new Vec3(4.05 + 0.1 * i, 7.5, (i % 2 == 0) ? 4.3 : 4.7));
-					}
-				})
+		var sequence = helper.startSequence()
+				.thenExecuteAfter(2, () -> capture.drainPackets());
+		// One identical diving arrow per tick for 10 consecutive ticks: each
+		// crosses the boundary on its first moved tick, so the hits land on 10
+		// consecutive ticks (the shield never shrinks below the 60% plateau).
+		for (int i = 0; i < 10; i++) {
+			final double x = 4.05 + 0.1 * i;
+			final double z = (i % 2 == 0) ? 4.3 : 4.7;
+			sequence = sequence.thenExecuteAfter(1, () -> spawnDivingArrow(helper, new Vec3(x, 7.5, z)));
+		}
+
+		sequence
 				.thenWaitUntil(() -> helper.assertTrue(
 						state.health == T0_D8_MAX_HEALTH - 10.0F * ShieldLogic.PROJECTILE_DAMAGE,
-						"waiting for the full volley, health is " + state.health))
+						"waiting for all 10 hits, health is " + state.health))
 				.thenExecuteAfter(20, () -> {
-					int thumps = countSoundsNear(capture.drainPackets(), SoundEvents.HEAVY_CORE_HIT, center, 12.0);
-					helper.assertTrue(thumps >= 1, "the volley must ring at least one trio");
-					helper.assertTrue(thumps <= 3, "the new hit-sound layer must stay <= 3/s, got " + thumps);
+					List<Object> packets = capture.drainPackets();
+					int thumps = countSoundsNear(packets, SoundEvents.HEAVY_CORE_HIT, center, 12.0);
+					int rings = countSoundsNear(packets, SoundEvents.SHIELD_BLOCK.value(), center, 12.0);
+					int famBreaks = countSoundsNear(packets, SoundEvents.AMETHYST_CLUSTER_BREAK, center, 12.0);
+					int famChimes = countSoundsNear(packets, SoundEvents.AMETHYST_BLOCK_CHIME, center, 12.0);
+					helper.assertTrue(thumps >= 2, "sustained fire must still ring trios, got " + thumps);
+					helper.assertTrue(thumps <= 3 && rings <= 3 && famBreaks <= 3 && famChimes <= 3,
+							"hits on 10 consecutive ticks must ring at most ceil(10/4) = 3 trios worth of packets, got "
+									+ thumps + "/" + rings + "/" + famBreaks + "/" + famChimes);
+					helper.assertTrue(rings == thumps && famBreaks == thumps && famChimes == thumps,
+							"every accepted window must ring the FULL trio, got "
+									+ thumps + "/" + rings + "/" + famBreaks + "/" + famChimes);
 				})
 				.thenSucceed();
 	}

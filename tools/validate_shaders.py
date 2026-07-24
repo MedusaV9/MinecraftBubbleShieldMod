@@ -74,11 +74,14 @@ On top of that it enforces the generated-shader invariants:
   apart;
 * v11 cost budget (check_cost_budget, comment-stripped counts): every fx
   spends EXACTLY 12 texture taps (7 atlasTile call sites minus the helper
-  definition + 3 Sampler1 + 2 Sampler2), keeps its field-function call sites
-  (deepField/fbm2/fbm3/caustic/vnoise3) at or under the hardcoded ceiling and
-  its raw line count at or under 760, carries exactly one
-  [layer:inner:<recipe>] marker equal to the manifest's thick.inner, and the
-  recomputed tap/field counts must equal the manifest's costTaps/costField;
+  definition + 3 Sampler1 + 2 Sampler2), has NO direct 'texture(Sampler0'
+  tap outside the atlasTile helper body (a raw tap would escape the
+  atlasTile-call-site count and silently break the 12-tap budget), keeps its
+  field-function call sites (deepField/fbm2/fbm3/caustic/vnoise3) at or under
+  the hardcoded ceiling and its raw line count at or under 760, carries
+  exactly one [layer:inner:<recipe>] marker equal to the manifest's
+  thick.inner, and the recomputed tap/field counts must equal the manifest's
+  costTaps/costField;
 * tools/surface_manifest.json exists, has EXACTLY the ids 0..COUNT-1, its
   entries match the fx_* files on disk 1:1, and its (family, warp, deep, rim,
   anim) stack tuples are pairwise distinct (the structural-variety guarantee);
@@ -274,7 +277,10 @@ WITH_TEXTURE_VAR_RE = re.compile(r'\.withTexture\(\s*"Sampler0"\s*,\s*(\w+)\s*\)
 # its internal texture(Sampler0 is the same tap, not an extra one) plus the
 # direct Sampler1/Sampler2 scene-copy taps. The v11 contract is exactly 12:
 # 7 atlasTile (center + 2 gradient + 2 flow + 2 deep-parallax) + 3 chromatic
-# Sampler1 taps + 2 Sampler2 depth taps.
+# Sampler1 taps + 2 Sampler2 depth taps. Because atlasTile call sites are the
+# unit of counting, a direct 'texture(Sampler0' ANYWHERE outside the helper's
+# own body would be an uncounted tap -- sampler0_taps_outside_atlas() makes
+# that a hard failure instead of letting it escape the budget.
 ATLAS_CALL_RE = re.compile(r"\batlasTile\s*\(")
 ATLAS_DEF_RE = re.compile(r"^\s*vec4\s+atlasTile\s*\(", re.MULTILINE)
 SAMPLER1_TAP_RE = re.compile(r"\btexture\s*\(\s*Sampler1\b")
@@ -824,13 +830,42 @@ def parse_png(data: bytes) -> tuple[int, int, int, int] | str:
     return width, height, bit_depth, color_type
 
 
+def sampler0_taps_outside_atlas(text: str) -> int:
+    """Count 'texture(Sampler0' call sites OUTSIDE the atlasTile helper body
+    in comment-stripped GLSL. The tap budget counts atlasTile call sites, so
+    the helper's own internal tap is the only legitimate direct Sampler0
+    sample; anything else is an uncounted texture tap. Brace-matches each
+    atlasTile definition to its closing brace so multi-line helper bodies
+    stay covered."""
+    spans: list[tuple[int, int]] = []
+    for definition in ATLAS_DEF_RE.finditer(text):
+        open_brace = text.find("{", definition.end())
+        if open_brace < 0:
+            continue
+        depth = 0
+        end = len(text)
+        for i in range(open_brace, len(text)):
+            if text[i] == "{":
+                depth += 1
+            elif text[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    end = i + 1
+                    break
+        spans.append((definition.start(), end))
+    return sum(1 for tap in SAMPLER0_USE_RE.finditer(text)
+               if not any(start <= tap.start() < end for start, end in spans))
+
+
 def check_cost_budget(shaders: list[Path], skip_fx: bool) -> list[str]:
     """v11 per-fx cost lint (fail-closed, like everything else here): every
     generated fx must spend EXACTLY the contracted texture budget (12 taps:
-    7 atlasTile call sites + 3 Sampler1 + 2 Sampler2), stay at or under the
-    field-function call ceiling and the raw line ceiling, and agree with the
-    manifest's v11 records -- the in-file [layer:inner:<recipe>] marker must
-    equal thick.inner, and the recomputed tap/field counts must equal
+    7 atlasTile call sites + 3 Sampler1 + 2 Sampler2), have NO direct
+    'texture(Sampler0' tap outside the atlasTile helper body (it would escape
+    the atlasTile-call-site count), stay at or under the field-function call
+    ceiling and the raw line ceiling, and agree with the manifest's v11
+    records -- the in-file [layer:inner:<recipe>] marker must equal
+    thick.inner, and the recomputed tap/field counts must equal
     costTaps/costField. glslang can not see any of this (an extra tap or a
     runaway inner recipe compiles fine), so this is the only gate keeping
     the per-fragment cost and the recorded cost model honest. Returns errors."""
@@ -858,6 +893,13 @@ def check_cost_budget(shaders: list[Path], skip_fx: bool) -> list[str]:
         if taps != EXPECTED_TEXTURE_TAPS:
             errors.append(f"{shader.name}: {taps} texture taps (atlasTile call sites + Sampler1 "
                           f"+ Sampler2), expected exactly {EXPECTED_TEXTURE_TAPS}")
+            file_ok = False
+
+        stray_taps = sampler0_taps_outside_atlas(text)
+        if stray_taps:
+            errors.append(f"{shader.name}: {stray_taps} direct 'texture(Sampler0' tap(s) outside "
+                          "the atlasTile helper definition -- all Sampler0 sampling must go "
+                          "through atlasTile() so the tap budget counts it")
             file_ok = False
 
         fields = len(FIELD_CALL_RE.findall(text)) - len(FIELD_DEF_RE.findall(text))
@@ -904,8 +946,8 @@ def check_cost_budget(shaders: list[Path], skip_fx: bool) -> list[str]:
 
     if not errors:
         print(f"OK    v11 cost budget ({checked} fx at exactly {EXPECTED_TEXTURE_TAPS} texture "
-              f"taps, field calls <= {FIELD_CALL_CEILING}, <= {MAX_FX_LINES} lines, "
-              "inner marker + costTaps/costField match the manifest)")
+              f"taps, no Sampler0 tap outside atlasTile, field calls <= {FIELD_CALL_CEILING}, "
+              f"<= {MAX_FX_LINES} lines, inner marker + costTaps/costField match the manifest)")
     return errors
 
 

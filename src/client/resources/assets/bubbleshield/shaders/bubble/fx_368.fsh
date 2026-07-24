@@ -398,8 +398,13 @@ void main() {
     // sphere. chord = the view ray's path length through the shell,
     // normalized by the radial thickness and limb-clamped: chordN is
     // 1.0 head-on and saturates at 3.0 toward the grazing silhouette.
+    // Two-case: while the ray still hits the inner sphere the path is
+    // cosV - sqrt(disc); past the tangent ring it misses and runs the
+    // full outer chord 2*cosV, capped at the inner-tangent maximum
+    // 2*sqrt(1 - (1-rho)^2) = 1.0883.
     float cosV = abs(dot(sdir, viewV));
-    float chord = cosV - sqrt(max(0.0, 0.8390 * 0.8390 - (1.0 - cosV * cosV)));
+    float chordDisc = 0.8390 * 0.8390 - (1.0 - cosV * cosV);
+    float chord = chordDisc > 0.0 ? cosV - sqrt(chordDisc) : min(2.0 * cosV, 1.0883);
     float chordN = min(chord / 0.1610, 3.0);
 
     // [layer:rim:graze_film]
@@ -581,8 +586,10 @@ void main() {
     // dissolve -- vertexColor.a still always wins).
     bodyAlpha += motifGlow * 0.1679;
     // [layer:inner:stars]
-    // v11 back-face interior: gl_FrontFacing keys the far shell only.
-    float innerFace = gl_FrontFacing ? 0.0 : 1.0;
+    // v11 far-shell interior: with the mesh's inward winding and cull OFF,
+    // gl_FrontFacing is TRUE exactly where the camera sees the concave side
+    // (the far shell from outside, the whole wall from inside).
+    float innerFace = gl_FrontFacing ? 1.0 : 0.0;
     // GALAXYSWIRL showcase: a COUNTER-rotated (-0.5x turns) inner star
     // plane spins against the disc, crossed by a Gaussian dust-lane
     // absorption band pinned to the inner equator.

@@ -236,6 +236,19 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	public static final int CONTACT_RATE_TICKS = 10;
 	/** WP-Evt: at most this many delayed sounds queue per shield (see {@link #queueAntipodeWaveTail}). */
 	public static final int MAX_PENDING_SOUNDS = 4;
+	/**
+	 * S2: the full hit-point sound trio plays at most once per this many ticks per
+	 * shield (see {@link #tryImpactSounds}). The old equality gate only merged
+	 * SAME-tick volleys — sustained fire (one arrow per tick) still rang up to 20
+	 * trios per second.
+	 */
+	public static final int IMPACT_SOUND_COOLDOWN_TICKS = 4;
+	/** Transient-map hygiene: both visitor maps are swept once per this many ticks. */
+	public static final int TRANSIENT_PRUNE_PERIOD_TICKS = 20;
+	/** Transient-map hygiene: {@link #lastContactTick} entries older than this are dropped. */
+	public static final int CONTACT_ENTRY_TTL_TICKS = 200;
+	/** Transient-map hygiene: {@link #wasInside} keeps players within {@code currentRadius + } this margin. */
+	public static final double PASSAGE_TRACK_MARGIN = 16.0;
 
 	/**
 	 * A delayed positional sound: queued by the S2 antipode wave tail and drained
@@ -259,7 +272,8 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	private final List<PendingSound> pendingSounds = new ArrayList<>();
 	/**
 	 * S2 impact-sound rate limit: the game time the last hit-point sound trio
-	 * played at; one trio per shield per tick (the first impact of the tick wins).
+	 * played at; one trio per shield per {@link #IMPACT_SOUND_COOLDOWN_TICKS}
+	 * (the first impact of the window wins).
 	 */
 	private long lastImpactSoundTick = Long.MIN_VALUE;
 
@@ -535,6 +549,13 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 
 			// D5: keep the projector chunk ticking while active (release when not).
 			this.updateChunkTicket(serverLevel);
+			// WP-Evt hygiene: both per-visitor maps would otherwise grow for as
+			// long as the shield stays active (one entry per player that ever
+			// pressed/crossed). Swept once per second, O(entries).
+			if (serverLevel.getGameTime() % TRANSIENT_PRUNE_PERIOD_TICKS == 0L) {
+				this.pruneTransientMaps(serverLevel);
+			}
+
 			// D7c: at most one sync broadcast per shield per tick.
 			this.flushSync();
 			// WP-Evt, right after flushSync and deliberately OUTSIDE it: the sync's
@@ -554,12 +575,22 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 	 * besides the ShieldLogic emission sites this is the harness hook the
 	 * gametests (and the future capture tooling) drive events through.
 	 *
+	 * <p>While the shield is INACTIVE only BREAK entries are accepted: the break
+	 * path flips {@code active} false and queues its entry in the same breath, so
+	 * BREAK must pass — but any other kind queued against a downed shield (the
+	 * hook is public) would otherwise flush a flash for a bubble that does not
+	 * exist.
+	 *
 	 * @param kind one of the {@link ShieldPayloads.ImpactEntry} KIND_* constants.
 	 * @param dirUnit outward unit direction from the shield center to the event
 	 * point ({@link Vec3#ZERO} for directionless events like BREAK).
 	 * @param strength damage-scale strength, byte-encoded x10 (saturates at 25.5).
 	 */
 	public void queueImpact(int kind, Vec3 dirUnit, float strength) {
+		if (!this.shieldState.active && kind != ShieldPayloads.ImpactEntry.KIND_BREAK) {
+			return;
+		}
+
 		this.pendingImpacts.add(ShieldPayloads.ImpactEntry.of(kind, dirUnit, strength));
 	}
 
@@ -590,10 +621,16 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 
 	/**
 	 * The S2 impact-sound rate gate: at most ONE hit-point sound trio per shield
-	 * per tick — the first impact of a same-tick volley wins.
+	 * per {@link #IMPACT_SOUND_COOLDOWN_TICKS} ticks — the first impact of the
+	 * window wins, later hits inside it stay silent server-side (their batch
+	 * entries still ship; only the audio layer is capped). The antipode wave
+	 * tail is unaffected beyond queuing only alongside an accepted trio.
 	 */
 	public boolean tryImpactSounds(long gameTime) {
-		if (this.lastImpactSoundTick == gameTime) {
+		// The != MIN_VALUE guard keeps the never-played sentinel from overflowing
+		// the subtraction (gameTime - Long.MIN_VALUE wraps negative).
+		if (this.lastImpactSoundTick != Long.MIN_VALUE
+				&& gameTime - this.lastImpactSoundTick < IMPACT_SOUND_COOLDOWN_TICKS) {
 			return false;
 		}
 
@@ -688,6 +725,33 @@ public class BubbleShieldBlockEntity extends BlockEntity implements ExtendedMenu
 		this.lastContactTick.clear();
 		this.wasInside.clear();
 		this.pendingSounds.clear();
+	}
+
+	/**
+	 * WP-Evt hygiene sweep, once per {@link #TRANSIENT_PRUNE_PERIOD_TICKS} from
+	 * {@link #serverTick}: {@link #lastContactTick} drops entries older than
+	 * {@link #CONTACT_ENTRY_TTL_TICKS} (the rate window is 10 ticks, so a
+	 * 200-tick-stale entry gates nothing), and {@link #wasInside} drops players
+	 * who are offline/elsewhere or no longer within
+	 * {@code currentRadius + }{@link #PASSAGE_TRACK_MARGIN} of the center (a
+	 * returning player just re-seeds on the first observation — no spurious
+	 * flip). Without this, both maps grow one entry per visitor for as long as
+	 * the shield stays active.
+	 */
+	private void pruneTransientMaps(ServerLevel level) {
+		long gameTime = level.getGameTime();
+		this.lastContactTick.values().removeIf(tick -> gameTime - tick > CONTACT_ENTRY_TTL_TICKS);
+
+		if (this.wasInside.isEmpty()) {
+			return;
+		}
+
+		Vec3 center = Vec3.atCenterOf(this.worldPosition);
+		double keepRange = this.currentRadius() + PASSAGE_TRACK_MARGIN;
+		this.wasInside.keySet().removeIf(uuid -> {
+			Player player = level.getPlayerByUUID(uuid);
+			return player == null || player.isRemoved() || player.position().distanceTo(center) > keepRange;
+		});
 	}
 
 	/** Pending visual-event entry count; exposed for gametests. */

@@ -58,7 +58,9 @@ import org.slf4j.LoggerFactory;
  *       floating interiors THROUGH the membrane;</li>
  *   <li>{@code volumetric} — {@code volumetric_grazing.png}: near-tangent view
  *       along the surface showing the limb thickening (ownership is temporarily
- *       foreign so no aperture punches through the grazed wall);</li>
+ *       foreign so no aperture punches through the grazed wall), plus
+ *       {@code volumetric_inside.png}: the far wall framed from INSIDE on a
+ *       celestial effect, showing the back-face inner-material recipe;</li>
  *   <li>{@code contact} — {@code contact_flash.png}: the shield is re-owned to
  *       a foreign UUID (whitelist cleared + {@code markUpdated} so the synced
  *       replica blocks the camera), then a &gt; 2-block snap-teleport to the
@@ -293,6 +295,13 @@ public class ScenarioCaptureTest implements FabricClientGameTest {
 	 * {@code volumetric}: a near-tangent membrane view. Ownership is temporarily
 	 * foreign (whitelist cleared) so the camera's proximity opens NO aperture in
 	 * the grazed wall; the camera never moves inward, so no contact fires either.
+	 *
+	 * <p>Also captures {@code volumetric_inside}: the interior camera (just
+	 * inside the east wall, looking west across the whole bubble) framing the
+	 * FAR wall from INSIDE on a celestial-group effect — the view that must show
+	 * the {@code [layer:inner:stars]} inner-material recipe on the far shell
+	 * (the aperture opened by the camera's own proximity sits on the east wall
+	 * BEHIND it, so the framed far wall stays sealed).
 	 */
 	private int runVolumetric(ClientGameTestContext ctx, TestServerContext server, Path captureDir, List<String> failures) {
 		int captured = 0;
@@ -306,6 +315,13 @@ public class ScenarioCaptureTest implements FabricClientGameTest {
 		captured += capture(ctx, "volumetric_grazing", captureDir, failures);
 		reownShield(server);
 		ctx.waitTicks(10);
+
+		// Inside view of the far wall, on the deepest-shell group (celestial,
+		// rho 0.18, inner recipe "stars") so the inner material reads clearly.
+		retune(server, firstOfFamily(SurfaceTemplate.STARFIELD).id());
+		server.runCommand(INTERIOR_CAMERA);
+		ctx.waitTicks(SETTLE_TICKS);
+		captured += capture(ctx, "volumetric_inside", captureDir, failures);
 		return captured;
 	}
 

@@ -371,9 +371,13 @@ public final class ServerNet {
 
 	/**
 	 * Sends one coalesced visual-event batch for the given shield to every player
-	 * within {@code currentRadius + }{@link #IMPACT_RECEIVE_MARGIN} of its center.
-	 * Called by {@code BubbleShieldBlockEntity.flushImpacts} (at most once per
-	 * shield per tick, OUTSIDE the sync diff gate).
+	 * within {@code max(targetRadius, currentRadius) + }{@link #IMPACT_RECEIVE_MARGIN}
+	 * of its center. Called by {@code BubbleShieldBlockEntity.flushImpacts} (at most
+	 * once per shield per tick, OUTSIDE the sync diff gate). The range deliberately
+	 * uses the LARGER of target and current radius: the batch flushes AFTER the hit
+	 * (and after flushSync), so the post-hit currentRadius is already shrunken —
+	 * and exactly 0 for a break, which would strand the BREAK omni-pulse on a
+	 * 32-block ring while everyone who watched the full-size bubble sees nothing.
 	 */
 	public static void broadcastImpacts(BubbleShieldBlockEntity shield, List<ShieldPayloads.ImpactEntry> entries) {
 		if (entries.isEmpty() || !(shield.getLevel() instanceof ServerLevel level)) {
@@ -382,7 +386,7 @@ public final class ServerNet {
 
 		ShieldPayloads.ImpactBatchS2C payload = new ShieldPayloads.ImpactBatchS2C(shield.getBlockPos(), level.dimension(), entries);
 		Vec3 center = Vec3.atCenterOf(shield.getBlockPos());
-		double range = shield.currentRadius() + IMPACT_RECEIVE_MARGIN;
+		double range = Math.max(shield.getShieldState().targetRadius, shield.currentRadius()) + IMPACT_RECEIVE_MARGIN;
 		for (ServerPlayer player : PlayerLookup.level(level)) {
 			if (player.position().distanceTo(center) <= range) {
 				ServerPlayNetworking.send(player, payload);

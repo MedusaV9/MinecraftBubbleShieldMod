@@ -3605,12 +3605,25 @@ def emit_shader(asg: dict) -> str:
     # dither layers and the depth-soft fade: bodyAlpha is still pre-clamp
     # and pre-dissolve, so vertexColor.a keeps final authority.
     # ------------------------------------------------------------------
+    # WINDING FACT (verified empirically on the llvmpipe harness, red-tint
+    # branch attribution): SphereMesh emits INWARD-wound quads (the winding
+    # normal points at the center) and the bubble pipeline culls nothing, so
+    # fragments showing their CONCAVE/interior side to the camera -- the far
+    # shell seen from outside, every wall seen from inside -- rasterize
+    # counter-clockwise and read gl_FrontFacing == TRUE. The inner recipes
+    # must land on exactly those fragments, hence `gl_FrontFacing ? 1.0 : 0.0`
+    # below. NOTE the pre-existing v5Back layer keys the OPPOSITE way
+    # (`gl_FrontFacing ? 0.0 : 1.0`): under this winding it has always
+    # densified/dimmed the NEAR face, but every v5 family was hand-tuned
+    # against that look since v5 -- it is deliberately left untouched.
     inner_turns = max(1, round(0.8 * plane0_turns * u(244, 0.9, 1.1)))
     inner_speed = F6(inner_turns * TWO_PI / DAY_SECONDS)
     inner_phase = F(u(245, 0.0, 6.2832))
     inner_lines = [f"// [layer:inner:{inner_recipe}]",
-                   "// v11 back-face interior: gl_FrontFacing keys the far shell only.",
-                   "float innerFace = gl_FrontFacing ? 0.0 : 1.0;"]
+                   "// v11 far-shell interior: with the mesh's inward winding and cull OFF,",
+                   "// gl_FrontFacing is TRUE exactly where the camera sees the concave side",
+                   "// (the far shell from outside, the whole wall from inside).",
+                   "float innerFace = gl_FrontFacing ? 1.0 : 0.0;"]
     if family == "LIGHTNING":
         bolt_turns = max(1, round(0.4 * plane0_turns))
         inner_lines += [
@@ -3923,14 +3936,37 @@ def emit_shader(asg: dict) -> str:
         lines.append(f"    vec3 deepTexB = atlasTile(texUV - VtUV * {depth_step}).rgb;")
     lines.append("    float deepTex = 0.5 * (dot(deepTexA, hgtW) + dot(deepTexB, hgtW));")
     lines.append("")
+    # Two-case chord: with impact parameter sinV, the view ray HITS the inner
+    # sphere while chordDisc = (1-rho)^2 - sin^2 V > 0 (path = cosV - sqrt(disc));
+    # past the tangent ring it MISSES and traverses the full outer chord 2*cosV,
+    # capped at the inner-tangent maximum 2*sqrt(1 - (1-rho)^2). The old
+    # single-case max(0, disc) form degenerated to chord = cosV -> 0 at the
+    # grazing limb (a THIN limb) instead of the shell-tangent maximum; now the
+    # shell thickens monotonically toward the tangent ring, with the 2*cosV
+    # falloff at the extreme limb. Sanity numbers (nominal group rho, before
+    # the per-id x0.88..1.12 jitter; chordN = min(chord/rho, 3)):
+    #   rho 0.05 (tangent cosV 0.3122): cosV 1.0 -> chord 0.0500, chordN 1.00
+    #     | 0.5 -> 0.1095, 2.19 | tangent -> 0.6245, 3.00(sat)
+    #     | 0.05 -> min(0.10, 0.6245) = 0.10, 2.00
+    #   rho 0.10 (tangent 0.4359): 1.0 -> 0.1000, 1.00 | 0.5 -> 0.2551, 2.55
+    #     | tangent -> 0.8718, 3.00(sat) | 0.05 -> 0.10, 1.00
+    #   rho 0.18 (tangent 0.5724): 1.0 -> 0.1800, 1.00
+    #     | 0.5 -> miss: min(1.0, 1.1447) = 1.0000, 3.00(sat)
+    #     | tangent -> 1.1447, 3.00(sat) | 0.05 -> 0.10, 0.56
+    inner_tangent_max = 2.0 * math.sqrt(max(1.0 - (1.0 - rho) ** 2, 0.0))
     lines.append("    // [layer:thick:chord]")
     lines.append(f"    // v11 volumetric thickness: the membrane is a shell of relative")
     lines.append(f"    // thickness rho = {F(rho)} ({thick_group} material group) on the unit")
     lines.append("    // sphere. chord = the view ray's path length through the shell,")
     lines.append("    // normalized by the radial thickness and limb-clamped: chordN is")
     lines.append("    // 1.0 head-on and saturates at 3.0 toward the grazing silhouette.")
+    lines.append("    // Two-case: while the ray still hits the inner sphere the path is")
+    lines.append("    // cosV - sqrt(disc); past the tangent ring it misses and runs the")
+    lines.append("    // full outer chord 2*cosV, capped at the inner-tangent maximum")
+    lines.append(f"    // 2*sqrt(1 - (1-rho)^2) = {F(inner_tangent_max)}.")
     lines.append("    float cosV = abs(dot(sdir, viewV));")
-    lines.append(f"    float chord = cosV - sqrt(max(0.0, {F(1.0 - rho)} * {F(1.0 - rho)} - (1.0 - cosV * cosV)));")
+    lines.append(f"    float chordDisc = {F(1.0 - rho)} * {F(1.0 - rho)} - (1.0 - cosV * cosV);")
+    lines.append(f"    float chord = chordDisc > 0.0 ? cosV - sqrt(chordDisc) : min(2.0 * cosV, {F(inner_tangent_max)});")
     lines.append(f"    float chordN = min(chord / {F(rho)}, 3.0);")
     lines.append("")
     lines.append(f"    // [layer:rim:{rim}]")
@@ -4136,9 +4172,11 @@ def emit_shader(asg: dict) -> str:
     lines.append(f"    bodyAlpha += motifGlow * {motif_alpha};")
     if is_v5:
         lines.append("    // [layer:v5:backface]")
-        lines.append("    // v5 back-face densify/dim (gl_FrontFacing is a builtin, no uniform")
-        lines.append("    // needed): the INSIDE of the far shell recedes toward the dark stop")
-        lines.append("    // and gains alpha, so the bubble reads as a filled volume from within.")
+        lines.append("    // v5 densify/dim (gl_FrontFacing is a builtin, no uniform needed).")
+        lines.append("    // Historical note: with the mesh's inward winding this condition is")
+        lines.append("    // TRUE on the CONVEX (near) face, not the far shell -- but every v5")
+        lines.append("    // family was tuned against exactly this look, so it stays on purpose")
+        lines.append("    // (the [layer:inner:*] block is the one keyed to the real far shell).")
         lines.append("    float v5Back = gl_FrontFacing ? 0.0 : 1.0;")
         lines.append(f"    rgb = mix(rgb, deepStop, v5Back * {v5_bf_dim});")
         lines.append(f"    bodyAlpha *= 1.0 + v5Back * {v5_bf_dens};")

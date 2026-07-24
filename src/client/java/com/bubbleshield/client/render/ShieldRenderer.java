@@ -102,11 +102,24 @@ public final class ShieldRenderer {
 		Vec3 camera = cameraPos;
 
 		for (ClientShieldManager.ClientShield shield : shields) {
-			float radius = shield.currentRadius();
-			if (!shield.active() || radius < MIN_VISIBLE_RADIUS) {
-				continue;
+			float syncedRadius = shield.currentRadius();
+			boolean live = shield.active() && syncedRadius >= MIN_VISIBLE_RADIUS;
+			// WP-Evt break ghost: the break's sync zeroes the radius BEFORE its
+			// BREAK batch arrives, so an inactive shield with an armed ghost
+			// window keeps rendering at its last active radius for up to
+			// BREAK_GHOST_TICKS — that is what makes the collapse omni-pulse
+			// (driven by the tracked BREAK impact below) visible at all.
+			float ghostFade = 0.0F;
+			if (!live) {
+				long ghostLeft = shield.breakGhostUntilTick() - ImpactTracker.currentTick();
+				if (ghostLeft <= 0 || shield.lastActiveRadius() < MIN_VISIBLE_RADIUS) {
+					continue;
+				}
+
+				ghostFade = Mth.clamp((ghostLeft - partialTick) / ClientShieldManager.BREAK_GHOST_TICKS, 0.0F, 1.0F);
 			}
 
+			float radius = live ? syncedRadius : shield.lastActiveRadius();
 			EffectDefinition def = EffectRegistry.get(shield.effectId());
 			RenderType renderType = ShieldPipelines.renderType(shield.effectId());
 			Vec3 center = Vec3.atCenterOf(shield.pos());
@@ -122,8 +135,10 @@ public final class ShieldRenderer {
 			// Weaker shields render fainter. Full health reads as SOLID refractive
 			// glass (0.95): the translucent pipeline re-blends the shader's refracted
 			// scene sample over the straight background by (1 - a), so a low vertex
-			// alpha washes the visible refraction out entirely.
-			float alphaBase = 0.35F + 0.6F * shield.healthFrac();
+			// alpha washes the visible refraction out entirely. A break ghost
+			// ignores the (post-break, already restored) health fraction and just
+			// fades out linearly over its window.
+			float alphaBase = live ? 0.35F + 0.6F * shield.healthFrac() : 0.75F * ghostFade;
 
 			// The synced shape picks the mesh; every variant shares the sphere's
 			// vertex conventions (POSITION_TEX_COLOR quads, UV in [0, 1], CPU-side
@@ -152,13 +167,14 @@ public final class ShieldRenderer {
 			// The projector's energy beam, per the synced per-bubble setting: AUTO
 			// resolves to the effect's derived preset, NONE renders nothing. Submitted
 			// AFTER the sphere so the additive column reads on top of the membrane.
-			// Deliberately untouched by WP-Dyn.
+			// Deliberately untouched by WP-Dyn. A break ghost renders no beam: the
+			// projector is down.
 			BeamStyle beamStyle = BeamStyle.byOrdinal(shield.beamStyle());
 			if (beamStyle == BeamStyle.AUTO) {
 				beamStyle = def.beamPreset();
 			}
 
-			if (beamStyle != BeamStyle.NONE) {
+			if (live && beamStyle != BeamStyle.NONE) {
 				RenderType beamRenderType = ShieldPipelines.beamRenderType(beamStyle.renderIndex());
 				// The beam's crossed planes re-orient toward the camera every frame
 				// (the horizontal camera offset picks the bearing); all animation runs

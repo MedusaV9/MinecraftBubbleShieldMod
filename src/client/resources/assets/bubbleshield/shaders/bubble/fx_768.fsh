@@ -424,8 +424,13 @@ void main() {
     // sphere. chord = the view ray's path length through the shell,
     // normalized by the radial thickness and limb-clamped: chordN is
     // 1.0 head-on and saturates at 3.0 toward the grazing silhouette.
+    // Two-case: while the ray still hits the inner sphere the path is
+    // cosV - sqrt(disc); past the tangent ring it misses and runs the
+    // full outer chord 2*cosV, capped at the inner-tangent maximum
+    // 2*sqrt(1 - (1-rho)^2) = 1.0521.
     float cosV = abs(dot(sdir, viewV));
-    float chord = cosV - sqrt(max(0.0, 0.8505 * 0.8505 - (1.0 - cosV * cosV)));
+    float chordDisc = 0.8505 * 0.8505 - (1.0 - cosV * cosV);
+    float chord = chordDisc > 0.0 ? cosV - sqrt(chordDisc) : min(2.0 * cosV, 1.0521);
     float chordN = min(chord / 0.1495, 3.0);
 
     // [layer:rim:graze]
@@ -624,9 +629,11 @@ void main() {
     // dissolve -- vertexColor.a still always wins).
     bodyAlpha += motifGlow * 0.1862;
     // [layer:v5:backface]
-    // v5 back-face densify/dim (gl_FrontFacing is a builtin, no uniform
-    // needed): the INSIDE of the far shell recedes toward the dark stop
-    // and gains alpha, so the bubble reads as a filled volume from within.
+    // v5 densify/dim (gl_FrontFacing is a builtin, no uniform needed).
+    // Historical note: with the mesh's inward winding this condition is
+    // TRUE on the CONVEX (near) face, not the far shell -- but every v5
+    // family was tuned against exactly this look, so it stays on purpose
+    // (the [layer:inner:*] block is the one keyed to the real far shell).
     float v5Back = gl_FrontFacing ? 0.0 : 1.0;
     rgb = mix(rgb, deepStop, v5Back * 0.3876);
     bodyAlpha *= 1.0 + v5Back * 0.1899;
@@ -644,8 +651,10 @@ void main() {
     float v5Dither = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
     bodyAlpha *= 1.0 + (v5Dither - 0.5) * 0.1282;
     // [layer:inner:fogbank]
-    // v11 back-face interior: gl_FrontFacing keys the far shell only.
-    float innerFace = gl_FrontFacing ? 0.0 : 1.0;
+    // v11 far-shell interior: with the mesh's inward winding and cull OFF,
+    // gl_FrontFacing is TRUE exactly where the camera sees the concave side
+    // (the far shell from outside, the whole wall from inside).
+    float innerFace = gl_FrontFacing ? 1.0 : 0.0;
     // INNER_FOGBANK: a slow fog bank fills the shell; denser fog
     // absorbs the interior light (Beer-consistent with the raised
     // group k) and recedes toward the dark stop with a 0.9 aerial-
