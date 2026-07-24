@@ -369,16 +369,61 @@ Design (see /tmp/shader_plan.md sections 1, 2, 4.1 and AGENTS.md):
     and the gain rises to 0.90-1.35 -- the per-id fingerprint stays
     identifiable BETWEEN pulses, still <= 2 Hz.
 
+* v11 VOLUMETRIC THICKNESS pass (EVERY file): the membrane becomes a shell
+  with real optical depth instead of an infinitely thin film.
+  - TRUE PARALLAX: viewV is hoisted next to sdir and Vt = viewV -
+    dot(viewV, sdir) * sdir (the view direction's component tangent to the
+    shell) replaces the old screen-space rimDir estimate as the parallax
+    direction: par = Vt * parScale (draw index 103, repurposed) -- zero
+    shift head-on, maximal at the grazing limb, seam-safe pure 3D geometry.
+    Files whose MID layer still consumes the 2D rimDir slope (HOLOPARALLAX,
+    DEEPICE) keep those two lines; everywhere else they are gone.
+  - CHORD THICKNESS ([layer:thick:chord]): a per-id baked relative shell
+    thickness rho (FAMILY_CATEGORY -> GROUP_OF_CATEGORY -> THICK_GROUPS,
+    jittered by draw 237) yields the view ray's path length through the
+    shell; chordN = min(chord / rho, 3.0) is 1.0 head-on and saturates at
+    the limb. chordN thickens the deep pattern toward the silhouette
+    (mix(1.0, chordN, THICKPATW) on the deep weight) and drives a
+    Beer-Lambert absorption of the refracted scene BEFORE the glass tint
+    (refracted *= exp(-k * chordN * (1 - baseCol)): absorption pulls toward
+    the live palette's own hue -- recolor-safe).
+  - PARALLAX TEXTURE DEPTH ([layer:thick:paratex]): two EXTRA atlas taps at
+    texUV +- VtUV * DEPTHSTEP (VtUV = Vt projected on the tangent frame)
+    blend into deepTex, which joins the pattern composite under THICKTEXW
+    -- the tile detail itself shifts with the view like texture suspended
+    INSIDE the glass. CRYSTALREFRACT taps a 2x-coarser texUV * 0.5 domain
+    (large internal facets). Texture-tap budget: 10 -> 12.
+  - INNER FACE ([layer:inner:<recipe>]): the back face composites a
+    group-keyed interior recipe (energy -> current, crystalline/geo ->
+    scaffold, organic -> fogbank, celestial -> stars) between the
+    knee/dither layers and the depth-soft fade: rgb mixes toward an
+    ALU-only innerCol (re-using deepField / the paratex taps / hgtC /
+    motifM -- NO new texture taps) and bodyAlpha densifies by INNERDENS.
+    Inner rotations run 0.8x plane-0 speed via re-rounded integer
+    turns/day (>= 1, day-wrap-safe). Five showcase families carry bespoke
+    inner branches: LIGHTNING bolt after-glow (0.4x turns), GALAXYSWIRL
+    counter-rotated star plane + Gaussian dust lane, VOIDRIFT
+    meridian-drifting starfield, CRYSTALREFRACT keyL-lit internal facets,
+    LAVAFLOW crust-gated current.
+  - DEEP LIVELINESS: plane-0 turns clamp to <= round(0.6 * base_turns)
+    (the strictly-decreasing chain still cascades) and the whole deep
+    domain breathes: * (1 + 0.010..0.020 * sin(time * qs)), day-quantized.
+  - COST CONTRACT (enforced here and by tools/validate_shaders.py
+    check_cost_budget, in lock-step): exactly 12 texture taps per file,
+    field-function call sites (deepField/fbm2/fbm3/caustic/vnoise3) <= 23,
+    raw line count <= 760, and the manifest's thick.inner / costTaps /
+    costField must match the emitted file.
+
 * Compile safety: conservative GLSL 330 subset only -- const-bounded for
   loops (fbm <= 6 octaves, parallax <= 4 taps, voronoi 3x3/5x5), no while, no
   switch, no arrays-of-structs, no uniforms beyond the four vanilla imports
   plus the plain `uniform sampler2D Sampler0/Sampler1/Sampler2` declarations
   (NO layout(binding=...) qualifier -- that fails at #version 330), exactly
-  ten texture() calls per file (5 atlas taps through the atlasTile helper:
-  static center + 2 gradient + 2 flow phases; 3 chromatic Sampler1 scene
-  taps; 2 Sampler2 depth taps -- all live into fragColor, so no
-  "does not use sampler" warning on any pipeline), explicit float literals,
-  every function defined before use.
+  twelve texture() calls per file (7 atlas taps through the atlasTile helper:
+  static center + 2 gradient + 2 flow phases + 2 v11 deep-parallax taps;
+  3 chromatic Sampler1 scene taps; 2 Sampler2 depth taps -- all live into
+  fragColor, so no "does not use sampler" warning on any pipeline), explicit
+  float literals, every function defined before use.
 
 Usage:
     python3 tools/gen_surface_shaders.py                  # all 840 + manifest
@@ -542,6 +587,51 @@ FAMILY_CATEGORY = {
     "OILSLICK": "film", "PLASMAGLOBE": "electric", "ECTOPLASM": "ghost",
     "VOIDRIFT": "void",
 }
+
+# v11 volumetric thickness: every visual category maps into one of five
+# MATERIAL groups, which key the shell's relative optical thickness rho,
+# its Beer-Lambert absorption strength k and the inner-face recipe (the
+# [layer:inner:<recipe>] block). Coverage is asserted below exactly like
+# FAMILY_REALISM: adding a category without grouping it is a hard failure.
+GROUP_OF_CATEGORY = {
+    # energy: thin hot films -- shallow shell, strong absorption
+    "electric": "energy", "fire": "energy", "glint": "energy",
+    # crystalline: refractive solids -- medium shell, moderate absorption
+    "glass": "crystalline", "ice": "crystalline", "shards": "crystalline",
+    "film": "crystalline", "metal": "crystalline", "fringe": "crystalline",
+    "mirror": "crystalline", "lens": "crystalline",
+    # organic: soft volumes -- the thickest diffuse shell
+    "water": "organic", "smoke": "organic", "cloud": "organic",
+    "fog": "organic", "gas": "organic", "ghost": "organic", "ink": "organic",
+    "organic": "organic", "flora": "organic", "tendril": "organic",
+    "curtain": "organic",
+    # geo/tech: constructed lattices -- thin shell, light absorption
+    "lattice": "geo", "grid": "geo", "cells": "geo", "plates": "geo",
+    "maze": "geo", "weave": "geo", "glyph": "geo", "mandala": "geo",
+    "ridges": "geo", "holo": "geo", "swirl": "geo",
+    # celestial: deep space interiors -- the deepest shell
+    "stars": "celestial", "galaxy": "celestial", "void": "celestial",
+    "fractal": "celestial", "rings": "celestial",
+}
+assert set(GROUP_OF_CATEGORY) == set(FAMILY_CATEGORY.values()), \
+    "GROUP_OF_CATEGORY must cover every FAMILY_CATEGORY value exactly"
+
+# Per-group thickness parameters: rho = relative shell thickness (fraction of
+# the unit outer radius, jittered per id by draw 237), k = Beer-Lambert
+# absorption strength on the refracted scene (jittered by draw 238), inner =
+# the back-face interior recipe emitted as [layer:inner:<recipe>] and
+# recorded in the manifest's thick.inner (validated in lock-step).
+THICK_GROUPS = {
+    "energy":      {"rho": 0.05, "k": 0.9, "inner": "current"},
+    "crystalline": {"rho": 0.10, "k": 0.5, "inner": "scaffold"},
+    "organic":     {"rho": 0.14, "k": 0.7, "inner": "fogbank"},
+    # geo shares the scaffold recipe but etches a 2x-coarser ghost of the
+    # id's own motif into it (see the inner block emission).
+    "geo":         {"rho": 0.07, "k": 0.4, "inner": "scaffold"},
+    "celestial":   {"rho": 0.18, "k": 0.6, "inner": "stars"},
+}
+assert set(GROUP_OF_CATEGORY.values()) == set(THICK_GROUPS), \
+    "THICK_GROUPS must define exactly the groups GROUP_OF_CATEGORY uses"
 
 # family -> atlas tile index, matched by technique (v9 remap over the 32-tile
 # atlas). Every family samples exactly one PRIMARY tile, every tile is used,
@@ -723,6 +813,42 @@ def quant_fract_speed(k: float) -> float:
     """Snaps a fract(t * k) phase speed so it completes integer cycles per day."""
     m = max(1, round(k * DAY_SECONDS))
     return m / DAY_SECONDS
+
+
+# --- v11 cost accounting (tools/validate_shaders.py check_cost_budget
+# recomputes BOTH counts with the same regexes and cross-checks them against
+# the manifest's costTaps/costField -- keep the two sides identical) --------
+_COST_BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
+_COST_LINE_COMMENT = re.compile(r"//[^\n]*")
+# Texture taps: atlasTile() call sites (minus the helper definition itself;
+# its internal texture(Sampler0 is the same tap, not an extra one) plus the
+# direct Sampler1/Sampler2 scene-copy taps.
+_ATLAS_CALL_RE = re.compile(r"\batlasTile\s*\(")
+_ATLAS_DEF_RE = re.compile(r"^\s*vec4\s+atlasTile\s*\(", re.MULTILINE)
+_SAMPLER1_TAP_RE = re.compile(r"\btexture\s*\(\s*Sampler1\b")
+_SAMPLER2_TAP_RE = re.compile(r"\btexture\s*\(\s*Sampler2\b")
+# Field-function call sites (procedural-noise cost proxy), definitions
+# excluded the same way.
+_FIELD_CALL_RE = re.compile(r"\b(?:deepField|fbm2|fbm3|caustic|vnoise3)\s*\(")
+_FIELD_DEF_RE = re.compile(r"^\s*float\s+(?:deepField|fbm2|fbm3|caustic|vnoise3)\s*\(", re.MULTILINE)
+# The v11 contract: 7 atlasTile call sites (center + 2 gradient + 2 flow
+# + 2 deep-parallax) + 3 Sampler1 chromatic taps + 2 Sampler2 depth taps.
+EXPECTED_TEXTURE_TAPS = 12
+
+
+def _cost_strip_comments(text: str) -> str:
+    return _COST_LINE_COMMENT.sub("", _COST_BLOCK_COMMENT.sub("", text))
+
+
+def count_texture_taps(source: str) -> int:
+    text = _cost_strip_comments(source)
+    return (len(_ATLAS_CALL_RE.findall(text)) - len(_ATLAS_DEF_RE.findall(text))
+            + len(_SAMPLER1_TAP_RE.findall(text)) + len(_SAMPLER2_TAP_RE.findall(text)))
+
+
+def count_field_calls(source: str) -> int:
+    text = _cost_strip_comments(source)
+    return len(_FIELD_CALL_RE.findall(text)) - len(_FIELD_DEF_RE.findall(text))
 
 
 def parse_registry() -> dict:
@@ -2773,16 +2899,42 @@ def emit_shader(asg: dict) -> str:
       v7 wash-guard/pole-fade/gating knobs, 152..183 v8 realism knobs
       (refraction/fresnel/key-light/flow/depth-soft), 184..191 v9
       refraction-slope + texture-drift knobs, 192..223 v9 motif knobs,
-      224..236 v10 near-white wash-guard + smooth-flicker knobs (each
-      extension appends to the stream, so growing 128 -> 144 -> 160 -> 192
-      -> 256 shifted no older draw). The draws are POSITIONAL lookups into
-      a fixed 256-entry table, so a composer reusing a spare index only
+      224..236 v10 near-white wash-guard + smooth-flicker knobs,
+      237..255 v11 volumetric-thickness knobs (each extension appends to
+      the stream, so growing 128 -> 144 -> 160 -> 192 -> 256 -> 320
+      shifted no older draw). The draws are POSITIONAL lookups into a
+      fixed 320-entry table, so a composer reusing a spare index only
       correlates two knobs -- it can never shift any other draw.
+
+    v11 index map (237..255; 256..319 reserved):
+      237 rho jitter (x0.88..1.12 on the group shell thickness),
+      238 k jitter (x0.88..1.12 on the group Beer-Lambert absorption),
+      239 THICKPATW (chordN weight into the deep pattern term),
+      240 THICKTEXW (deepTex weight into the pattern composite),
+      241 DEPTHSTEP (paratex tap offset, tile units),
+      242 INNERW (inner-face color mix weight),
+      243 INNERDENS (inner-face alpha densify),
+      244 inner-speed jitter (x0.9..1.1 on the 0.8x re-rounded turns),
+      245 inner rotation phase (0..2pi, rotating recipes),
+      246 deep breath depth (0.010..0.020),
+      247 deep breath speed (0.6..2.4, quant_sin_speed),
+      248 inner meridian drift (VOIDRIFT showcase, quant_drift),
+      249 recipe param A (current grade / scaffold R gain / fog gain /
+          star shaping pow),
+      250 recipe param B (current+bolt scale jitter / scaffold hgtC
+          weight / fog floor / star color mix),
+      251..255 showcase extras, per-family (251 doubles as the geo
+          scaffold motif-ghost weight; no geo family is a showcase):
+          LIGHTNING 251 bolt cut + 252 bolt pow, GALAXYSWIRL 251 dust
+          latitude + 252 dust width + 253 dust depth, CRYSTALREFRACT
+          251 facet threshold + 252 facet lit floor.
+      Index 103 (dead since the v11 true-parallax `par`: it fed par1.x)
+      is REPURPOSED as parScale, the view-tangent parallax scale.
     """
     effect_id = asg["id"]
     family = asg["family"]
     rng = Rng(asg["seed"])
-    draws = [rng.unit() for _ in range(256)]
+    draws = [rng.unit() for _ in range(320)]
 
     def u(i, lo, hi):
         return lo + (hi - lo) * draws[i]
@@ -3174,8 +3326,10 @@ def emit_shader(asg: dict) -> str:
     deep_s0 = u(100, 1.6, 3.0)         # front-plane domain scale
     base_turns = max(taps + 2, round(u(101, 0.05, 0.16) * DAY_SECONDS / TWO_PI))
     aer = u(102, 0.55, 0.90)           # aerial-perspective tint reach
-    par1 = unit3(103)
-    par2 = unit3(106)
+    # v11: the old screen-space parallax basis par1 = unit3(103) / par2 =
+    # unit3(106) is GONE (par is now the true view tangent Vt * parScale);
+    # indices 104..108 stay dead in the table (positional stability) and
+    # 103 is repurposed as parScale above.
     mwc = F(u(110, *pres["cover"]))    # family-tuned mid coverage over the deep volume
     rwc = F(u(111, 0.40, 0.70))        # rim coverage over the deep volume
     mid3_scale = F(mid_scale * u(112, 0.18, 0.30))
@@ -3355,30 +3509,66 @@ def emit_shader(asg: dict) -> str:
     wash_knee = u(235, 0.20, 0.28)       # knee depth at washHi = 1
     wash_knee_k = F(u(236, 3.0, 5.0))    # knee compression steepness
 
+    # v11 volumetric-thickness knobs (indices 237..255, appended to the
+    # stream -- no older draw shifts; see the index map in the docstring).
+    # The material group keys the shell's relative optical thickness rho,
+    # the Beer-Lambert absorption k and the inner-face recipe.
+    thick_group = GROUP_OF_CATEGORY[FAMILY_CATEGORY[family]]
+    tg = THICK_GROUPS[thick_group]
+    rho = tg["rho"] * u(237, 0.88, 1.12)
+    kabs = tg["k"] * u(238, 0.88, 1.12)
+    inner_recipe = tg["inner"]
+    thick_patw = F(u(239, 0.15, 0.35))   # chordN weight on the deep pattern
+    thick_texw = F(u(240, 0.10, 0.25))   # deepTex weight in the composite
+    depth_step = F(u(241, 0.040, 0.085))  # paratex tap offset (tile units)
+    inner_w = F(u(242, 0.18, 0.32))      # inner-face color mix weight
+    inner_dens = F(u(243, 0.10, 0.22))   # inner-face alpha densify
+    # index 103 repurposed (dead since the true-parallax par: it fed the
+    # old screen-space par1.x): the view-tangent parallax scale. |Vt| tops
+    # out at 1.0 on the limb, so 1.4..2.4 keeps the limb shift comparable
+    # to the old |rimDir.x * par1 + rimDir.y * par2| ~ 1 magnitude.
+    par_scale = F(u(103, 1.4, 2.4))
+    deep_breath_amp = F(u(246, 0.010, 0.020))
+    deep_breath_speed = F6(quant_sin_speed(u(247, 0.6, 2.4)))
+
     sec_ang, sec_sat, sec_val = secondary_consts(
         asg["primary"], asg["secondary"] if asg.get("secondary") is not None else asg["primary"])
 
     # Correlated multi-plane parallax (v4): ONE deep field sampled at `taps`
     # depth planes on the 3D sphere direction. Real parallax law per plane:
     # farther planes show finer features (scale * (1 + i*g)), rotate slower
-    # (strictly decreasing integer turns/day), shift along the silhouette
-    # slope (rimDir), and recede toward the dark stop (aerial perspective).
+    # (strictly decreasing integer turns/day), shift along the true
+    # view-tangent parallax direction (v11: par = Vt * parScale, replacing
+    # the old screen-space rimDir), and recede toward the dark stop
+    # (aerial perspective).
     # v4 composites FRONT-TO-BACK with Beer-Lambert transmittance: each
     # plane's density occludes the planes behind it, its light lands under
     # the REMAINING transmittance into BOTH the color accumulator (per-plane
     # color: baseCol receding through secCol to deepStop) and the opacity
     # term (1 - deepTrans) that feeds the alpha path -- a real volume, not
     # one averaged scalar.
-    tap_lines = ["float deepTrans = 1.0;", "vec3 deepCol = vec3(0.0);"]
-    norm = 0.0
-    trans_est = 1.0
+    # v11: the plane turns are resolved up front -- plane 0 is clamped to
+    # <= round(0.6 * base_turns) (the front plane spun distractingly fast
+    # next to the new inner-face layers) and the strictly-decreasing chain
+    # still cascades off it; the inner recipes re-round their slowed turns
+    # from plane 0's final value.
+    plane_turns = []
     prev_turns = None
     for i in range(taps):
         turns = max(1, round(base_turns / (1.0 + i * plane_g)))
+        if i == 0:
+            turns = max(1, min(turns, round(0.6 * base_turns)))
         if prev_turns is not None and turns >= prev_turns:
             turns = max(1, prev_turns - 1)  # strictly slower with depth
         prev_turns = turns
-        speed = F6(turns * TWO_PI / DAY_SECONDS)
+        plane_turns.append(turns)
+    plane0_turns = plane_turns[0]
+
+    tap_lines = ["float deepTrans = 1.0;", "vec3 deepCol = vec3(0.0);"]
+    norm = 0.0
+    trans_est = 1.0
+    for i in range(taps):
+        speed = F6(plane_turns[i] * TWO_PI / DAY_SECONDS)
         scale = F(deep_s0 * (1.0 + i * plane_g))
         t = aer * i / (taps - 1.0)
         if i == 0:
@@ -3386,7 +3576,9 @@ def emit_shader(asg: dict) -> str:
         else:
             plane_col = (f"mix(mix(baseCol, secCol, {F(min(1.0, 1.5 * t))}), "
                          f"deepStop, {F(0.55 * t)})")
-        sample = f"deepField(rotA(spinAxis, time * {speed}) * (sdir * {scale})"
+        # v11 breathing: deepBreath is a slow day-quantized in/exhale of the
+        # whole deep domain (emitted just before these taps).
+        sample = f"deepField(rotA(spinAxis, time * {speed}) * (sdir * ({scale} * deepBreath))"
         if i > 0:
             sample += f" + par * {F(i * d_step)}"
         sample += ", time)"
@@ -3401,6 +3593,121 @@ def emit_shader(asg: dict) -> str:
     full_op = 1.0 - (1.0 - absorb) ** taps  # opacity at full density
     tap_lines.append(f"deepCol *= {F(d_bright / max(norm, 0.5))};")
     tap_lines.append(f"float deepPat = pow(clamp((1.0 - deepTrans) * {F(1.0 / full_op)}, 0.0, 1.0), {d_pow});")
+
+    # ------------------------------------------------------------------
+    # v11 inner face ([layer:inner:<recipe>]): the BACK face of the shell
+    # composites a group-keyed interior so looking through the bubble at
+    # its far side reads as a filled volume, not the same film twice.
+    # ALU-only: the recipes re-use deepField / the paratex taps / hgtC /
+    # motifM -- NO new texture taps. Inner rotations run at 0.8x plane-0
+    # speed through RE-ROUNDED integer turns/day (>= 1), so the daily
+    # wrap still lands on whole turns. The block sits between the knee/
+    # dither layers and the depth-soft fade: bodyAlpha is still pre-clamp
+    # and pre-dissolve, so vertexColor.a keeps final authority.
+    # ------------------------------------------------------------------
+    inner_turns = max(1, round(0.8 * plane0_turns * u(244, 0.9, 1.1)))
+    inner_speed = F6(inner_turns * TWO_PI / DAY_SECONDS)
+    inner_phase = F(u(245, 0.0, 6.2832))
+    inner_lines = [f"// [layer:inner:{inner_recipe}]",
+                   "// v11 back-face interior: gl_FrontFacing keys the far shell only.",
+                   "float innerFace = gl_FrontFacing ? 0.0 : 1.0;"]
+    if family == "LIGHTNING":
+        bolt_turns = max(1, round(0.4 * plane0_turns))
+        inner_lines += [
+            "// LIGHTNING showcase: inner bolt AFTER-GLOW -- the family's ridged",
+            "// bolt field re-evaluated on a slower counter rotation (0.4x",
+            "// re-rounded turns/day), graded deepStop -> secCol: ghost bolts",
+            "// linger inside the shell behind the live surface strikes.",
+            f"vec3 innerB = rotA(spinAxis, -time * {F6(bolt_turns * TWO_PI / DAY_SECONDS)} + {inner_phase}) * (sdir * {F(deep_s0 * u(250, 0.85, 1.25))});",
+            "float innerN = fbm3(innerB);",
+            f"float innerGlow = pow(clamp(1.0 - abs(2.0 * innerN - 1.0) * {F(u(251, 1.15, 1.45))}, 0.0, 1.0), {F(u(252, 6.0, 10.0))});",
+            f"vec3 innerCol = mix(deepStop, secCol, clamp(innerGlow * {F(u(249, 0.9, 1.5))}, 0.0, 1.0));",
+        ]
+    elif inner_recipe == "current":
+        inner_lines += [
+            "// INNER_CURRENT: the deep field re-sampled on a COUNTER-rotated",
+            "// domain and re-tinted hotStop -> secCol -- an energy current",
+            "// circulating the inside of the shell against the deep planes.",
+            f"float innerGlow = deepField(rotA(spinAxis, -time * {inner_speed} + {inner_phase}) * (sdir * {F(deep_s0 * u(250, 0.85, 1.25))}), time);",
+        ]
+        if family == "LAVAFLOW":
+            inner_lines += [
+                "// LAVAFLOW showcase: the molten inner current only glows where",
+                "// the (in-scope) crust coverage field cracks open",
+                "innerGlow *= (1.0 - crust);",
+            ]
+        inner_lines.append(
+            f"vec3 innerCol = mix(hotStop, secCol, clamp(innerGlow * {F(u(249, 0.9, 1.5))}, 0.0, 1.0));")
+    elif family == "CRYSTALREFRACT":
+        facet_t0 = u(251, 0.35, 0.55)
+        inner_lines += [
+            "// CRYSTALREFRACT showcase: the 2x-coarser paratex taps threshold",
+            "// into discrete INTERNAL FACET planes, lit by the key light's wrap",
+            "// diffuse -- crystal cleavage inside the shell.",
+            f"float innerFacet = smoothstep({F(facet_t0)}, {F(facet_t0 + 0.18)}, 0.5 * (deepTexA.r + deepTexB.r));",
+            f"vec3 innerCol = mix(deepStop, hotStop * ({F(u(252, 0.45, 0.65))} + 0.45 * keyDiff), innerFacet);",
+        ]
+    elif inner_recipe == "scaffold":
+        inner_lines += [
+            "// INNER_SCAFFOLD: the R (coarse structure) channel of the two",
+            "// slope-parallax paratex taps builds the interior lattice (the",
+            "// taps already shift with the view: structural parallax for free).",
+            f"float innerScaf = clamp(0.5 * (deepTexA.r + deepTexB.r) * {F(u(249, 0.9, 1.4))} + hgtC * {F(u(250, 0.25, 0.55))}, 0.0, 1.0);",
+        ]
+        if thick_group == "geo":
+            inner_lines += [
+                "// geo/tech group: a 2x-coarser GHOST of this id's motif is etched",
+                "// into the scaffold (the pow widens the Gaussian/band footprint",
+                "// to roughly twice the surface motif's size)",
+                f"innerScaf = clamp(innerScaf + {F(u(251, 0.25, 0.45))} * pow(clamp(motifM, 0.0, 1.0), 0.25), 0.0, 1.0);",
+            ]
+        inner_lines.append("vec3 innerCol = mix(deepStop, secCol, innerScaf);")
+    elif inner_recipe == "fogbank":
+        inner_lines += [
+            "// INNER_FOGBANK: a slow fog bank fills the shell; denser fog",
+            "// absorbs the interior light (Beer-consistent with the raised",
+            "// group k) and recedes toward the dark stop with a 0.9 aerial-",
+            "// perspective reach.",
+            f"float innerFog = clamp(deepField(rotA(spinAxis, time * {inner_speed} + {inner_phase}) * (sdir * {F(deep_s0 * 0.9)}), time) * {F(u(249, 0.9, 1.4))} + {F(u(250, 0.10, 0.25))}, 0.0, 1.0);",
+            "vec3 innerCol = mix(mix(baseCol, secCol, 0.55), deepStop, 0.9 * innerFog);",
+        ]
+    elif family == "GALAXYSWIRL":
+        gal_turns = max(1, round(0.5 * plane0_turns))
+        dust_inv = F(1.0 / u(252, 0.06, 0.12))
+        inner_lines += [
+            "// GALAXYSWIRL showcase: a COUNTER-rotated (-0.5x turns) inner star",
+            "// plane spins against the disc, crossed by a Gaussian dust-lane",
+            "// absorption band pinned to the inner equator.",
+            f"float innerStar = deepField(rotA(spinAxis, -time * {F6(gal_turns * TWO_PI / DAY_SECONDS)} + {inner_phase}) * (sdir * {F(deep_s0)}) + Vt * {F(deep_s0 * 0.18)}, time);",
+            f"float innerLit = pow(clamp(innerStar, 0.0, 1.0), {F(u(249, 1.5, 3.0))});",
+            f"float innerDustD = (baseUV.y - {F(u(251, 0.42, 0.58))}) * {dust_inv};",
+            "float innerDust = exp(-innerDustD * innerDustD);",
+            f"vec3 innerCol = mix(mix(deepStop, mix(secCol, hotStop, {F(u(250, 0.35, 0.65))}), innerLit), deepStop, innerDust * {F(u(253, 0.55, 0.80))});",
+        ]
+    else:  # stars (celestial)
+        star_drift = ""
+        star_extra = []
+        if family == "VOIDRIFT":
+            star_extra = [
+                "// VOIDRIFT showcase: the inner starfield DRIFTS along the rift",
+                "// meridian (v axis). quant_drift snaps the daily shift to whole",
+                "// lattice cells of the non-repeating hash lattice, so the wrap",
+                "// reads as the usual per-cell re-roll, never a visible pop.",
+            ]
+            star_drift = f" + vec3(0.0, time * {F6(quant_drift(u(248, 0.04, 0.10), 1.0))}, 0.0)"
+        inner_lines += [
+            "// INNER_PARALLAX_STARS: the deep field re-sampled at plane-0 scale",
+            "// on a SLOWED rotation (0.8x re-rounded turns) with a view-tangent",
+            "// offset -- a star shell parallaxing behind the surface.",
+            *star_extra,
+            f"float innerStar = deepField(rotA(spinAxis, time * {inner_speed} + {inner_phase}) * (sdir * {F(deep_s0)}){star_drift} + Vt * {F(deep_s0 * 0.18)}, time);",
+            f"float innerLit = pow(clamp(innerStar, 0.0, 1.0), {F(u(249, 1.5, 3.0))});",
+            f"vec3 innerCol = mix(deepStop, mix(secCol, hotStop, {F(u(250, 0.35, 0.65))}), innerLit);",
+        ]
+    inner_lines += [
+        f"rgb = mix(rgb, innerCol, innerFace * {inner_w});",
+        f"bodyAlpha *= 1.0 + innerFace * {inner_dens};",
+    ]
 
     deep_marker = f"parallax3d_{asg['deep']}_x{taps}"
     mid_marker = f"{family.lower()}_{warp}_{anim}"
@@ -3462,6 +3769,13 @@ def emit_shader(asg: dict) -> str:
     lines.append("    vec3 sdir = vec3(sin(3.1415927 * baseUV.y) * cos(6.2831853 * baseUV.x),")
     lines.append("        cos(3.1415927 * baseUV.y),")
     lines.append("        sin(3.1415927 * baseUV.y) * sin(6.2831853 * baseUV.x));")
+    lines.append("    // v11: the view direction is hoisted up here (the thickness and")
+    lines.append("    // parallax layers need it before the normal block) together with")
+    lines.append("    // its component TANGENT to the shell surface: Vt is the true")
+    lines.append("    // parallax direction -- zero head-on, maximal at the grazing limb,")
+    lines.append("    // seam-safe by construction (pure 3D geometry, no UV involved).")
+    lines.append("    vec3 viewV = -normalize(worldPos);")
+    lines.append("    vec3 Vt = viewV - dot(viewV, sdir) * sdir;")
     lines.append("")
     lines.append("    // [palette:gradient3]")
     lines.append("    // Runtime 3-stop palette derived from vertexColor.rgb: the dark stop")
@@ -3492,11 +3806,22 @@ def emit_shader(asg: dict) -> str:
     lines.append("    // receding baseCol -> secCol -> dark stop) and the opacity term that")
     lines.append("    // feeds the alpha. Farther planes show finer features, spin slower")
     lines.append("    // (integer turns/day: the daily wrap lands on a full turn) and slide")
-    lines.append("    // along the silhouette slope (rimDir is screen-space: seam-safe).")
-    lines.append("    vec2 rimDirRaw = vec2(dFdx(sphericalVertexDistance), dFdy(sphericalVertexDistance));")
-    lines.append("    vec2 rimDir = rimDirRaw / (length(rimDirRaw) + 0.0001);")
+    lines.append("    // along the TRUE view-tangent parallax direction (v11: par = Vt *")
+    lines.append("    // parScale replaces the old screen-space rimDir estimate -- planes")
+    lines.append("    // hold still head-on and shear apart toward the grazing limb).")
+    # v11: the 2D screen-space silhouette slope is only emitted for the
+    # families whose MID layer still consumes it (HOLOPARALLAX's hologram
+    # sheets, DEEPICE's layer parallax) -- everywhere else it is dead code.
+    needs_rimdir = any("rimDir" in ln for ln in mid_lines + post_lines)
+    if needs_rimdir:
+        lines.append("    // (this family's mid layer still reads the screen-space slope)")
+        lines.append("    vec2 rimDirRaw = vec2(dFdx(sphericalVertexDistance), dFdy(sphericalVertexDistance));")
+        lines.append("    vec2 rimDir = rimDirRaw / (length(rimDirRaw) + 0.0001);")
     lines.append(f"    vec3 spinAxis = vec3({F(spin_axis[0])}, {F(spin_axis[1])}, {F(spin_axis[2])});")
-    lines.append(f"    vec3 par = rimDir.x * vec3({F(par1[0])}, {F(par1[1])}, {F(par1[2])}) + rimDir.y * vec3({F(par2[0])}, {F(par2[1])}, {F(par2[2])});")
+    lines.append(f"    vec3 par = Vt * {par_scale};")
+    lines.append("    // v11 breathing: the deep domain slowly in/exhales (day-quantized,")
+    lines.append("    // well under 2 Hz) so the interior volume reads alive, not baked.")
+    lines.append(f"    float deepBreath = 1.0 + {deep_breath_amp} * sin(time * {deep_breath_speed});")
     for ln in tap_lines:
         lines.append("    " + ln)
     lines.append("")
@@ -3575,10 +3900,38 @@ def emit_shader(asg: dict) -> str:
     lines.append("        -sin(3.1415927 * baseUV.y),")
     lines.append("        cos(3.1415927 * baseUV.y) * sin(6.2831853 * baseUV.x));")
     lines.append(f"    vec3 bumpN = normalize(sdir + (tanU * atlasSlope.x + tanV * atlasSlope.y) * ({bump_amp} * atlasPoleW));")
-    lines.append("    vec3 viewV = -normalize(worldPos);")
-    lines.append("    // fresnel rim (view angle against the bumped normal): the classic")
-    lines.append("    // force-field edge glow; abs() keeps the back faces consistent")
+    lines.append("    // fresnel rim (view angle against the bumped normal; viewV was")
+    lines.append("    // hoisted next to sdir in v11): the classic force-field edge glow;")
+    lines.append("    // abs() keeps the back faces consistent")
     lines.append(f"    float fresnel = pow(1.0 - abs(dot(bumpN, viewV)), {rim_pow});")
+    lines.append("")
+    lines.append("    // [layer:thick:paratex]")
+    lines.append("    // v11 in-shell texture parallax: two EXTRA atlas taps stepped along")
+    lines.append("    // the view tangent projected onto the tangent frame (VtUV) sample")
+    lines.append("    // the tile as if suspended deeper INSIDE the glass -- the detail")
+    lines.append("    // visibly shifts against the surface as the view moves. Seam/day-")
+    lines.append("    // safe: the offset lives on the periodic texUV domain.")
+    lines.append("    vec2 VtUV = vec2(dot(Vt, tanU), dot(Vt, tanV));")
+    if family == "CRYSTALREFRACT":
+        lines.append("    // CRYSTALREFRACT showcase: the deep taps run on a 2x-coarser")
+        lines.append("    // texUV * 0.5 domain -- large internal facet planes, not surface")
+        lines.append("    // grain (the inner-face block thresholds them into keyL-lit facets)")
+        lines.append(f"    vec3 deepTexA = atlasTile(texUV * 0.5 + VtUV * {depth_step}).rgb;")
+        lines.append(f"    vec3 deepTexB = atlasTile(texUV * 0.5 - VtUV * {depth_step}).rgb;")
+    else:
+        lines.append(f"    vec3 deepTexA = atlasTile(texUV + VtUV * {depth_step}).rgb;")
+        lines.append(f"    vec3 deepTexB = atlasTile(texUV - VtUV * {depth_step}).rgb;")
+    lines.append("    float deepTex = 0.5 * (dot(deepTexA, hgtW) + dot(deepTexB, hgtW));")
+    lines.append("")
+    lines.append("    // [layer:thick:chord]")
+    lines.append(f"    // v11 volumetric thickness: the membrane is a shell of relative")
+    lines.append(f"    // thickness rho = {F(rho)} ({thick_group} material group) on the unit")
+    lines.append("    // sphere. chord = the view ray's path length through the shell,")
+    lines.append("    // normalized by the radial thickness and limb-clamped: chordN is")
+    lines.append("    // 1.0 head-on and saturates at 3.0 toward the grazing silhouette.")
+    lines.append("    float cosV = abs(dot(sdir, viewV));")
+    lines.append(f"    float chord = cosV - sqrt(max(0.0, {F(1.0 - rho)} * {F(1.0 - rho)} - (1.0 - cosV * cosV)));")
+    lines.append(f"    float chordN = min(chord / {F(rho)}, 3.0);")
     lines.append("")
     lines.append(f"    // [layer:rim:{rim}]")
     lines.append("    // Silhouette / band lift so the membrane reads as a curved shell:")
@@ -3619,9 +3972,9 @@ def emit_shader(asg: dict) -> str:
         lines.append(f"    float v5Par = deepField(sdir * {F(v5_sp_scale)} + par * {F(v5_sp_step)}, time) * 0.5;")
         lines.append(f"    v5Par += deepField(sdir * {F(v5_sp_scale * 1.35)} + par * {F(v5_sp_step * 2.0)}, time) * 0.3;")
         lines.append(f"    v5Par += deepField(sdir * {F(v5_sp_scale * 1.75)} + par * {F(v5_sp_step * 3.0)}, time) * 0.2;")
-        lines.append(f"    float pattern = clamp({dw} * deepPat + {mw} * mid + {rw} * rim + flourish + grain + {v5_sp_w} * v5Par, 0.0, 1.5);")
+        lines.append(f"    float pattern = clamp({dw} * deepPat * mix(1.0, chordN, {thick_patw}) + {mw} * mid + {rw} * rim + flourish + grain + {v5_sp_w} * v5Par + {thick_texw} * deepTex, 0.0, 1.5);")
     else:
-        lines.append(f"    float pattern = clamp({dw} * deepPat + {mw} * mid + {rw} * rim + flourish + grain, 0.0, 1.5);")
+        lines.append(f"    float pattern = clamp({dw} * deepPat * mix(1.0, chordN, {thick_patw}) + {mw} * mid + {rw} * rim + flourish + grain + {thick_texw} * deepTex, 0.0, 1.5);")
     lines.append(f"    float gpos = clamp(pattern * {pk} + rim * {rk}, 0.0, 1.0);")
     lines.append("    vec3 rgb = gradient3(deepStop, baseCol, hotStop, gpos);")
     lines.append(f"    float midCover = clamp({mwc} * mid + {rwc} * rim, 0.0, 1.0);")
@@ -3702,6 +4055,11 @@ def emit_shader(asg: dict) -> str:
     lines.append(f"        texture(Sampler1, clamp(screenUV + refrOff * {F(1.0 + refr_disp)}, vec2(0.001), vec2(0.999))).r,")
     lines.append("        texture(Sampler1, clamp(screenUV + refrOff, vec2(0.001), vec2(0.999))).g,")
     lines.append(f"        texture(Sampler1, clamp(screenUV + refrOff * {F(1.0 - refr_disp)}, vec2(0.001), vec2(0.999))).b);")
+    lines.append("    // v11 Beer-Lambert body absorption: the scene light is absorbed")
+    lines.append("    // along the view chord through the shell -- the longer the grazing")
+    lines.append("    // path, the deeper the palette tint (absorption pulls toward")
+    lines.append("    // baseCol's own hue: recolor-safe, and head-on stays clearest).")
+    lines.append(f"    refracted *= exp(-{F(kabs)} * chordN * (1.0 - baseCol));")
     lines.append("    // energy-glass composite: the refracted scene (lightly tinted toward")
     lines.append("    // the live palette) is the see-through BASE; the family's pattern")
     lines.append("    // rides on top as the ENERGY, weighted by its own brightness and the")
@@ -3797,6 +4155,8 @@ def emit_shader(asg: dict) -> str:
         lines.append("    // below still bounds it.")
         lines.append("    float v5Dither = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));")
         lines.append(f"    bodyAlpha *= 1.0 + (v5Dither - 0.5) * {v5_dither};")
+    for ln in inner_lines:
+        lines.append("    " + ln)
     lines.append("    // [layer:depthsoft:scene_depth]")
     lines.append("    // v8 refraction floor + depth-soft edges, folded into bodyAlpha BEFORE")
     lines.append("    // the ceiling clamp: what shows through the membrane must be the")
@@ -3822,20 +4182,29 @@ def emit_shader(asg: dict) -> str:
 
     source = "\n".join(lines) + "\n"
     n = source.count("\n")
-    # Upper bound raised 660 -> 700 for the v9 motif fingerprint block
-    # (envelope + moving-element mask add ~10-25 lines to EVERY file).
-    if not 130 <= n <= 700:
-        sys.exit(f"fx_{effect_id:03d}: emitted {n} lines, outside the 130..700 sanity bounds")
+    # Upper bound raised 660 -> 700 (v9 motif fingerprint) -> 760 (v11
+    # thickness: paratex + chord + Beer + inner-face blocks add ~35-45
+    # lines to EVERY file). tools/validate_shaders.py enforces the same
+    # 760-line ceiling in check_cost_budget.
+    if not 130 <= n <= 760:
+        sys.exit(f"fx_{effect_id:03d}: emitted {n} lines, outside the 130..760 sanity bounds")
     return source
 
 
 def manifest_entry(asg: dict, source: str) -> dict:
+    # 320 to match emit_shader's table (prefix-stable: the first 128 draws
+    # are byte-identical to the old 128-entry table, growing it shifts no
+    # recorded value); the v11 thick block reads indices 237/238.
     rng = Rng(asg["seed"])
-    draws = [rng.unit() for _ in range(128)]
+    draws = [rng.unit() for _ in range(320)]
 
     def u(i, lo, hi):
         return lo + (hi - lo) * draws[i]
 
+    # Same group lookup + jitters as emit_shader (kept in lock-step; the
+    # validator cross-checks thick.inner against the in-file marker and
+    # costTaps/costField against recounts of the emitted source).
+    tg = THICK_GROUPS[GROUP_OF_CATEGORY[FAMILY_CATEGORY[asg["family"]]]]
     return {
         "file": f"fx_{asg['id']:03d}.fsh",
         "family": asg["family"],
@@ -3855,6 +4224,11 @@ def manifest_entry(asg: dict, source: str) -> dict:
         "env": asg["env"],
         "seed": f"{asg['seed']:016x}",
         "lines": source.count("\n"),
+        "thick": {"rho": round(tg["rho"] * u(237, 0.88, 1.12), 4),
+                  "k": round(tg["k"] * u(238, 0.88, 1.12), 4),
+                  "inner": tg["inner"]},
+        "costTaps": count_texture_taps(source),
+        "costField": count_field_calls(source),
     }
 
 
@@ -3899,6 +4273,9 @@ def main() -> None:
     written = 0
     for asg in assignments:
         source = emit_shader(asg)
+        if count_texture_taps(source) != EXPECTED_TEXTURE_TAPS:
+            sys.exit(f"fx_{asg['id']:03d}: {count_texture_taps(source)} texture taps, "
+                     f"expected exactly {EXPECTED_TEXTURE_TAPS} (v11 cost contract)")
         manifest[str(asg["id"])] = manifest_entry(asg, source)
         if asg["id"] in ids:
             (out_dir / f"fx_{asg['id']:03d}.fsh").write_text(source, encoding="utf-8", newline="\n")

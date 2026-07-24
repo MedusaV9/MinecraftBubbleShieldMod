@@ -256,6 +256,13 @@ void main() {
     vec3 sdir = vec3(sin(3.1415927 * baseUV.y) * cos(6.2831853 * baseUV.x),
         cos(3.1415927 * baseUV.y),
         sin(3.1415927 * baseUV.y) * sin(6.2831853 * baseUV.x));
+    // v11: the view direction is hoisted up here (the thickness and
+    // parallax layers need it before the normal block) together with
+    // its component TANGENT to the shell surface: Vt is the true
+    // parallax direction -- zero head-on, maximal at the grazing limb,
+    // seam-safe by construction (pure 3D geometry, no UV involved).
+    vec3 viewV = -normalize(worldPos);
+    vec3 Vt = viewV - dot(viewV, sdir) * sdir;
 
     // [palette:gradient3]
     // Runtime 3-stop palette derived from vertexColor.rgb: the dark stop
@@ -286,23 +293,26 @@ void main() {
     // receding baseCol -> secCol -> dark stop) and the opacity term that
     // feeds the alpha. Farther planes show finer features, spin slower
     // (integer turns/day: the daily wrap lands on a full turn) and slide
-    // along the silhouette slope (rimDir is screen-space: seam-safe).
-    vec2 rimDirRaw = vec2(dFdx(sphericalVertexDistance), dFdy(sphericalVertexDistance));
-    vec2 rimDir = rimDirRaw / (length(rimDirRaw) + 0.0001);
+    // along the TRUE view-tangent parallax direction (v11: par = Vt *
+    // parScale replaces the old screen-space rimDir estimate -- planes
+    // hold still head-on and shear apart toward the grazing limb).
     vec3 spinAxis = vec3(-0.1596, -0.6143, -0.7728);
-    vec3 par = rimDir.x * vec3(0.7765, -0.0903, -0.6237) + rimDir.y * vec3(0.7290, -0.1054, -0.6764);
+    vec3 par = Vt * 2.3475;
+    // v11 breathing: the deep domain slowly in/exhales (day-quantized,
+    // well under 2 Hz) so the interior volume reads alive, not baked.
+    float deepBreath = 1.0 + 0.0177 * sin(time * 1.555088);
     float deepTrans = 1.0;
     vec3 deepCol = vec3(0.0);
-    float dp = deepField(rotA(spinAxis, time * 0.078540) * (sdir * 1.6613), time);
+    float dp = deepField(rotA(spinAxis, time * 0.047124) * (sdir * (1.6613 * deepBreath)), time);
     deepCol += deepTrans * dp * baseCol;
     deepTrans *= 1.0 - 0.4012 * clamp(dp, 0.0, 1.0);
-    dp = deepField(rotA(spinAxis, time * 0.052360) * (sdir * 2.4564) + par * 0.0646, time);
+    dp = deepField(rotA(spinAxis, time * 0.041888) * (sdir * (2.4564 * deepBreath)) + par * 0.0646, time);
     deepCol += deepTrans * dp * mix(mix(baseCol, secCol, 0.2997), deepStop, 0.1099);
     deepTrans *= 1.0 - 0.4012 * clamp(dp, 0.0, 1.0);
-    dp = deepField(rotA(spinAxis, time * 0.041888) * (sdir * 3.2515) + par * 0.1292, time);
+    dp = deepField(rotA(spinAxis, time * 0.036652) * (sdir * (3.2515 * deepBreath)) + par * 0.1292, time);
     deepCol += deepTrans * dp * mix(mix(baseCol, secCol, 0.5993), deepStop, 0.2198);
     deepTrans *= 1.0 - 0.4012 * clamp(dp, 0.0, 1.0);
-    dp = deepField(rotA(spinAxis, time * 0.031416) * (sdir * 4.0465) + par * 0.1938, time);
+    dp = deepField(rotA(spinAxis, time * 0.031416) * (sdir * (4.0465 * deepBreath)) + par * 0.1938, time);
     deepCol += deepTrans * dp * mix(mix(baseCol, secCol, 0.8990), deepStop, 0.3296);
     deepTrans *= 1.0 - 0.4012 * clamp(dp, 0.0, 1.0);
     deepCol *= 0.7720;
@@ -369,10 +379,31 @@ void main() {
         -sin(3.1415927 * baseUV.y),
         cos(3.1415927 * baseUV.y) * sin(6.2831853 * baseUV.x));
     vec3 bumpN = normalize(sdir + (tanU * atlasSlope.x + tanV * atlasSlope.y) * (1.8976 * atlasPoleW));
-    vec3 viewV = -normalize(worldPos);
-    // fresnel rim (view angle against the bumped normal): the classic
-    // force-field edge glow; abs() keeps the back faces consistent
+    // fresnel rim (view angle against the bumped normal; viewV was
+    // hoisted next to sdir in v11): the classic force-field edge glow;
+    // abs() keeps the back faces consistent
     float fresnel = pow(1.0 - abs(dot(bumpN, viewV)), 2.9812);
+
+    // [layer:thick:paratex]
+    // v11 in-shell texture parallax: two EXTRA atlas taps stepped along
+    // the view tangent projected onto the tangent frame (VtUV) sample
+    // the tile as if suspended deeper INSIDE the glass -- the detail
+    // visibly shifts against the surface as the view moves. Seam/day-
+    // safe: the offset lives on the periodic texUV domain.
+    vec2 VtUV = vec2(dot(Vt, tanU), dot(Vt, tanV));
+    vec3 deepTexA = atlasTile(texUV + VtUV * 0.0841).rgb;
+    vec3 deepTexB = atlasTile(texUV - VtUV * 0.0841).rgb;
+    float deepTex = 0.5 * (dot(deepTexA, hgtW) + dot(deepTexB, hgtW));
+
+    // [layer:thick:chord]
+    // v11 volumetric thickness: the membrane is a shell of relative
+    // thickness rho = 0.0487 (energy material group) on the unit
+    // sphere. chord = the view ray's path length through the shell,
+    // normalized by the radial thickness and limb-clamped: chordN is
+    // 1.0 head-on and saturates at 3.0 toward the grazing silhouette.
+    float cosV = abs(dot(sdir, viewV));
+    float chord = cosV - sqrt(max(0.0, 0.9513 * 0.9513 - (1.0 - cosV * cosV)));
+    float chordN = min(chord / 0.0487, 3.0);
 
     // [layer:rim:graze]
     // Silhouette / band lift so the membrane reads as a curved shell:
@@ -415,7 +446,7 @@ void main() {
     // signature structure, and the gradient position leans toward the hot
     // stop at the rim (chromatic rim). The vertexColor.a dissolve near
     // whitelisted players always wins the final alpha.
-    float pattern = clamp(0.3447 * deepPat + 0.7191 * mid + 0.8536 * rim + flourish + grain, 0.0, 1.5);
+    float pattern = clamp(0.3447 * deepPat * mix(1.0, chordN, 0.3481) + 0.7191 * mid + 0.8536 * rim + flourish + grain + 0.1622 * deepTex, 0.0, 1.5);
     float gpos = clamp(pattern * 0.8591 + rim * 0.2454, 0.0, 1.0);
     vec3 rgb = gradient3(deepStop, baseCol, hotStop, gpos);
     float midCover = clamp(1.1011 * mid + 0.4685 * rim, 0.0, 1.0);
@@ -494,6 +525,11 @@ void main() {
         texture(Sampler1, clamp(screenUV + refrOff * 1.0525, vec2(0.001), vec2(0.999))).r,
         texture(Sampler1, clamp(screenUV + refrOff, vec2(0.001), vec2(0.999))).g,
         texture(Sampler1, clamp(screenUV + refrOff * 0.9475, vec2(0.001), vec2(0.999))).b);
+    // v11 Beer-Lambert body absorption: the scene light is absorbed
+    // along the view chord through the shell -- the longer the grazing
+    // path, the deeper the palette tint (absorption pulls toward
+    // baseCol's own hue: recolor-safe, and head-on stays clearest).
+    refracted *= exp(-0.8673 * chordN * (1.0 - baseCol));
     // energy-glass composite: the refracted scene (lightly tinted toward
     // the live palette) is the see-through BASE; the family's pattern
     // rides on top as the ENERGY, weighted by its own brightness and the
@@ -549,6 +585,16 @@ void main() {
     // v9: the motif also firms the membrane locally (pre-clamp, pre-
     // dissolve -- vertexColor.a still always wins).
     bodyAlpha += motifGlow * 0.2079;
+    // [layer:inner:current]
+    // v11 back-face interior: gl_FrontFacing keys the far shell only.
+    float innerFace = gl_FrontFacing ? 0.0 : 1.0;
+    // INNER_CURRENT: the deep field re-sampled on a COUNTER-rotated
+    // domain and re-tinted hotStop -> secCol -- an energy current
+    // circulating the inside of the shell against the deep planes.
+    float innerGlow = deepField(rotA(spinAxis, -time * 0.036652 + 0.7531) * (sdir * 1.6047), time);
+    vec3 innerCol = mix(hotStop, secCol, clamp(innerGlow * 1.2047, 0.0, 1.0));
+    rgb = mix(rgb, innerCol, innerFace * 0.3137);
+    bodyAlpha *= 1.0 + innerFace * 0.1030;
     // [layer:depthsoft:scene_depth]
     // v8 refraction floor + depth-soft edges, folded into bodyAlpha BEFORE
     // the ceiling clamp: what shows through the membrane must be the

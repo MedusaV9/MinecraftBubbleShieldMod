@@ -66,11 +66,19 @@ On top of that it enforces the generated-shader invariants:
   COMMENT-STRIPPED, whitespace-normalized GLSL (SHA-256 of the executable
   source, not the raw bytes) -- a unique-id comment or seed annotation can
   never make two copies of the same executable shader count as distinct;
-* every generated fx_*.fsh carries all four structural layer markers
-  ([layer:deep:...], [layer:mid:...], [layer:rim:...], [layer:motif:...]),
-  and the in-file motif marker's (class, envelope) pair must MATCH the
-  manifest's recorded per-id motif fingerprint (motif/env), so the marker and
-  the manifest can never drift apart;
+* every generated fx_*.fsh carries all six structural layer markers
+  ([layer:deep:...], [layer:mid:...], [layer:rim:...], [layer:motif:...],
+  [layer:thick:...], [layer:inner:...]), and the in-file motif marker's
+  (class, envelope) pair must MATCH the manifest's recorded per-id motif
+  fingerprint (motif/env), so the marker and the manifest can never drift
+  apart;
+* v11 cost budget (check_cost_budget, comment-stripped counts): every fx
+  spends EXACTLY 12 texture taps (7 atlasTile call sites minus the helper
+  definition + 3 Sampler1 + 2 Sampler2), keeps its field-function call sites
+  (deepField/fbm2/fbm3/caustic/vnoise3) at or under the hardcoded ceiling and
+  its raw line count at or under 760, carries exactly one
+  [layer:inner:<recipe>] marker equal to the manifest's thick.inner, and the
+  recomputed tap/field counts must equal the manifest's costTaps/costField;
 * tools/surface_manifest.json exists, has EXACTLY the ids 0..COUNT-1, its
   entries match the fx_* files on disk 1:1, and its (family, warp, deep, rim,
   anim) stack tuples are pairwise distinct (the structural-variety guarantee);
@@ -185,12 +193,19 @@ MOJ_IMPORT = re.compile(r"^#moj_import <minecraft:([a-z_]+)\.glsl>\s*$")
 COUNT_RE = re.compile(r"^\s*public static final int COUNT = (\d+);", re.MULTILINE)
 FX_NAME = re.compile(r"^fx_(\d{3})\.fsh$")
 SFX_NAME = re.compile(r"^sfx_(\d{3})\.fsh$")
-LAYER_MARKERS = ("// [layer:deep:", "// [layer:mid:", "// [layer:rim:", "// [layer:motif:")
+LAYER_MARKERS = ("// [layer:deep:", "// [layer:mid:", "// [layer:rim:", "// [layer:motif:",
+                 # v11 volumetric thickness: every fx must carry the chord/paratex
+                 # thickness layers and the back-face interior recipe.
+                 "// [layer:thick:", "// [layer:inner:")
 # The per-id motif fingerprint marker the generator writes into every fx file
 # (// [layer:motif:<class>:<envelope>]); its (class, envelope) pair is
 # cross-checked against the manifest's recorded (motif, env) so the in-file
 # marker and the manifest can never drift apart.
 MOTIF_MARKER_RE = re.compile(r"^\s*// \[layer:motif:([a-z0-9]+):([a-z0-9]+)\]\s*$", re.MULTILINE)
+# The v11 inner-face recipe marker (// [layer:inner:<recipe>]); its recipe
+# name is cross-checked against the manifest's thick.inner in
+# check_cost_budget so the marker and the manifest can never drift apart.
+INNER_MARKER_RE = re.compile(r"^\s*// \[layer:inner:([a-z0-9_]+)\]\s*$", re.MULTILINE)
 STACK_KEYS = ("family", "warp", "deep", "rim", "anim", "motif", "motifN", "env")
 # v9 per-EFFECT motif fingerprint: within one family, no two ids may share
 # the same (motif class, element count, envelope) triple -- the structural
@@ -250,6 +265,32 @@ LAYOUT_BINDING_RE = re.compile(r"layout\s*\(\s*binding\b")
 WITH_TEXTURE_DIRECT_RE = re.compile(
     r'\.withTexture\(\s*"Sampler0"\s*,\s*BubbleShield\.id\(\s*"([^"]+)"\s*\)\s*\)')
 WITH_TEXTURE_VAR_RE = re.compile(r'\.withTexture\(\s*"Sampler0"\s*,\s*(\w+)\s*\)')
+
+# --- v11 per-fx cost budget (see check_cost_budget; the regexes mirror the
+# count_texture_taps / count_field_calls helpers in gen_surface_shaders.py,
+# and the counts are cross-checked against the manifest's costTaps/costField
+# so the recorded cost and the emitted file can never drift apart) ----------
+# Texture taps: atlasTile() call sites (minus the helper definition itself;
+# its internal texture(Sampler0 is the same tap, not an extra one) plus the
+# direct Sampler1/Sampler2 scene-copy taps. The v11 contract is exactly 12:
+# 7 atlasTile (center + 2 gradient + 2 flow + 2 deep-parallax) + 3 chromatic
+# Sampler1 taps + 2 Sampler2 depth taps.
+ATLAS_CALL_RE = re.compile(r"\batlasTile\s*\(")
+ATLAS_DEF_RE = re.compile(r"^\s*vec4\s+atlasTile\s*\(", re.MULTILINE)
+SAMPLER1_TAP_RE = re.compile(r"\btexture\s*\(\s*Sampler1\b")
+SAMPLER2_TAP_RE = re.compile(r"\btexture\s*\(\s*Sampler2\b")
+EXPECTED_TEXTURE_TAPS = 12
+# Field-function call sites (the procedural-noise ALU cost proxy),
+# definitions excluded the same way.
+FIELD_CALL_RE = re.compile(r"\b(?:deepField|fbm2|fbm3|caustic|vnoise3)\s*\(")
+FIELD_DEF_RE = re.compile(r"^\s*float\s+(?:deepField|fbm2|fbm3|caustic|vnoise3)\s*\(", re.MULTILINE)
+# Pre-v11 fleet maximum was 20 call sites (fx_482, PRISMDISPERSE); the v11
+# inner recipes/showcases add at most 1 per file, so 20 + 3 leaves headroom
+# without letting a runaway composer slip through.
+FIELD_CALL_CEILING = 23
+# Raw line ceiling, kept in lock-step with the generator's 130..760 sanity
+# bounds (pre-v11 max was 667; v11 adds ~35-45 lines per file).
+MAX_FX_LINES = 760
 
 
 def parse_registry_count() -> int:
@@ -783,6 +824,91 @@ def parse_png(data: bytes) -> tuple[int, int, int, int] | str:
     return width, height, bit_depth, color_type
 
 
+def check_cost_budget(shaders: list[Path], skip_fx: bool) -> list[str]:
+    """v11 per-fx cost lint (fail-closed, like everything else here): every
+    generated fx must spend EXACTLY the contracted texture budget (12 taps:
+    7 atlasTile call sites + 3 Sampler1 + 2 Sampler2), stay at or under the
+    field-function call ceiling and the raw line ceiling, and agree with the
+    manifest's v11 records -- the in-file [layer:inner:<recipe>] marker must
+    equal thick.inner, and the recomputed tap/field counts must equal
+    costTaps/costField. glslang can not see any of this (an extra tap or a
+    runaway inner recipe compiles fine), so this is the only gate keeping
+    the per-fragment cost and the recorded cost model honest. Returns errors."""
+    errors: list[str] = []
+    if skip_fx:
+        return errors
+    fx_files = sorted(p for p in shaders if FX_NAME.match(p.name))
+
+    manifest: dict = {}
+    if MANIFEST_PATH.is_file():
+        try:
+            manifest = json.loads(MANIFEST_PATH.read_text())
+        except json.JSONDecodeError:
+            manifest = {}  # already reported by check_generated_invariants
+    by_file = {entry.get("file"): entry for entry in manifest.values()}
+
+    checked = 0
+    for shader in fx_files:
+        raw = shader.read_text(encoding="utf-8")
+        text = strip_comments(raw)
+        file_ok = True
+
+        taps = (len(ATLAS_CALL_RE.findall(text)) - len(ATLAS_DEF_RE.findall(text))
+                + len(SAMPLER1_TAP_RE.findall(text)) + len(SAMPLER2_TAP_RE.findall(text)))
+        if taps != EXPECTED_TEXTURE_TAPS:
+            errors.append(f"{shader.name}: {taps} texture taps (atlasTile call sites + Sampler1 "
+                          f"+ Sampler2), expected exactly {EXPECTED_TEXTURE_TAPS}")
+            file_ok = False
+
+        fields = len(FIELD_CALL_RE.findall(text)) - len(FIELD_DEF_RE.findall(text))
+        if fields > FIELD_CALL_CEILING:
+            errors.append(f"{shader.name}: {fields} field-function call sites "
+                          f"(deepField/fbm2/fbm3/caustic/vnoise3), over the ceiling "
+                          f"{FIELD_CALL_CEILING}")
+            file_ok = False
+
+        raw_lines = raw.count("\n")
+        if raw_lines > MAX_FX_LINES:
+            errors.append(f"{shader.name}: {raw_lines} lines, over the {MAX_FX_LINES}-line ceiling")
+            file_ok = False
+
+        inner_markers = INNER_MARKER_RE.findall(raw)
+        if len(inner_markers) != 1:
+            errors.append(f"{shader.name}: expected exactly one '// [layer:inner:<recipe>]' "
+                          f"marker, found {len(inner_markers)}")
+            file_ok = False
+
+        entry = by_file.get(shader.name)
+        if entry is None:
+            continue  # missing manifest entry is already reported elsewhere
+        thick = entry.get("thick")
+        if not isinstance(thick, dict) or not isinstance(thick.get("rho"), (int, float)) \
+                or not isinstance(thick.get("k"), (int, float)) or "inner" not in thick:
+            errors.append(f"{shader.name}: manifest entry has no valid 'thick' record "
+                          "(expected {rho: <num>, k: <num>, inner: <recipe>})")
+            file_ok = False
+        elif len(inner_markers) == 1 and inner_markers[0] != thick["inner"]:
+            errors.append(f"{shader.name}: in-file marker '// [layer:inner:{inner_markers[0]}]' "
+                          f"does not match manifest thick.inner '{thick['inner']}'")
+            file_ok = False
+        if entry.get("costTaps") != taps:
+            errors.append(f"{shader.name}: manifest costTaps {entry.get('costTaps')} != "
+                          f"recomputed {taps}")
+            file_ok = False
+        if entry.get("costField") != fields:
+            errors.append(f"{shader.name}: manifest costField {entry.get('costField')} != "
+                          f"recomputed {fields}")
+            file_ok = False
+        if file_ok:
+            checked += 1
+
+    if not errors:
+        print(f"OK    v11 cost budget ({checked} fx at exactly {EXPECTED_TEXTURE_TAPS} texture "
+              f"taps, field calls <= {FIELD_CALL_CEILING}, <= {MAX_FX_LINES} lines, "
+              "inner marker + costTaps/costField match the manifest)")
+    return errors
+
+
 def check_texture_binding(shaders: list[Path], beam_names: tuple[str, ...]) -> list[str]:
     """The Sampler0 texture-binding contract, fail-closed (see module
     docstring). glslangValidator compiles a declared-but-unused sampler
@@ -1038,6 +1164,7 @@ def main() -> None:
 
     invariant_errors = inventory_errors
     invariant_errors += check_generated_invariants(shaders, count, skip_fx)
+    invariant_errors += check_cost_budget(shaders, skip_fx)
     invariant_errors += check_screen_invariants(shaders, count, skip_sfx)
     # The Sampler0/atlas contract runs unconditionally: ShieldPipelines.java
     # and the shipped atlas are hand-maintained (not generated), so even an
