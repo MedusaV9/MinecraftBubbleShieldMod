@@ -2,8 +2,8 @@
 
 A [Fabric](https://fabricmc.net/) mod for Minecraft 26.2 that adds deployable **bubble shields**: translucent
 force-field bubbles in ten shapes (spheres, domes, cylinders, cubes, diamonds, rings, pyramids, lenses,
-hourglasses and stars) projected from a furnace-like block that keep hostile players and their
-projectiles out while letting your friends walk right through.
+hourglasses and stars) projected from a furnace-like block that keep hostile players, hostile mobs and
+their projectiles out while letting your friends walk right through.
 
 ## What is a Bubble Shield?
 
@@ -11,8 +11,8 @@ Craft and place a **Bubble Shield Projector** (a furnace-like machine block), fu
 raise a shield around it:
 
 - **Fuel**: the projector burns coal (80 s), charcoal (80 s), coal blocks (800 s), blaze rods (120 s) or lava
-  buckets (1000 s). An active shield drains one fuel-second per second and collapses when fuel runs out
-  (Eco mode and the Flux Capacitor slow this drain — see the exact rule below).
+  buckets (1000 s). An active shield drains stored fuel-seconds while running and collapses when fuel runs
+  out (bigger bubbles burn more; Eco mode and the Flux Capacitor slow the drain — see the exact rule below).
 - **Size**: the shield diameter is configurable in the projector GUI from 8 up to a maximum of **200 blocks**.
 - **Shape**: a GUI cycle button picks one of **ten shapes** — the classic full **sphere**, a **dome** (upper
   hemisphere only — open below the projector's center plane, so anything at or below that height passes
@@ -22,25 +22,40 @@ raise a shield around it:
   **Auto** (each effect resolves to its own coherent preset) or one of the **8 rendered styles**: storm,
   pulse, helix, prism, void, ember, runic and frost (each with its own hand-written beam shader).
 - **Whitelist**: the owner and any whitelisted players (added by name in the GUI, matched case-insensitively
-  by name or UUID) pass through freely; everyone else is pushed back at the boundary. The shield surface
-  dissolves in a bubble around approaching whitelisted players.
-- **Health**: projectile hits damage the shield, and the shield **shrinks** as its health drops (never below a
-  4-block radius). When health is depleted the shield breaks and the projector enters a **30-minute cooldown**
-  (halved at tier 2) before it can be activated again.
-- **Mode**: a GUI cycle button switches between **Defense** (the classic behavior), **Pulse** (every 3 seconds,
-  hostile mobs inside the bubble take 2 magic damage and a small outward knockback; each pulse that hits
-  something burns one extra fuel-second) and **Eco** (passive drain halved, radius capped at 0.75x, tier
-  regeneration suppressed).
-- **Combined drain rule** (Eco x Flux Capacitor): the active shield burns 1 fuel-second every
+  by name or UUID, up to **64 entries**) pass through freely; everyone else is pushed back at the boundary.
+  The shield surface dissolves in a bubble around approaching whitelisted players.
+- **Health**: max health scales with the bubble's **size and tier** — from 125 for a tiny uncored shield up
+  to thousands of HP for a huge Aegis-cored one (see the tier table below). Projectile hits damage the
+  shield; at **60% health or above the bubble holds its full radius**, below that it shrinks proportionally
+  (never under a 4-block radius). Below **25% health** the shield enters *last stand*: incoming damage is
+  halved, fuel drain doubles and a heartbeat thumps at the projector. When health is depleted the shield
+  breaks with a **shockwave nova** (8 magic damage plus strong knockback to every hostile mob inside) and
+  the projector enters a break cooldown of **15 / 10 / 6 / 3 minutes** by tier; a bell ping announces when
+  it is ready again.
+- **Mode**: a GUI cycle button switches between **Defense** (blocks players *and* hostile mobs, expelling
+  any already inside), **Pulse** (every 3 seconds, hostile mobs inside the bubble take 2 magic damage and a
+  small outward knockback; each pulse that hits something burns one extra fuel-second; mobs are blocked at
+  the boundary but not expelled — they are the zap's prey) and **Eco** (passive drain halved, radius capped
+  at 0.75x, tier regeneration suppressed, no mob barrier). The Wither and the Ender Dragon are exempt from
+  the mob barrier (they still take pulse and nova damage).
+- **Combined drain rule** (Eco x Flux Capacitor): the active shield pays a drain event every
   `20 x (Eco ? 2 : 1) x (Capacitor ? 2 : 1)` ticks, **capped at 80 ticks** — i.e. every second plain, every
-  2 seconds with either Eco mode or a Flux Capacitor, and every 4 seconds (the cap) with both.
+  2 seconds with either Eco mode or a Flux Capacitor, and every 4 seconds (the cap) with both. Each event
+  burns `max(1, round(diameter / 50))` fuel-seconds (1 up to diameter 74, scaling to 4 at 175+), doubled
+  while in last stand.
+- **Strength gamerule**: `/gamerule bubbleshield:strength <percent>` (10–500, default 100) scales the max
+  health of every shield on the server.
 - **Effect cycle**: an optional toggle (in the effect picker) that re-rolls the active shield's effect to a
   random different one every 30 seconds.
 - **Custom name**: the owner can name the shield in the GUI (*Name...*, up to 32 characters); the name shows
   on the boss bar and in-bubble HUD, and clearing it falls back to the effect name.
 - **Boss bar**: everyone standing inside an active shield sees a boss bar tracking the shield's health,
-  named after the shield (custom name or effect name) and colored to match the effect palette (or the
-  owner's dye override).
+  named after the shield (custom name or effect name) with a health readout in 5% steps ("· NN%"), colored
+  to match the effect palette (or the owner's dye override). Below 25% health the bar switches to a notched
+  style, and while the shield is under attack the name carries an "UNDER ATTACK!" suffix.
+- **GUI readout**: the projector GUI shows the live numbers — HP current/max, regeneration and fuel drain
+  per minute, tier with combined damage resistance, threat count and a mm:ss cooldown timer; hovering the
+  Activate button previews max HP, resistance and fuel cost (or the remaining cooldown).
 - **Dye color override**: a GUI color picker (*Color...*) recolors the bubble surface, HUD bar, particles
   and boss bar with any of the 16 dye colors, or resets to the effect's authored palette. Caveat: the
   in-bubble **screen post-effect keeps the effect's own authored colors** (they are baked into the static
@@ -48,18 +63,28 @@ raise a shield around it:
 
 ### Upgrade cores, tiers and regeneration
 
-The projector has a second slot for an **upgrade core**:
+The projector has a second slot for an **upgrade core**, which sets the shield's tier:
 
-- **Resonant Core** (tier 1, crafted from amethyst/iron/diamond): max health 200, and the shield
-  **regenerates** 1.0 health every 2 seconds while active and fueled.
-- **Prismatic Core** (tier 2, crafted from diamonds/amethyst blocks around a Resonant Core): max health 300,
-  regenerates 2.5 health per pulse, and the break cooldown is **halved** to 15 minutes.
+| Tier | Core | Base HP | Damage resistance | Regen (HP per 2 s) | Break cooldown |
+|------|------|---------|-------------------|--------------------|----------------|
+| 0 | — | 200 | 0% | 1 (out of combat only) | 15 min |
+| 1 | **Resonant Core** (amethyst/iron/diamond) | 400 | 25% | 3 | 10 min |
+| 2 | **Prismatic Core** (diamonds/amethyst blocks around a Resonant Core) | 700 | 40% | 6 | 6 min |
+| 3 | **Aegis Core** (echo shards/netherite ingots around a Prismatic Core) | 1200 | 50% | 12 | 3 min |
 
-Each regeneration pulse burns one extra fuel-second on top of the normal drain. Removing the core drops the
-tier (and clamps health) immediately.
+The effective max health is `base HP x (0.5 + diameter / 64) x strength%`, clamped to 50–8000 — at the
+default 32-block diameter the base values apply unchanged, and a 200-block Aegis shield reaches 4350 HP.
+Tier damage resistance reduces every projectile hit before it reaches the health bar.
 
-Besides crafting, **Resonant Cores** also drop from structure loot: End City treasure and Ancient City
-chests each have an extra 1-in-10 chance to contain one.
+Regeneration pulses once per 2 seconds of active runtime while fueled: **out of combat** (not hit for
+10 seconds) tiers 1–3 heal at **3x** their rate, while tier 0 only regenerates out of combat at all. Eco
+mode suppresses regeneration, resonance-linked shields heal **1.25x** per pulse, and each pulse burns one
+extra fuel-second on top of the normal drain (unless a Flux Capacitor is installed). Removing the core
+drops the tier (and rescales health) immediately.
+
+Besides crafting, structure loot carries the shield gear: End City treasure and Ancient City chests each
+have an extra 1-in-10 chance to contain a **Resonant Core**, End City treasure a 1-in-20 chance for an
+**Aegis Core**, and Ancient City chests a 1-in-8 chance for 1–2 **Patch Kits**.
 
 ### Flux Capacitor
 
@@ -67,17 +92,52 @@ A third slot takes a **Flux Capacitor** (crafted from copper ingots, redstone bl
 installed it **halves the passive fuel drain** (see the combined drain rule above) and makes tier
 regeneration pulses **fuel-free** (they no longer burn the extra fuel-second).
 
+### Augment slot: Reinforced Plating or Blast Ward
+
+A fourth slot takes exactly **one** defense module — a strategic either/or choice:
+
+- **Reinforced Plating** (iron ingots around obsidian): **-30% damage from every projectile hit**, stacking
+  multiplicatively with the tier resistance; the combined resistance is capped at **70%**.
+- **Blast Ward** (obsidian/bricks/netherite scrap): **explosive** projectiles (fireballs, wither skulls,
+  wind charges) deal **60% less** shield damage, applied before the tier/plating resistance.
+
+### Field repairs: Patch Kit and emergency revive
+
+- **Patch Kit** (2 amethyst shards + slime ball + copper ingot, crafts 2, stacks to 16): right-click an
+  **active** projector to restore **150 shield HP** (owner or whitelisted players only; the kit is consumed
+  only when it actually heals), or a **broken** (cooling-down) projector to cut the remaining cooldown by
+  **20% of the full break cooldown** — repeated kits stack.
+- **Emergency revive**: while the projector is on break cooldown with at least **400 fuel-seconds** stored,
+  the owner's Activate button becomes *Revive (-400 fuel)* — pressing it consumes the 400 fuel-seconds,
+  clears the cooldown and restarts the shield at **50% health**.
+
+### The shield fights back
+
+- **Arrow riposte** (tier 1+): intercepted arrows with a known shooter are **reflected straight back** at
+  them (re-owned to the shield's owner, no pickup) instead of absorbed.
+- **Siege alarm**: a projectile interception, or threats appearing near an active shield, rings a bell at
+  the projector, pins the comparator output to 15 for 5 seconds and marks the boss bar "UNDER ATTACK!" (at
+  most one alarm per 15 seconds). Threats — non-whitelisted players plus hostile mobs inside the bubble or
+  within 8 blocks beyond it — are counted once per second and shown in the GUI.
+- **Threat log**: the last 8 intercepted attackers (name, damage, time) are remembered per projector and
+  readable via `/bubbleshield log`.
+- Last stand, the break shockwave nova and the hostile-mob barrier are described under *Health* and *Mode*
+  above.
+
 ### Resonance linking
 
 Two or more **active shields with the same owner whose spheres overlap** form a resonance link: intercepted
-projectile damage is **split evenly** across all linked shields, and an END_ROD particle tether connects the
-projectors. Linking is not transitive (only shields directly overlapping the hit shield share its damage),
-uses the current health-shrunk radii, and ignores shape (domes link by their full sphere radius).
+projectile damage is **split evenly** across all linked shields (each then applies its own damage
+resistance to its share), linked shields **regenerate 1.25x** per pulse, and an END_ROD particle tether
+connects the projectors. Linking is not transitive (only shields directly overlapping the hit shield share
+its damage), uses the current health-shrunk radii, and ignores shape (domes link by their full sphere
+radius).
 
 ### Comparator, redstone and sculk
 
 - **Comparator output**: while active, the signal is the shield's health fraction on a 1–15 scale; while
-  inactive, it reports stored fuel (one signal step per 200 fuel-seconds, capped at 15).
+  inactive, it reports stored fuel (one signal step per 200 fuel-seconds, capped at 15). A siege alarm
+  overrides the output to 15 for 5 seconds, so a comparator can trigger base defenses.
 - **Redstone control**: a rising redstone edge activates a fueled projector, a falling edge deactivates it.
   Edge-triggered, so GUI toggling still works independently while powered.
 - **Sculk game events**: a real activation emits `BLOCK_ACTIVATE` and a real deactivation emits
@@ -89,16 +149,25 @@ uses the current health-shrunk radii, and ignores shape (domes link by their ful
 - `/bubbleshield info <id>` — print an effect's surface, inside behavior, guard style and context profile.
 - `/bubbleshield set <id>` — retune the nearest projector within 16 blocks to the given effect. Owner-gated
   with the same claim rule as the GUI; the id is clamped into the catalogue range.
+- `/bubbleshield status` — the nearest owned projector's full stat sheet: HP, tier and combined damage
+  resistance, regen and drain per minute (with a time-to-empty projection), cooldown, strength gamerule and
+  live threat count.
+- `/bubbleshield log` — the nearest owned projector's threat log (the last 8 intercepted attackers).
 
 ### Projectile interactions
 
 Projectiles from non-whitelisted shooters are intercepted at the surface, by type:
 
-- **Arrows** (and anything unclassified): absorbed (removed), 5 shield damage.
+- **Arrows** (and anything unclassified): absorbed (removed) — or **riposted** back at the shooter at
+  tier 1+ — 3 shield damage.
 - **Tridents**: too heavy to absorb — **reverse-deflected** back out, 4 damage.
-- **Fireballs, wither skulls, wind charges**: reverse-deflected (no explosion inside), 8 damage.
+- **Fireballs, wither skulls, wind charges**: reverse-deflected (no explosion inside), 10 damage (x0.4 with
+  a Blast Ward).
 - **Thrown items** (snowballs, potions, **ender pearls** — no teleporting through!) and shulker bullets:
-  fizzle out, 2 damage.
+  fizzle out, 1 damage.
+
+These are raw values: the tier and plating damage resistance (and last stand) reduce what the health bar
+actually loses.
 
 ## The 840 effects
 
@@ -164,12 +233,17 @@ are emitted by deterministic, byte-stable generators — **never hand-edit gener
 ## HUD, ambient sounds and advancements
 
 - **In-bubble HUD**: while you stand inside an active shield, a top-center HUD element shows the shield
-  name (custom or effect name), a 100px health bar tinted with the effect's primary color (or the dye
-  override), and the shield tier (when cored).
-- **Advancements**: eight advancements with custom criteria — obtaining a projector, raising a shield
+  name (custom or effect name), a 100px health bar with an absolute HP readout, tinted with the effect's
+  primary color (or the dye override), and the shield tier (when cored).
+- **Shield sounds**: beacon-style activation/deactivation cues, a hit sound whose pitch rises as the shield
+  weakens, the last-stand heartbeat, the siege-alarm bell and a one-shot bell ping when a break cooldown
+  naturally expires.
+- **Advancements**: twelve advancements with custom criteria — obtaining a projector, raising a shield
   ("Shields Up!"), raising a 200-block-diameter shield ("Maximalist"), having your own shield shatter
   ("Bubble Burst"), whitelisting a friend ("Friend Zone"), naming a shield ("Christened"), dye-recoloring a
-  shield ("Full Spectrum") and having two linked shields split damage ("Linked Up").
+  shield ("Full Spectrum"), having two linked shields split damage ("Linked Up"), plus the Bulwark chain:
+  activating a tier-1/2/3 shield ("Reinforced" / "Bastion" / "Aegis Bearer") and absorbing 500 damage on a
+  single projector ("Unbroken").
 - Full **English + German** localization for everything, enforced by a key-parity gametest.
 
 ## Building and running
@@ -184,10 +258,12 @@ Requires Java 25. All commands run from the repository root:
 ./gradlew runServer
 
 # Run the automated game tests (shield lifecycle, projectile interactions, whitelist,
-# menu, tiers/regen, flux capacitor economy, comparator/redstone, dome geometry,
-# guard/context, advancements, boss bar/naming, shield modes/effect cycle, color
-# override, resonance linking, command/sculk/loot integration, effect catalogue
-# invariants, lang parity, post-effect assets, persistence)
+# menu, tiers/strength/regen/damage-resistance, augments, patch kit/revive, combat
+# behaviors (mob barrier, riposte, last stand, nova, siege alarm), flux capacitor
+# economy, comparator/redstone, dome geometry, guard/context, advancements, boss
+# bar/naming, shield modes/effect cycle, color override, resonance linking,
+# command/sculk/loot integration, effect catalogue invariants, lang parity,
+# post-effect assets, persistence)
 ./gradlew runGameTest
 
 # Compile-validate all bubble + screen-fx GLSL shaders with glslangValidator
