@@ -1,6 +1,7 @@
 package com.bubbleshield.client.fx;
 
 import com.bubbleshield.client.ClientShieldManager;
+import com.bubbleshield.client.render.InteriorRenderer;
 import com.bubbleshield.net.ShieldPayloads;
 
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLevelEvents;
@@ -32,6 +33,15 @@ public final class ImpactFxManager {
 				int kind = entry.kind() & 0xFF;
 				if (kind >= ShieldPayloads.ImpactEntry.KIND_COUNT) {
 					// Forward compatibility: a newer server's unknown kinds are skipped.
+					continue;
+				}
+
+				// A PASSAGE the ApertureTracker already predicted locally (same
+				// shield, similar direction, within 10 ticks) is that
+				// prediction's server echo: adding it too would superpose a
+				// second ripple at ~2x amplitude.
+				if ((kind == ShieldPayloads.ImpactEntry.KIND_PASSAGE_IN || kind == ShieldPayloads.ImpactEntry.KIND_PASSAGE_OUT)
+						&& ApertureTracker.matchesLocalPassage(pos, entry.dir())) {
 					continue;
 				}
 
@@ -70,5 +80,8 @@ public final class ImpactFxManager {
 		ApertureTracker.clear();
 		ContactFlash.reset();
 		ProximityHum.stop();
+		// Scatter caches are keyed by GlobalPos; a new server/level invalidates
+		// them exactly like the other per-shield client state.
+		InteriorRenderer.clearCache();
 	}
 }

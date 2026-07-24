@@ -878,7 +878,9 @@ public final class SphereMesh {
 	 * {@code d} is the arc {@code R * acos(clamp(unitDir dot impactDir, -1, 1))}
 	 * for the geodesic shapes — sphere/dome/lens/diamond, using the normalized
 	 * unit-scale POSITION as the direction — and the Euclidean
-	 * {@code |worldPos - impactDir * R|} for the prism-like shapes), plus every
+	 * {@code |worldPos - impactDir * surfaceDist|} for the prism-like shapes,
+	 * with {@code surfaceDist} the shape-projected boundary distance computed
+	 * once per impact by the renderer), plus every
 	 * aperture lip along {@code 0.7 * tangentAway + 0.3 * normal}, plus the
 	 * last-stand tremble along the normal, the total clamped to
 	 * {@link SurfaceWaveMath#TOTAL_DISPLACEMENT_CLAMP};</li>
@@ -890,8 +892,9 @@ public final class SphereMesh {
 	 * (the aperture hole replacing the legacy dissolve);</li>
 	 * <li><b>UV flow</b>: {@code 0.04 * exp(-(d - holeR)^2 / 2.88)} radially away
 	 * from the aperture's spherical UV projection, skipping the u component
-	 * across the u = 0/1 seam ({@code |u - uAp| > 0.5}) and clamping a shifted u
-	 * into [0.002, 0.998].</li>
+	 * across the u = 0/1 seam ({@code |u - uAp| > 0.5}) and clamping BOTH
+	 * shifted components into [0.002, 0.998] (an unclamped v would wrap through
+	 * fract() at the poles).</li>
 	 * </ul>
 	 *
 	 * <p>With {@link DeformState#isIdle()} the evaluator short-circuits to the
@@ -924,6 +927,8 @@ public final class SphereMesh {
 		private final boolean[] impactHeal;
 		private final float[] impactStrengths;
 		private final float[] impactAges;
+		/** Center-to-surface distance along each impact's dir (see {@link DeformState.Impact#surfaceDist}). */
+		private final float[] impactSurfaceDists;
 
 		private final int apertureCount;
 		private final float[] aperturePositions;
@@ -956,6 +961,7 @@ public final class SphereMesh {
 			this.impactHeal = new boolean[this.impactCount];
 			this.impactStrengths = new float[this.impactCount];
 			this.impactAges = new float[this.impactCount];
+			this.impactSurfaceDists = new float[this.impactCount];
 			for (int i = 0; i < this.impactCount; i++) {
 				DeformState.Impact impact = impacts.get(i);
 				Vec3 dir = impact.dirUnit();
@@ -966,6 +972,7 @@ public final class SphereMesh {
 				this.impactHeal[i] = impact.kind() == ShieldPayloads.ImpactEntry.KIND_HEAL;
 				this.impactStrengths[i] = impact.strength01();
 				this.impactAges[i] = impact.ageSec();
+				this.impactSurfaceDists[i] = impact.surfaceDist();
 			}
 
 			List<DeformState.Aperture> apertures = deform.apertures();
@@ -1056,9 +1063,15 @@ public final class SphereMesh {
 						float dot = Mth.clamp(ux * ix + uy * iy + uz * iz, -1.0F, 1.0F);
 						d = this.radius * (float) Math.acos(dot);
 					} else {
-						float dx = worldX - ix * this.radius;
-						float dy = worldY - iy * this.radius;
-						float dz = worldZ - iz * this.radius;
+						// The wave center sits on the ACTUAL boundary along the
+						// impact dir (surfaceDist, projected once per impact by
+						// the renderer) — dir * radius would put it on the
+						// bounding sphere, off-surface by up to 42 blocks on a
+						// D=200 cube.
+						float surfaceDist = this.impactSurfaceDists[i];
+						float dx = worldX - ix * surfaceDist;
+						float dy = worldY - iy * surfaceDist;
+						float dz = worldZ - iz * surfaceDist;
 						d = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
 					}
 
@@ -1146,7 +1159,10 @@ public final class SphereMesh {
 			this.outY = worldY + dispY;
 			this.outZ = worldZ + dispZ;
 			this.outU = uShift != 0.0F ? Mth.clamp(u + uShift, 0.002F, 0.998F) : u;
-			this.outV = v + vShift;
+			// v clamps like u: the fx shaders treat v as non-periodic latitude,
+			// so an unclamped shift past 0/1 would wrap through fract() at the
+			// poles and paint the opposite end of the palette there.
+			this.outV = vShift != 0.0F ? Mth.clamp(v + vShift, 0.002F, 0.998F) : v;
 			this.outColor = this.gradedColor(latFrac, maxCrest, crestIsHeal, maxRim, alphaFactor);
 		}
 

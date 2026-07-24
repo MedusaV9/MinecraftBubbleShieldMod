@@ -5,6 +5,7 @@ import java.util.Comparator;
 import java.util.List;
 
 import com.bubbleshield.client.ClientShieldManager;
+import com.bubbleshield.client.ShieldWallMath;
 import com.bubbleshield.client.fx.ApertureTracker;
 import com.bubbleshield.client.fx.ImpactTracker;
 import com.bubbleshield.effect.ContextModifier;
@@ -123,7 +124,11 @@ public final class ShieldRenderer {
 			EffectDefinition def = EffectRegistry.get(shield.effectId());
 			RenderType renderType = ShieldPipelines.renderType(shield.effectId());
 			Vec3 center = Vec3.atCenterOf(shield.pos());
-			DeformState deform = buildDeformState(level, shield, center, radius, partialTick, timeSec);
+			// The synced shape picks the mesh; every variant shares the sphere's
+			// vertex conventions (POSITION_TEX_COLOR quads, UV in [0, 1], CPU-side
+			// radius scaling) and the dimensions match ShieldGeometry exactly.
+			ShieldShape shape = ShieldShape.byOrdinal(shield.shape());
+			DeformState deform = buildDeformState(level, shield, shape, center, radius, partialTick, timeSec);
 
 			// Owner recolor: the override (opaque ARGB, so negative; -1 = unset) replaces the
 			// authored palette, with the secondary derived as the same darkened (x0.55) shade.
@@ -139,11 +144,6 @@ public final class ShieldRenderer {
 			// ignores the (post-break, already restored) health fraction and just
 			// fades out linearly over its window.
 			float alphaBase = live ? 0.35F + 0.6F * shield.healthFrac() : 0.75F * ghostFade;
-
-			// The synced shape picks the mesh; every variant shares the sphere's
-			// vertex conventions (POSITION_TEX_COLOR quads, UV in [0, 1], CPU-side
-			// radius scaling) and the dimensions match ShieldGeometry exactly.
-			ShieldShape shape = ShieldShape.byOrdinal(shield.shape());
 
 			poseStack.pushPose();
 			poseStack.translate(center.x - camera.x, center.y - camera.y, center.z - camera.z);
@@ -192,12 +192,15 @@ public final class ShieldRenderer {
 	/**
 	 * Builds one shield's per-frame {@link DeformState}: the {@value #MAX_IMPACTS}
 	 * strongest live impacts (by {@code strength * e^(-1.6 * age)}) with per-kind
-	 * effective strengths, plus the {@value #MAX_APERTURES} apertures nearest the
-	 * wall. Returns {@link DeformState#NONE} when nothing is happening so the mesh
+	 * effective strengths and shape-projected surface distances (the wave center
+	 * of a prism-like shape lies on the actual boundary along the impact
+	 * direction, NOT on the bounding sphere — computed once per impact here, not
+	 * per vertex), plus the {@value #MAX_APERTURES} apertures nearest the wall.
+	 * Returns {@link DeformState#NONE} when nothing is happening so the mesh
 	 * takes its idle fast path.
 	 */
 	private static DeformState buildDeformState(ClientLevel level, ClientShieldManager.ClientShield shield,
-			Vec3 center, float radius, float partialTick, float timeSec) {
+			ShieldShape shape, Vec3 center, float radius, float partialTick, float timeSec) {
 		GlobalPos globalPos = new GlobalPos(shield.dimension(), shield.pos());
 		float healthFrac = shield.healthFrac();
 
@@ -218,7 +221,9 @@ public final class ShieldRenderer {
 				impacts = new ArrayList<>();
 			}
 
-			impacts.add(new DeformState.Impact(safeNormalize(impact.dir()), strength, ageSec, impact.kind()));
+			Vec3 dirUnit = safeNormalize(impact.dir());
+			impacts.add(new DeformState.Impact(dirUnit, strength, ageSec, impact.kind(),
+					surfaceDistance(shape, center, radius, dirUnit)));
 		}
 
 		if (impacts != null && impacts.size() > MAX_IMPACTS) {
@@ -259,22 +264,40 @@ public final class ShieldRenderer {
 	}
 
 	/**
-	 * Apertures (player-relative position + animated hole radius) of whitelisted
-	 * players and the shield's owner, replacing the legacy flat dissolve: the same
-	 * owner/whitelist scan, but the hole radius is the {@link ApertureTracker}'s
-	 * animated value (hysteresis + easing live there, on the tick), and only the
-	 * {@value #MAX_APERTURES} nearest the wall are consumed.
+	 * Center-to-surface distance along {@code dirUnit} for an impact's wave
+	 * center: {@code radius} on the geodesic shapes (sphere/dome/lens/diamond —
+	 * their wave metric is direction-based and never reads the center point) and
+	 * for the omnidirectional BREAK, the shape-projected boundary crossing
+	 * ({@link ShieldWallMath#boundaryDistanceAlong}) on the prism-like ones.
+	 */
+	private static float surfaceDistance(ShieldShape shape, Vec3 center, float radius, Vec3 dirUnit) {
+		return switch (shape) {
+			case CYLINDER, CUBE, RING, PYRAMID, HOURGLASS, STAR -> dirUnit.lengthSqr() < 1.0e-6
+					? radius
+					: (float) ShieldWallMath.boundaryDistanceAlong(shape, center, radius, dirUnit);
+			default -> radius;
+		};
+	}
+
+	/**
+	 * Apertures (player-relative position + animated hole radius) of every
+	 * pass-through-entitled player — the owner, whitelist UUIDs AND name-only
+	 * whitelist entries, via the same {@code ClientShield.blocks} mirror the
+	 * server authorizes with — replacing the legacy flat dissolve: the hole
+	 * radius is the {@link ApertureTracker}'s animated value (hysteresis +
+	 * easing live there, on the tick), and only the {@value #MAX_APERTURES}
+	 * nearest the wall are consumed. Remote players' apertures render for
+	 * everyone, matching the old dissolve's visibility.
 	 */
 	private static List<DeformState.Aperture> collectApertures(ClientLevel level, ClientShieldManager.ClientShield shield,
 			GlobalPos globalPos, Vec3 center, float radius) {
-		if (shield.whitelist().isEmpty() && shield.ownerUuid().isEmpty()) {
+		if (shield.whitelist().isEmpty() && shield.whitelistNames().isEmpty() && shield.ownerUuid().isEmpty()) {
 			return List.of();
 		}
 
 		List<DeformState.Aperture> apertures = null;
 		for (AbstractClientPlayer player : level.players()) {
-			boolean isOwner = shield.ownerUuid().map(player.getUUID()::equals).orElse(false);
-			if (!isOwner && !shield.whitelist().contains(player.getUUID())) {
+			if (shield.blocks(player.getUUID(), player.getGameProfile().name())) {
 				continue;
 			}
 

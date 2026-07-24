@@ -27,7 +27,15 @@ Running `python3 tools/gen_interior_sprites.py` (re)writes
 * interior_soft.png -- 512x512, a 4x4 grid of 128px cells, fully PROCEDURAL
   grayscale+alpha billboards (tinted at runtime by the renderer), with an 8px
   transparent gutter inside each cell so LINEAR sampling never bleeds across
-  cells. The .mcmeta requests blur (LINEAR) + clamp.
+  cells. The .mcmeta requests blur (LINEAR) + clamp. The alpha channel is
+  BINARY (0/255), produced by 4x4 ordered Bayer dithering of the procedural
+  soft alpha: the render pipeline is a NON-blending cutout (discard only at
+  alpha == 0), so a continuous alpha would render every semitransparent texel
+  fully opaque (glow dots and veils read as solid squares). Dithering turns
+  the soft falloffs into a screen-door dissolve, which reads as translucency
+  in the solid phase; SOFT_SHRINK additionally shrinks every element ~15%
+  (coordinate expansion) so the sparse dither fringe stays comfortably inside
+  the gutter-inset cell area.
   Cell (ordinal) allocation, row-major:
       0 glow_dot   1 star_soft  2 ring        3 shard
       4 streak     5 petal_soft 6 smoke_wisp  7 veil
@@ -355,10 +363,36 @@ def build_pixel_sheet() -> np.ndarray:
 
 # --- soft sheet (all procedural; grayscale in RGB, shape in alpha) ---
 
+# Uniform element shrink (coordinate expansion): with the binary Bayer alpha,
+# the faint gaussian tails that LINEAR blending used to hide become sparse
+# opaque dither dots, so the shapes are pulled in ~15% to keep that fringe
+# well inside the gutter-inset cell area.
+SOFT_SHRINK = 0.85
+
+# 4x4 ordered Bayer matrix; thresholds (m + 0.5) / 16 dither the soft alpha
+# to BINARY 0/255 (alpha >= threshold -> 255) for the non-blending cutout
+# pipeline (discard only at alpha == 0), turning soft edges into a
+# screen-door dissolve instead of solid squares.
+BAYER4 = np.array([
+    [0, 8, 2, 10],
+    [12, 4, 14, 6],
+    [3, 11, 1, 9],
+    [15, 7, 13, 5],
+], dtype=np.float64)
+
+
+def _bayer_dither(alpha: np.ndarray) -> np.ndarray:
+    """[0,1] float alpha -> binary uint8 0/255 via 4x4 ordered dithering."""
+    h, w = alpha.shape
+    thresholds = (np.tile(BAYER4, (-(-h // 4), -(-w // 4)))[:h, :w] + 0.5) / 16.0
+    return np.where(alpha >= thresholds, 255, 0).astype(np.uint8)
+
+
 def _grid() -> tuple:
-    """Centered [-1,1] coordinate grid over the usable (gutter-inset) cell."""
+    """Centered coordinate grid over the usable (gutter-inset) cell, expanded
+    by 1/SOFT_SHRINK so every element draws ~15% smaller (see SOFT_SHRINK)."""
     usable = SOFT_CELL - 2 * SOFT_GUTTER
-    c = (np.arange(usable) + 0.5) / usable * 2.0 - 1.0
+    c = ((np.arange(usable) + 0.5) / usable * 2.0 - 1.0) / SOFT_SHRINK
     x, y = np.meshgrid(c, c)
     return x, y, usable
 
@@ -495,8 +529,7 @@ def build_soft_sheet() -> np.ndarray:
         cell[SOFT_GUTTER:SOFT_GUTTER + usable, SOFT_GUTTER:SOFT_GUTTER + usable, 0] = value
         cell[SOFT_GUTTER:SOFT_GUTTER + usable, SOFT_GUTTER:SOFT_GUTTER + usable, 1] = value
         cell[SOFT_GUTTER:SOFT_GUTTER + usable, SOFT_GUTTER:SOFT_GUTTER + usable, 2] = value
-        cell[SOFT_GUTTER:SOFT_GUTTER + usable, SOFT_GUTTER:SOFT_GUTTER + usable, 3] = \
-            np.round(alpha * 255.0).astype(np.uint8)
+        cell[SOFT_GUTTER:SOFT_GUTTER + usable, SOFT_GUTTER:SOFT_GUTTER + usable, 3] = _bayer_dither(alpha)
         gy, gx = divmod(ordinal, SOFT_GRID)
         sheet[gy * SOFT_CELL:(gy + 1) * SOFT_CELL, gx * SOFT_CELL:(gx + 1) * SOFT_CELL] = cell
     return sheet

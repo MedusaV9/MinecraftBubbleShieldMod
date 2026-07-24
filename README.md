@@ -277,8 +277,8 @@ star fields, film petals, glyphs, ghost veils, cage rings, void shells…), and 
 - **Matrix Rain (575)** — falling glyph code with bright streaks.
 - **Whispering Library (612)** — orbiting books and drifting runes.
 - **Taco Fiesta (633)** — tacos orbiting and bobbing through the dome.
-- **Lava Lamp (717)** — glowing blobs rising lazily from the floor.
-- **Cat Cloud (728)** — cats perched on drifting smoke wisps.
+- **Lava Lamp (717)** — glowing blobs that rise and sink lazily.
+- **Cat Cloud (728)** — perched, blinking cats while smoke wisps drift nearby.
 - **Donut Drift (756)** — a slow ring-orbit of donuts with sprinkle motes.
 - **Disco Dome (809)** — a top-center disco ball, sweeping light shafts and blinking sparkles.
 - **Void Absolute (839)** — the maxed-out void: a dark inner dome shell, sparse stars and spiraling
@@ -291,19 +291,20 @@ Interiors are visible from outside too, seen through the translucent membrane.
 A blocked player pressing the barrier gets an instant full-screen edge flash in the shield's tint, its
 style matched to the effect's screen family (color grade, chromatic offset, expanding rings, scanlines
 or glow rims) and thickened on the screen side facing the wall, plus a personal slime squelch at the
-contact point. The flash is client-predicted (zero perceived latency) and reconciled against the
+player's post-expulsion position (the barrier pushes the player back out before the sound fires). The
+flash is client-predicted (zero perceived latency) and reconciled against the
 server's confirmed CONTACT events. Photosensitivity guards: it is a pure 2D overlay (no scene
 distortion), peaks at 35% opacity, hard re-triggers are capped at 2 per second, and the
 `flashIntensity` client config scales it down or off entirely.
 
 ## Impact audio
 
-A projectile hit layers three sounds at the actual hit point — a heavy-core thump whose pitch scales
-with the damage, the shield-block ring whose pitch rises as health falls, and the effect family's
-surface-material pair from five sound groups (energy crackle, crystal chime, organic squelch, tech
-click, void resonance) — rate-limited to one trio per shield per tick. The shockwave then "travels
-through" the bubble: a warden-sonic tail rings out at the antipode (the far side of the bubble)
-`2 + radius/8` ticks later, so bigger bubbles take audibly longer to traverse. Standing close to an
+A projectile hit layers a four-sound stack at the actual hit point — a heavy-core thump whose pitch
+scales with the damage, the shield-block ring whose pitch rises as health falls, and the effect
+family's TWO surface-material layers from five sound groups (energy crackle, crystal chime, organic
+squelch, tech click, void resonance) — rate-limited to one stack per shield per tick. The shockwave
+then "travels through" the bubble: a warden-sonic tail rings out at the antipode (the far side of the
+bubble) `2 + floor(radius/8)` ticks later, so bigger bubbles take audibly longer to traverse. Standing close to an
 active wall also plays a soft proximity hum, portal-flavored for the void families.
 
 ## Client config

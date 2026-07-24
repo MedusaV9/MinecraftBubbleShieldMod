@@ -4,6 +4,8 @@ import java.util.UUID;
 
 import com.bubbleshield.client.ClientShieldManager;
 import com.bubbleshield.client.ClientShieldManager.ClientShield;
+import com.bubbleshield.client.ShieldWallMath;
+import com.bubbleshield.shield.ShieldShape;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
@@ -21,15 +23,19 @@ import org.jspecify.annotations.Nullable;
  * <p><b>Prediction first:</b> the primary trigger is client-predicted so the flash
  * has zero perceived latency — {@link ClientShield#blocks} mirrors the server's
  * {@code ShieldLogic.shouldBlock} on the synced replica, and a press is either
- * (a) hugging the wall (spherical wall distance &lt; {@value #WALL_TRIGGER_DIST})
+ * (a) hugging the wall (shape-aware wall distance &lt; {@value #WALL_TRIGGER_DIST})
  * while moving inward faster than {@value #INWARD_SPEED_TRIGGER} blocks/tick, or
  * (b) a &gt; {@value #SNAP_TRIGGER_DIST}-block single-tick position snap while
- * blocked — the signature of the server barrier's expulsion teleport.
+ * blocked whose PRE-snap position was within {@value #SNAP_PRE_WALL_DIST} blocks
+ * of the wall — the signature of the server barrier's expulsion teleport (the
+ * pre-snap wall check keeps ordinary teleports from far away from flashing).
  * Server {@code CONTACT} batch entries then RECONCILE: a confirmed contact whose
  * prediction already fired within the last {@value #RECONCILE_SUPPRESS_MILLIS} ms
  * is suppressed (it IS that prediction); an unpredicted one (e.g. the player was
  * pushed in by a piston without inward input) triggers the flash late but
- * correctly.
+ * correctly — and only when the entry's shape-projected contact point is within
+ * {@value #RECONCILE_MAX_POINT_DIST} blocks of the LOCAL player, so another
+ * blocked player's press on the far side of the same shield never flashes us.
  *
  * <p><b>Envelope:</b> a hard flash peaks at alpha {@value #HARD_PEAK_ALPHA} and
  * eases out cubically over {@value #EASE_SECONDS} s; a sustained press (trigger
@@ -37,16 +43,18 @@ import org.jspecify.annotations.Nullable;
  * steady {@value #SUSTAIN_ALPHA}; hard re-triggers are limited to one per
  * {@value #RETRIGGER_MILLIS} ms (&le; 2 Hz).
  *
- * <p>Wall distance uses the SPHERICAL approximation |dist(center) - r|: exact for
- * SPHERE/DOME and a safe underestimate of proximity for the sub-ball shapes
- * (every shape is a subset of the r-ball, see {@code ShieldGeometry}); a flash
- * for a shaped shield can only fire when genuinely near its bounding sphere and
- * moving inward, which reads correctly in play.
+ * <p>Wall distance is SHAPE-AWARE ({@link ShieldWallMath#wallDistance}): exact
+ * for the sphere and refined along the radial direction for the sub-ball shapes
+ * — the old spherical |dist(center) - r| approximation left a D=200 cube's
+ * faces 42 blocks away from the "wall", so presses against shaped shields never
+ * triggered at all.
  */
 public final class ContactFlash {
 	private static final double WALL_TRIGGER_DIST = 0.6;
 	private static final double INWARD_SPEED_TRIGGER = 0.05;
 	private static final double SNAP_TRIGGER_DIST = 2.0;
+	/** A snap only counts as an expulsion when the PRE-snap position hugged the wall this closely. */
+	private static final double SNAP_PRE_WALL_DIST = 1.5;
 	private static final long RETRIGGER_MILLIS = 500L;
 	private static final long RECONCILE_SUPPRESS_MILLIS = 100L;
 	private static final int SUSTAIN_MIN_TICKS = 4;
@@ -55,6 +63,8 @@ public final class ContactFlash {
 	private static final float EASE_SECONDS = 0.6F;
 	/** How far from the wall a server CONTACT can still plausibly be OUR press. */
 	private static final double RECONCILE_MAX_WALL_DIST = 1.5;
+	/** A server CONTACT reconciles only when its projected contact point is this close to us. */
+	private static final double RECONCILE_MAX_POINT_DIST = 3.0;
 
 	private static long flashStartMillis = Long.MIN_VALUE;
 	private static long lastTriggerMillis = Long.MIN_VALUE;
@@ -77,7 +87,8 @@ public final class ContactFlash {
 		}
 
 		Vec3 pos = player.position();
-		Vec3 moved = prevPlayerPos != null ? pos.subtract(prevPlayerPos) : Vec3.ZERO;
+		Vec3 prevPos = prevPlayerPos;
+		Vec3 moved = prevPos != null ? pos.subtract(prevPos) : Vec3.ZERO;
 		prevPlayerPos = pos;
 
 		UUID uuid = player.getUUID();
@@ -93,7 +104,7 @@ public final class ContactFlash {
 			Vec3 center = Vec3.atCenterOf(shield.pos());
 			Vec3 fromCenter = pos.subtract(center);
 			double dist = fromCenter.length();
-			double wallDist = Math.abs(dist - shield.currentRadius());
+			double wallDist = ShieldWallMath.wallDistance(shield, pos);
 			if (wallDist < nearestWallDist) {
 				nearest = shield;
 				nearestWallDist = wallDist;
@@ -108,7 +119,11 @@ public final class ContactFlash {
 
 		double inwardSpeed = -moved.dot(nearestOutward);
 		boolean pressing = nearestWallDist < WALL_TRIGGER_DIST && inwardSpeed > INWARD_SPEED_TRIGGER;
-		boolean snapped = moved.length() > SNAP_TRIGGER_DIST;
+		// The expulsion-teleport signature: a large single-tick snap FROM the
+		// wall. Without the pre-snap wall check, any ordinary long teleport
+		// (ender pearl, /tp) landing near a blocking shield would flash.
+		boolean snapped = moved.length() > SNAP_TRIGGER_DIST && prevPos != null
+				&& ShieldWallMath.wallDistance(nearest, prevPos) <= SNAP_PRE_WALL_DIST;
 		pressTicks = pressing ? pressTicks + 1 : 0;
 		if (pressing || snapped) {
 			long now = Util.getMillis();
@@ -120,8 +135,11 @@ public final class ContactFlash {
 	/**
 	 * Reconciles one server-confirmed CONTACT batch entry (client thread): ignored
 	 * unless it is plausibly the LOCAL player's press (blocked by that shield, near
-	 * its wall), and suppressed when a prediction already fired
-	 * &lt; {@value #RECONCILE_SUPPRESS_MILLIS} ms ago (double-flash guard).
+	 * its wall, AND the entry's shape-projected contact point within
+	 * {@value #RECONCILE_MAX_POINT_DIST} blocks of us — a nearby stranger's press
+	 * elsewhere on the same shield is not ours), and suppressed when a prediction
+	 * already fired &lt; {@value #RECONCILE_SUPPRESS_MILLIS} ms ago (double-flash
+	 * guard).
 	 */
 	static void onServerContact(GlobalPos pos, Vec3 dir) {
 		Minecraft mc = Minecraft.getInstance();
@@ -135,19 +153,37 @@ public final class ContactFlash {
 			return;
 		}
 
-		Vec3 center = Vec3.atCenterOf(pos.pos());
-		double wallDist = Math.abs(player.position().distanceTo(center) - shield.currentRadius());
+		double wallDist = ShieldWallMath.wallDistance(shield, player.position());
 		if (wallDist > RECONCILE_MAX_WALL_DIST) {
 			// Another blocked player's press on the same shield; not ours to flash.
 			return;
 		}
 
-		long now = Util.getMillis();
-		if (now - lastPredictedMillis < RECONCILE_SUPPRESS_MILLIS) {
+		// Locate the actual contact point on the shape's boundary along the
+		// entry's direction; a contact that happened away from US (another
+		// blocked player pressing nearby) must not flash our screen.
+		double dirLength = dir.length();
+		if (dirLength < 1.0e-4) {
 			return;
 		}
 
-		trigger(now, dir, pos);
+		Vec3 dirUnit = dir.scale(1.0 / dirLength);
+		Vec3 center = Vec3.atCenterOf(pos.pos());
+		Vec3 contactPoint = center.add(dirUnit.scale(ShieldWallMath.boundaryDistanceAlong(
+				ShieldShape.byOrdinal(shield.shape()), center, shield.currentRadius(), dirUnit)));
+		if (player.position().distanceTo(contactPoint) > RECONCILE_MAX_POINT_DIST) {
+			return;
+		}
+
+		long now = Util.getMillis();
+		// Explicit sentinel check: now - MIN_VALUE overflows negative, so the
+		// bare subtraction would read as "predicted just now" and suppress the
+		// FIRST unpredicted server contact forever.
+		if (lastPredictedMillis != Long.MIN_VALUE && now - lastPredictedMillis < RECONCILE_SUPPRESS_MILLIS) {
+			return;
+		}
+
+		trigger(now, dirUnit, pos);
 	}
 
 	/** Fires a hard flash, subject to the {@value #RETRIGGER_MILLIS} ms rate limit. */

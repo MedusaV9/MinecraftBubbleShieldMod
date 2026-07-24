@@ -568,7 +568,7 @@ VARIANT_TAILS_DE = [
     "Ein langsamer Puls rollt durch die Wand.",
     "Blasse Lichtpunkte treiben, wo die Wand dünn wird.",
     "Ihr Schimmer wird schärfer, wenn die Nacht hereinbricht.",
-    "Sanfte Echos klingen die Wölbung entlang.",
+    "Sanfte Echos hallen entlang der Wölbung.",
     "Der Scheitel der Kuppel glüht am hellsten.",
 ]
 

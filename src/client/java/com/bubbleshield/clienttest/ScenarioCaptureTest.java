@@ -327,27 +327,28 @@ public class ScenarioCaptureTest implements FabricClientGameTest {
 
 	/**
 	 * {@code contact}: the camera becomes a blocked stranger pressed against the
-	 * wall. Two triggers stack so the flash is provably live in the captured
-	 * frame regardless of llvmpipe latency:
-	 * <ol>
-	 *   <li>the final staging teleport (8 blocks, far park spot &rarr; 0.5 outside
-	 *       the wall) is itself a &gt; 2-block single-tick "snap" — the expulsion
-	 *       signature — so the HARD flash (alpha 0.35, 0.6 s cubic ease-out)
-	 *       starts ON the capture tick; the 20-tick park pause beforehand lets
-	 *       the park-teleport's own stray envelope and the 500 ms re-trigger
-	 *       limit expire so this snap is a fresh full-brightness flash;</li>
-	 *   <li>the walk-backward key is HELD through the capture ({@code holdKey}
-	 *       survives {@code takeScreenshot}'s internal tick loop, unlike
-	 *       tp-stepping which stops when the staging code blocks), so the camera
-	 *       keeps genuinely moving inward: the predicted press (wall distance
-	 *       &lt; 0.6, inward speed &gt; 0.05/tick) accrues 4+ consecutive ticks,
-	 *       holding the 0.12 sustain floor and re-triggering the hard flash
-	 *       every 500 ms as the barrier expels and the walk re-presses.</li>
-	 * </ol>
-	 * The camera FACES AWAY from the bubble while walking backward into it: the
-	 * flash is a screen-space HUD overlay, and against open grass/sky the tinted
-	 * edge vignette is unmistakable (facing the wall, the membrane fills the
-	 * frame in the same palette and hides it).
+	 * wall. The staging teleport (8 blocks, far park spot &rarr; 0.5 inside the
+	 * wall) deliberately does NOT snap-flash anymore: the snap trigger requires
+	 * the PRE-snap position within 1.5 blocks of the wall (the
+	 * teleport-false-positive guard), and the park spot is ~8.5 blocks out.
+	 * The flash instead comes from the press loop — the walk-backward key is
+	 * HELD through the capture ({@code holdKey} survives
+	 * {@code takeScreenshot}'s internal tick loop, unlike tp-stepping which
+	 * stops when the staging code blocks), so the camera keeps genuinely moving
+	 * inward: the predicted press (wall distance &lt; 0.6, inward speed &gt;
+	 * 0.05/tick) fires the HARD flash (alpha 0.35, 0.6 s cubic ease-out) on the
+	 * first press tick, accrues 4+ consecutive ticks holding the 0.12 sustain
+	 * floor, and re-triggers every 500 ms as the barrier expels (whose own
+	 * expulsion teleports DO pass the pre-snap wall check) and the walk
+	 * re-presses. The 700 ms park pause beforehand lets the 500 ms re-trigger
+	 * limit expire (wall-clock: gametest client ticks run far faster than
+	 * 50 ms) so the first press is a fresh full-brightness flash; the capture
+	 * gates on the live {@code ContactFlash.alpha()}.
+	 *
+	 * <p>The camera FACES AWAY from the bubble while walking backward into it:
+	 * the flash is a screen-space HUD overlay, and against open grass/sky the
+	 * tinted edge vignette is unmistakable (facing the wall, the membrane fills
+	 * the frame in the same palette and hides it).
 	 */
 	private int runContact(ClientGameTestContext ctx, TestServerContext server, Path captureDir, List<String> failures) {
 		int captured = 0;

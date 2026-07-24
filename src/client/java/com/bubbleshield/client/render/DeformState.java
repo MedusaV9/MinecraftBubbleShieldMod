@@ -27,11 +27,17 @@ public record DeformState(List<Impact> impacts, List<Aperture> apertures, float 
 	 * shield center to the hit point ({@link Vec3#ZERO} for the omnidirectional
 	 * BREAK pulse), {@code strength01} the per-kind EFFECTIVE strength in [0, 1]
 	 * (already scaled by the consumer's kind table), {@code ageSec} the
-	 * partial-tick-interpolated age and {@code kind} one of the
+	 * partial-tick-interpolated age, {@code kind} one of the
 	 * {@link ShieldPayloads.ImpactEntry} {@code KIND_*} constants (HEAL grades
-	 * toward the secondary color, BREAK pulses the whole surface).
+	 * toward the secondary color, BREAK pulses the whole surface) and
+	 * {@code surfaceDist} the distance from the shield center to the MEMBRANE
+	 * surface along {@code dirUnit} (world units) — {@code radius} on the
+	 * geodesic shapes, the shape-projected boundary crossing on the prism-like
+	 * ones, computed ONCE per impact per frame by
+	 * {@code ShieldRenderer.buildDeformState} so the Euclidean wave metric
+	 * measures from the actual hit point instead of the bounding sphere.
 	 */
-	public record Impact(Vec3 dirUnit, float strength01, float ageSec, int kind) {
+	public record Impact(Vec3 dirUnit, float strength01, float ageSec, int kind, float surfaceDist) {
 	}
 
 	/**

@@ -1,12 +1,15 @@
 package com.bubbleshield.client.fx;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import com.bubbleshield.client.ClientShieldManager;
 import com.bubbleshield.client.ClientShieldManager.ClientShield;
+import com.bubbleshield.client.ShieldWallMath;
 import com.bubbleshield.net.ShieldPayloads;
 import com.bubbleshield.shield.ShieldGeometry;
 import com.bubbleshield.shield.ShieldShape;
@@ -32,9 +35,12 @@ import net.minecraft.world.phys.Vec3;
  *
  * <p><b>Passage detection:</b> an {@code isInside} flip (shape-aware,
  * {@link ShieldGeometry#isInside}) appends a client-local PASSAGE impact to the
- * {@link ImpactTracker} (zero-latency ripple; the server's own PASSAGE batch
- * entry arrives a tick or two later and superposes a second, clamped ripple —
- * a documented, deliberate redundancy) and rings the passage whoosh.
+ * {@link ImpactTracker} (zero-latency ripple) and rings the passage whoosh. The
+ * server's own PASSAGE batch entry arrives a tick or two later; each local
+ * passage is remembered for {@value #PASSAGE_DEDUP_TICKS} ticks so
+ * {@link ImpactFxManager} can DROP that echo ({@link #matchesLocalPassage},
+ * dir dot &gt; {@value #PASSAGE_DEDUP_MIN_DOT}) instead of superposing a second
+ * ripple at ~2x amplitude.
  *
  * <p><b>Sounds</b> (local, at the player's projected wall point, at most one
  * per {@link #SOUND_RATE_TICKS} ticks per entry): the aperture opening past
@@ -59,6 +65,10 @@ public final class ApertureTracker {
 	private static final float REMOVE_BELOW_RADIUS = 0.01F;
 	/** Effective strength of the client-local PASSAGE ripple. */
 	private static final float PASSAGE_STRENGTH = 0.6F;
+	/** A server PASSAGE echo within this many ticks of a local one is dropped. */
+	private static final int PASSAGE_DEDUP_TICKS = 10;
+	/** Minimum direction agreement (dot) for the local/server passage match. */
+	private static final double PASSAGE_DEDUP_MIN_DOT = 0.9;
 
 	/** Mutable per-(shield, player) aperture state. */
 	private static final class Entry {
@@ -69,9 +79,33 @@ public final class ApertureTracker {
 		long lastSoundTick = Long.MIN_VALUE;
 	}
 
+	/** One remembered client-local PASSAGE, matched against the server's echo. */
+	private record LocalPassage(GlobalPos pos, Vec3 dir, long tick) {
+	}
+
 	private static final Map<GlobalPos, Map<UUID, Entry>> APERTURES = new HashMap<>();
+	private static final List<LocalPassage> LOCAL_PASSAGES = new ArrayList<>();
 
 	private ApertureTracker() {
+	}
+
+	/**
+	 * True when a client-local PASSAGE for the shield at {@code pos} with a
+	 * similar direction (dot &gt; {@value #PASSAGE_DEDUP_MIN_DOT}) was predicted
+	 * within the last {@value #PASSAGE_DEDUP_TICKS} ticks — the caller
+	 * ({@link ImpactFxManager}) then drops the server's echo of that crossing so
+	 * the ripple never doubles up.
+	 */
+	public static boolean matchesLocalPassage(GlobalPos pos, Vec3 dir) {
+		long tick = ImpactTracker.currentTick();
+		for (LocalPassage passage : LOCAL_PASSAGES) {
+			if (tick - passage.tick() <= PASSAGE_DEDUP_TICKS && passage.pos().equals(pos)
+					&& passage.dir().dot(dir) > PASSAGE_DEDUP_MIN_DOT) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
@@ -91,11 +125,13 @@ public final class ApertureTracker {
 	/** Drops one shield's apertures (its {@code ShieldRemoveS2C} arrived). */
 	public static void remove(GlobalPos pos) {
 		APERTURES.remove(pos);
+		LOCAL_PASSAGES.removeIf(passage -> passage.pos().equals(pos));
 	}
 
 	/** Drops everything (disconnect / level change). */
 	public static void clear() {
 		APERTURES.clear();
+		LOCAL_PASSAGES.clear();
 	}
 
 	/** Advances every aperture one tick; runs on END_CLIENT_TICK. */
@@ -107,9 +143,11 @@ public final class ApertureTracker {
 		}
 
 		long tick = ImpactTracker.currentTick();
+		LOCAL_PASSAGES.removeIf(passage -> tick - passage.tick() > PASSAGE_DEDUP_TICKS);
 		for (ClientShield shield : ClientShieldManager.currentDimensionShields()) {
 			GlobalPos globalPos = new GlobalPos(shield.dimension(), shield.pos());
-			if (!shield.active() || (shield.whitelist().isEmpty() && shield.ownerUuid().isEmpty())) {
+			if (!shield.active() || (shield.whitelist().isEmpty() && shield.whitelistNames().isEmpty()
+					&& shield.ownerUuid().isEmpty())) {
 				APERTURES.remove(globalPos);
 				continue;
 			}
@@ -120,16 +158,20 @@ public final class ApertureTracker {
 			Map<UUID, Entry> entries = APERTURES.get(globalPos);
 			Map<UUID, Entry> ticked = null;
 			for (AbstractClientPlayer player : level.players()) {
-				boolean isOwner = shield.ownerUuid().map(player.getUUID()::equals).orElse(false);
-				if (!isOwner && !shield.whitelist().contains(player.getUUID())) {
+				// Full pass-through eligibility (owner, whitelist UUIDs AND
+				// whitelist names): the server authorizes name-only entries
+				// through the same shouldBlock mirror, so gating on the UUID
+				// list alone left them facing an opaque wall.
+				if (shield.blocks(player.getUUID(), player.getGameProfile().name())) {
 					continue;
 				}
 
 				// Beyond the close edge with no live entry: nothing to animate.
 				Vec3 mid = player.position().add(0.0, player.getBbHeight() * 0.5, 0.0);
-				double centerDist = mid.distanceTo(center);
+				boolean midInside = ShieldGeometry.isInside(shape, center, radius, mid);
+				double wallDist = ShieldWallMath.wallDistance(shape, center, radius, mid);
 				boolean hasEntry = entries != null && entries.containsKey(player.getUUID());
-				if (!hasEntry && centerDist > radius + SurfaceWaveMath.APERTURE_CLOSE_DIST) {
+				if (!hasEntry && !midInside && wallDist > SurfaceWaveMath.APERTURE_CLOSE_DIST) {
 					continue;
 				}
 
@@ -144,7 +186,7 @@ public final class ApertureTracker {
 				}
 
 				ticked.put(player.getUUID(), entry);
-				tickEntry(level, shield, shape, center, radius, mid, player.position(), entry, tick);
+				tickEntry(level, shield, shape, center, radius, mid, midInside, wallDist, player.position(), entry, tick);
 			}
 
 			// Entries whose player vanished (logout, dimension change) ease shut
@@ -174,13 +216,13 @@ public final class ApertureTracker {
 	}
 
 	private static void tickEntry(ClientLevel level, ClientShield shield, ShieldShape shape, Vec3 center, float radius,
-			Vec3 playerMid, Vec3 playerFeet, Entry entry, long tick) {
-		// Hysteresis: open within radius + 5.5 of the center (spherical, matching
-		// the legacy dissolve's proximity test), close only beyond radius + 6.5.
-		double centerDist = playerMid.distanceTo(center);
-		if (!entry.open && centerDist <= radius + SurfaceWaveMath.APERTURE_OPEN_DIST) {
+			Vec3 playerMid, boolean midInside, double wallDist, Vec3 playerFeet, Entry entry, long tick) {
+		// Hysteresis on the SHAPE-AWARE wall distance: open when inside or
+		// within 5.5 blocks of the wall (matching the legacy dissolve's
+		// proximity test on the sphere), close only beyond 6.5 outside it.
+		if (!entry.open && (midInside || wallDist <= SurfaceWaveMath.APERTURE_OPEN_DIST)) {
 			entry.open = true;
-		} else if (entry.open && centerDist > radius + SurfaceWaveMath.APERTURE_CLOSE_DIST) {
+		} else if (entry.open && !midInside && wallDist > SurfaceWaveMath.APERTURE_CLOSE_DIST) {
 			entry.open = false;
 		}
 
@@ -188,15 +230,18 @@ public final class ApertureTracker {
 		float previous = entry.holeR;
 		entry.holeR = SurfaceWaveMath.apertureRadiusStep(previous, target, TICK_SECONDS, entry.open);
 
+		double centerDist = playerMid.distanceTo(center);
 		Vec3 outward = centerDist > 1.0e-4 ? playerMid.subtract(center).scale(1.0 / centerDist) : new Vec3(1.0, 0.0, 0.0);
-		Vec3 wallPoint = center.add(outward.scale(radius));
+		Vec3 wallPoint = center.add(outward.scale(ShieldWallMath.boundaryDistanceAlong(shape, center, radius, outward)));
 
-		// Shape-aware passage flip: zero-latency local ripple + whoosh (the
-		// server's PASSAGE batch entry reconciles later).
+		// Shape-aware passage flip: zero-latency local ripple + whoosh; the
+		// crossing is remembered so the server's PASSAGE echo is deduped.
 		boolean inside = ShieldGeometry.isInside(shape, center, radius, playerFeet);
 		if (entry.insideSeeded && inside != entry.lastInside) {
-			ImpactTracker.addServerImpact(new GlobalPos(shield.dimension(), shield.pos()), outward, PASSAGE_STRENGTH,
+			GlobalPos globalPos = new GlobalPos(shield.dimension(), shield.pos());
+			ImpactTracker.addServerImpact(globalPos, outward, PASSAGE_STRENGTH,
 					inside ? ShieldPayloads.ImpactEntry.KIND_PASSAGE_IN : ShieldPayloads.ImpactEntry.KIND_PASSAGE_OUT);
+			LOCAL_PASSAGES.add(new LocalPassage(globalPos, outward, tick));
 			playRateLimited(level, entry, tick, wallPoint, SoundKind.PASSAGE);
 		}
 
@@ -216,7 +261,10 @@ public final class ApertureTracker {
 	}
 
 	private static void playRateLimited(ClientLevel level, Entry entry, long tick, Vec3 at, SoundKind kind) {
-		if (tick - entry.lastSoundTick < SOUND_RATE_TICKS) {
+		// Explicit sentinel check: tick - MIN_VALUE overflows negative, so the
+		// bare subtraction would read as "just played" and — since
+		// lastSoundTick is only ever written below — silence the entry forever.
+		if (entry.lastSoundTick != Long.MIN_VALUE && tick - entry.lastSoundTick < SOUND_RATE_TICKS) {
 			return;
 		}
 

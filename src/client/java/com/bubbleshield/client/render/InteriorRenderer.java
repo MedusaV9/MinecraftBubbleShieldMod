@@ -24,7 +24,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.AABB;
@@ -94,11 +93,22 @@ public final class InteriorRenderer {
 	private record CacheEntry(int effectId, int shapeOrdinal, int count, float[] data) {
 	}
 
-	private static final Map<BlockPos, CacheEntry> CACHE = new HashMap<>();
+	/**
+	 * Keyed by dimension + position (like {@code ClientShieldManager}'s replica
+	 * map) so same-coordinate shields in different dimensions never share a
+	 * scatter; cleared by {@code ImpactFxManager}'s disconnect / level-change
+	 * reset alongside the other per-shield trackers.
+	 */
+	private static final Map<GlobalPos, CacheEntry> CACHE = new HashMap<>();
 
 	private static volatile CamBasis camBasis;
 
 	private InteriorRenderer() {
+	}
+
+	/** Drops every cached scatter (disconnect / level change). */
+	public static void clearCache() {
+		CACHE.clear();
 	}
 
 	public static void register() {
@@ -186,13 +196,13 @@ public final class InteriorRenderer {
 
 			remaining -= count;
 			ShieldShape shape = ShieldShape.byOrdinal(shield.shape());
-			CacheEntry entry = CACHE.get(shield.pos());
+			GlobalPos globalPos = new GlobalPos(shield.dimension(), shield.pos());
+			CacheEntry entry = CACHE.get(globalPos);
 			if (entry == null || entry.effectId() != shield.effectId()
 					|| entry.shapeOrdinal() != shape.ordinal() || entry.count() != maxCount) {
 				entry = new CacheEntry(shield.effectId(), shape.ordinal(), maxCount,
-						InteriorScatter.scatter(new GlobalPos(shield.dimension(), shield.pos()),
-								shield.effectId(), shape, maxCount));
-				CACHE.put(shield.pos(), entry);
+						InteriorScatter.scatter(globalPos, shield.effectId(), shape, maxCount));
+				CACHE.put(globalPos, entry);
 			}
 
 			// Live palette (owner recolor replaces it, like the membrane renderer).
