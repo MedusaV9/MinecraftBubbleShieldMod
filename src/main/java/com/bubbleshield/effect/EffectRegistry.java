@@ -608,7 +608,7 @@ public final class EffectRegistry {
 		// F88 "Spiritstorm Haunt" (crimson x ember)
 		all.add(row(440, 0xF5652C, 0x674908, "spectralveil", "spirit_rain", 0, GuardStyle.GUST, ContextProfile.HEALTH_HUE, "block.honey_block.slide", 1.1F, 157, "spectral"));
 		all.add(row(441, 0xE08655, 0x517BA8, "raymarchfog", "ecto_fog_banks", 0, GuardStyle.BLIND, ContextProfile.NONE, "block.lava.ambient", 0.9F, 194, "aberration"));
-		all.add(row(442, 0xB85812, 0x4D3F00, "prismdisperse", "aurora_ghosts", 0, GuardStyle.DARK, ContextProfile.NIGHT_BLOOM, "block.note_block.bell", 0.7F, 231, "underwater"));
+		all.add(row(442, 0x36C9C6, 0x0E4A66, "prismdisperse", "aurora_ghosts", 0, GuardStyle.DARK, ContextProfile.NIGHT_BLOOM, "block.note_block.bell", 0.7F, 231, "underwater")); // novelty retheme: Aquarium
 		all.add(row(443, 0xFABC82, 0x7475BB, "holoparallax", "static_haunt", 0, GuardStyle.GLOW, ContextProfile.STORM_CHARGED, "block.note_block.chime", 1.4F, 268, "thermal"));
 		all.add(row(444, 0x99682B, 0x403E0C, "orbittrap", "moonbeam_shafts", 0, GuardStyle.STING, ContextProfile.LOW_HEALTH_FRENZY, "block.note_block.harp", 1.2F, 84, "sketch"));
 		// F89 "Effigy Haunt" (crimson x ember)
@@ -709,7 +709,7 @@ public final class EffectRegistry {
 		all.add(row(524, 0x4C992B, 0x0C4011, "orbittrap", "arcane_turbines", 1, GuardStyle.STING, ContextProfile.STORM_CHARGED, "ambient.soul_sand_valley.loop", 1.4F, 171, "spectral"));
 		// F105 "Leviathan Vigil" (gold x gold)
 		all.add(row(525, 0x90F52C, 0x126708, "crystalsdf", "abyssal_jellies", 1, GuardStyle.GUST, ContextProfile.CROWD_SCALE, "ambient.underwater.loop", 1.2F, 208, "aberration"));
-		all.add(row(526, 0x92E055, 0x9151A8, "fluidink", "void_rifts_inside", 1, GuardStyle.SLOW, ContextProfile.LOW_HEALTH_FRENZY, "ambient.warped_forest.loop", 1.0F, 245, "underwater"));
+		all.add(row(526, 0xFFD447, 0x2E8BC0, "fluidink", "void_rifts_inside", 1, GuardStyle.SLOW, ContextProfile.LOW_HEALTH_FRENZY, "ambient.warped_forest.loop", 1.0F, 245, "underwater")); // novelty retheme: Rubber Duck Pond
 		all.add(row(527, 0x4FB812, 0x004D03, "irisfilm", "leviathan_shadow", 1, GuardStyle.BLIND, ContextProfile.HEALTH_HUE, "block.amethyst_block.chime", 0.8F, 282, "thermal"));
 		all.add(row(528, 0xA6FA82, 0xBB74AD, "aethersmoke", "anglerfish_lures", 1, GuardStyle.DARK, ContextProfile.NIGHT_BLOOM, "block.amethyst_block.resonate", 0.6F, 98, "sketch"));
 		all.add(row(529, 0x45992B, 0x0C4014, "stainedglass", "singularity_heart", 1, GuardStyle.GLOW, ContextProfile.STORM_CHARGED, "block.beacon.ambient", 1.3F, 135, "starburst"));
@@ -768,7 +768,7 @@ public final class EffectRegistry {
 		all.add(row(573, 0x82FAAB, 0xBB747F, "solarflare", "meteor_shower_veil", 2, GuardStyle.STING, ContextProfile.NONE, "ambient.nether_wastes.loop", 0.6F, 216, "radialblur"));
 		all.add(row(574, 0x2B9958, 0x0C4036, "deepice", "zodiac_beams", 2, GuardStyle.GUST, ContextProfile.NIGHT_BLOOM, "ambient.soul_sand_valley.loop", 1.3F, 253, "glitch"));
 		// F115 "Pollen Realm" (lime x verdant)
-		all.add(row(575, 0x2CF557, 0x086742, "runecircuit", "dryad_bloom", 2, GuardStyle.SLOW, ContextProfile.STORM_CHARGED, "ambient.underwater.loop", 1.1F, 290, "duotone"));
+		all.add(row(575, 0x00FF41, 0x003B12, "runecircuit", "dryad_bloom", 2, GuardStyle.SLOW, ContextProfile.STORM_CHARGED, "ambient.underwater.loop", 1.1F, 290, "duotone")); // novelty retheme: Matrix Rain
 		all.add(row(576, 0x55E07C, 0xA85181, "oilslick", "mushroom_ring_sprites", 2, GuardStyle.BLIND, ContextProfile.LOW_HEALTH_FRENZY, "ambient.warped_forest.loop", 0.9F, 106, "kaleido"));
 		all.add(row(577, 0x12B84C, 0x004D3A, "plasmaglobe", "pollen_elementals", 2, GuardStyle.DARK, ContextProfile.HEALTH_HUE, "block.amethyst_block.chime", 0.7F, 143, "huedrift"));
 		all.add(row(578, 0x82FAB4, 0xBB747A, "ectoplasm", "vine_serpents", 2, GuardStyle.GLOW, ContextProfile.NONE, "block.amethyst_block.resonate", 1.4F, 180, "dreamblur"));
@@ -812,7 +812,7 @@ public final class EffectRegistry {
 		// F122 "Owllight Rite" (verdant x teal)
 		all.add(row(610, 0x2CF5BB, 0x085C67, "phantomecho", "ghost_wolves", 3, GuardStyle.NONE, ContextProfile.STORM_CHARGED, "entity.dolphin.ambient_water", 1.3F, 259, "underwater"));
 		all.add(row(611, 0x55E0C2, 0xA85155, "gravlens", "spectral_stag", 3, GuardStyle.GUST, ContextProfile.CROWD_SCALE, "entity.elder_guardian.ambient", 1.1F, 296, "thermal"));
-		all.add(row(612, 0x12B89E, 0x003A4D, "mycelia", "wisp_owls", 3, GuardStyle.SLOW, ContextProfile.HEALTH_HUE, "entity.evoker.cast_spell", 0.9F, 112, "sketch"));
+		all.add(row(612, 0xD9B98C, 0x5C3A1E, "mycelia", "wisp_owls", 3, GuardStyle.SLOW, ContextProfile.HEALTH_HUE, "entity.evoker.cast_spell", 0.9F, 112, "sketch")); // novelty retheme: Whispering Library
 		all.add(row(613, 0x82FAF0, 0xBB9274, "solarflare", "bone_fish", 3, GuardStyle.BLIND, ContextProfile.NONE, "entity.firework_rocket.twinkle", 0.7F, 149, "starburst"));
 		all.add(row(614, 0x2B9997, 0x0C2C40, "deepice", "carrion_crows", 3, GuardStyle.DARK, ContextProfile.NIGHT_BLOOM, "entity.glow_squid.ambient", 1.4F, 186, "vhs"));
 		// F123 "Purgatory Rite" (verdant x teal)
@@ -837,7 +837,7 @@ public final class EffectRegistry {
 		all.add(row(630, 0x2CF5F5, 0x084167, "phantomecho", "constellation_wheel", 3, GuardStyle.SLOW, ContextProfile.STORM_CHARGED, "block.beacon.power_select", 0.9F, 115, "glitch"));
 		all.add(row(631, 0x55D7E0, 0xA86551, "gravlens", "comet_orrery", 3, GuardStyle.BLIND, ContextProfile.CROWD_SCALE, "block.bell.resonate", 0.7F, 152, "duotone"));
 		all.add(row(632, 0x12A2B8, 0x00244D, "mycelia", "eclipse_disc", 3, GuardStyle.DARK, ContextProfile.LOW_HEALTH_FRENZY, "block.big_dripleaf.tilt_down", 1.4F, 189, "kaleido"));
-		all.add(row(633, 0x82E2FA, 0xBBA674, "solarflare", "meteor_shower_veil", 3, GuardStyle.GLOW, ContextProfile.HEALTH_HUE, "block.bubble_column.upwards_ambient", 1.2F, 226, "huedrift"));
+		all.add(row(633, 0xFFB03A, 0x8A3B12, "solarflare", "meteor_shower_veil", 3, GuardStyle.GLOW, ContextProfile.HEALTH_HUE, "block.bubble_column.upwards_ambient", 1.2F, 226, "huedrift")); // novelty retheme: Taco Fiesta
 		all.add(row(634, 0x2B7C99, 0x0C1D40, "deepice", "zodiac_beams", 3, GuardStyle.STING, ContextProfile.NONE, "block.candle.ambient", 1.0F, 263, "dreamblur"));
 		// F127 "Vineheart Rite" (teal x teal)
 		all.add(row(635, 0x2CE6F5, 0x083A67, "runecircuit", "dryad_bloom", 3, GuardStyle.NONE, ContextProfile.NIGHT_BLOOM, "block.chorus_flower.grow", 0.8F, 300, "moire"));
@@ -938,7 +938,7 @@ public final class EffectRegistry {
 		// F143 "Genie Watch" (azure x indigo)
 		all.add(row(715, 0x572CF5, 0x420867, "runecircuit", "sentinel_totems", 4, GuardStyle.GUST, ContextProfile.NONE, "entity.parrot.fly", 1.0F, 166, "duotone"));
 		all.add(row(716, 0x7C55E0, 0x81A851, "oilslick", "valkyrie_patrol", 4, GuardStyle.SLOW, ContextProfile.NIGHT_BLOOM, "entity.puffer_fish.blow_up", 0.8F, 203, "kaleido"));
-		all.add(row(717, 0x4C12B8, 0x3A004D, "plasmaglobe", "shield_maidens", 4, GuardStyle.BLIND, ContextProfile.STORM_CHARGED, "entity.slime.squish", 0.6F, 240, "huedrift"));
+		all.add(row(717, 0xFF6A2A, 0x531B8C, "plasmaglobe", "shield_maidens", 4, GuardStyle.BLIND, ContextProfile.STORM_CHARGED, "entity.slime.squish", 0.6F, 240, "huedrift")); // novelty retheme: Lava Lamp
 		all.add(row(718, 0xB482FA, 0x7ABB74, "ectoplasm", "cerberus_watch", 4, GuardStyle.DARK, ContextProfile.CROWD_SCALE, "entity.warden.heartbeat", 1.3F, 277, "dreamblur"));
 		all.add(row(719, 0x602B99, 0x3A0C40, "voidrift", "genie_plumes", 4, GuardStyle.GLOW, ContextProfile.LOW_HEALTH_FRENZY, "particle.soul_escape", 1.1F, 93, "moire"));
 		// F144 "Nightmare Veil" (azure x indigo)
@@ -951,7 +951,7 @@ public final class EffectRegistry {
 		all.add(row(725, 0x742CF5, 0x500867, "crystalsdf", "wailing_choir", 5, GuardStyle.GLOW, ContextProfile.NONE, "ambient.underwater.loop", 0.8F, 94, "starburst"));
 		all.add(row(726, 0x9055E0, 0x75A851, "fluidink", "grave_hands", 5, GuardStyle.STING, ContextProfile.STORM_CHARGED, "ambient.warped_forest.loop", 0.6F, 131, "vhs"));
 		all.add(row(727, 0x6312B8, 0x45004D, "irisfilm", "ecto_mist_maze", 5, GuardStyle.NONE, ContextProfile.CROWD_SCALE, "block.amethyst_block.chime", 1.3F, 168, "gloom"));
-		all.add(row(728, 0xC582FA, 0x74BB78, "aethersmoke", "phantom_bells", 5, GuardStyle.SLOW, ContextProfile.LOW_HEALTH_FRENZY, "block.amethyst_block.resonate", 1.1F, 205, "tint"));
+		all.add(row(728, 0xF6EFE7, 0x86AFDD, "aethersmoke", "phantom_bells", 5, GuardStyle.SLOW, ContextProfile.LOW_HEALTH_FRENZY, "block.amethyst_block.resonate", 1.1F, 205, "tint")); // novelty retheme: Cat Cloud
 		all.add(row(729, 0x702B99, 0x400C3F, "stainedglass", "seance_table", 5, GuardStyle.BLIND, ContextProfile.HEALTH_HUE, "block.beacon.ambient", 0.9F, 242, "wobble"));
 		// F146 "Spiritwolf Veil" (azure x indigo)
 		all.add(row(730, 0x822CF5, 0x570867, "phantomecho", "ghost_wolves", 5, GuardStyle.DARK, ContextProfile.NONE, "block.beacon.power_select", 0.7F, 279, "vignette"));
@@ -985,7 +985,7 @@ public final class EffectRegistry {
 		all.add(row(754, 0x972B99, 0x400C2C, "deepice", "zodiac_beams", 5, GuardStyle.BLIND, ContextProfile.LOW_HEALTH_FRENZY, "block.water.ambient", 1.3F, 283, "vhs"));
 		// F151 "Fairyring Veil" (indigo x violet)
 		all.add(row(755, 0xCA2CF5, 0x670855, "runecircuit", "dryad_bloom", 5, GuardStyle.DARK, ContextProfile.HEALTH_HUE, "entity.allay.ambient_with_item", 1.1F, 99, "gloom"));
-		all.add(row(756, 0xCC55E0, 0x51A852, "oilslick", "mushroom_ring_sprites", 5, GuardStyle.STING, ContextProfile.NIGHT_BLOOM, "entity.axolotl.swim", 0.9F, 136, "tint"));
+		all.add(row(756, 0xF77FBE, 0x8A5A2B, "oilslick", "mushroom_ring_sprites", 5, GuardStyle.STING, ContextProfile.NIGHT_BLOOM, "entity.axolotl.swim", 0.9F, 136, "tint")); // novelty retheme: Donut Drift
 		all.add(row(757, 0xAA12B8, 0x4D0035, "plasmaglobe", "pollen_elementals", 5, GuardStyle.NONE, ContextProfile.STORM_CHARGED, "entity.bee.loop", 0.7F, 173, "wobble"));
 		all.add(row(758, 0xF882FA, 0x74BB97, "ectoplasm", "vine_serpents", 5, GuardStyle.GUST, ContextProfile.CROWD_SCALE, "entity.blaze.burn", 1.4F, 210, "vignette"));
 		all.add(row(759, 0x992B93, 0x400C28, "voidrift", "seasons_wheel", 5, GuardStyle.SLOW, ContextProfile.LOW_HEALTH_FRENZY, "entity.breeze.idle_ground", 1.2F, 247, "chroma"));
@@ -1048,7 +1048,7 @@ public final class EffectRegistry {
 		all.add(row(806, 0xE05592, 0x51A891, "fluidink", "enderman_stalkers", 6, GuardStyle.NONE, ContextProfile.NONE, "entity.axolotl.swim", 0.8F, 218, "underwater"));
 		all.add(row(807, 0xB8124F, 0x4D0300, "irisfilm", "skeleton_army", 6, GuardStyle.GUST, ContextProfile.NIGHT_BLOOM, "entity.bee.loop", 0.6F, 255, "thermal"));
 		all.add(row(808, 0xFA82A6, 0x74ADBB, "aethersmoke", "slime_ghosts", 6, GuardStyle.SLOW, ContextProfile.STORM_CHARGED, "entity.blaze.burn", 1.3F, 292, "sketch"));
-		all.add(row(809, 0x992B45, 0x40140C, "stainedglass", "drowned_procession", 6, GuardStyle.BLIND, ContextProfile.CROWD_SCALE, "entity.breeze.idle_ground", 1.1F, 108, "starburst"));
+		all.add(row(809, 0xDCD6F5, 0x8A0FBF, "stainedglass", "drowned_procession", 6, GuardStyle.BLIND, ContextProfile.CROWD_SCALE, "entity.breeze.idle_ground", 1.1F, 108, "starburst")); // novelty retheme: Disco Dome
 		// F162 "Constellation Chorus" (magenta x magenta)
 		all.add(row(810, 0xF52C82, 0x67080B, "phantomecho", "constellation_wheel", 6, GuardStyle.DARK, ContextProfile.HEALTH_HUE, "entity.dolphin.ambient_water", 0.9F, 145, "vhs"));
 		all.add(row(811, 0xE05588, 0x51A897, "gravlens", "comet_orrery", 6, GuardStyle.GLOW, ContextProfile.NONE, "entity.elder_guardian.ambient", 0.7F, 182, "gloom"));
@@ -1084,7 +1084,7 @@ public final class EffectRegistry {
 		all.add(row(836, 0xE05556, 0x519AA8, "oilslick", "valkyrie_patrol", 6, GuardStyle.STING, ContextProfile.HEALTH_HUE, "block.conduit.ambient", 1.1F, 223, "sketch"));
 		all.add(row(837, 0xB81D12, 0x4D2400, "plasmaglobe", "shield_maidens", 6, GuardStyle.NONE, ContextProfile.NONE, "block.copper_bulb.turn_on", 0.9F, 260, "starburst"));
 		all.add(row(838, 0xFA9182, 0x748FBB, "ectoplasm", "cerberus_watch", 6, GuardStyle.GUST, ContextProfile.NIGHT_BLOOM, "block.enchantment_table.use", 0.7F, 297, "vhs"));
-		all.add(row(839, 0x99402B, 0x402B0C, "voidrift", "genie_plumes", 6, GuardStyle.SLOW, ContextProfile.STORM_CHARGED, "block.end_portal_frame.fill", 1.4F, 113, "gloom"));
+		all.add(row(839, 0x0D0714, 0x02000A, "voidrift", "genie_plumes", 6, GuardStyle.SLOW, ContextProfile.STORM_CHARGED, "block.end_portal_frame.fill", 1.4F, 113, "gloom")); // novelty retheme: Void Absolute
 
 		return List.copyOf(all);
 	}

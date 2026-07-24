@@ -160,7 +160,7 @@ vec2 warp2(vec2 p, vec2 per, float t) {
 // iq cosine palette, baked per effect; used ONLY for bounded accents
 vec3 accentPalette(float t) {
     return vec3(0.5) + vec3(0.5) * cos(6.2831853 * (vec3(0.4941, 1.2917, 0.6931) * t
-        + vec3(0.6561, 0.4440, 0.8367)));
+        + vec3(0.9012, 0.3460, 0.4602)));
 }
 
 // 3-stop shadow/body/highlight grade (two smoothstep segments): every
@@ -264,7 +264,7 @@ void main() {
     // baked primary->secondary relation (hue angle + sat/value ratios) --
     // the vertex format has no second color attribute, and deriving both
     // from the live vertexColor keeps the owner recolor authoritative.
-    vec3 secCol = clamp(satLift(clamp(hueSpin(baseCol, -2.6000), 0.0, 1.0), 0.7910) * 0.7480, 0.0, 1.0);
+    vec3 secCol = clamp(satLift(clamp(hueSpin(baseCol, -0.2695), 0.0, 1.0), 1.1256) * 0.5412, 0.0, 1.0);
 
     // [layer:deep:parallax3d_fbm_x3]
     // Interior volume: correlated parallax PLANES of ONE deep field on

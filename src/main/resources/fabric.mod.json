@@ -47,7 +47,8 @@
 			"com.bubbleshield.gametest.CombatGameTests",
 			"com.bubbleshield.gametest.UxGameTests",
 			"com.bubbleshield.gametest.VisualEventsGameTests",
-			"com.bubbleshield.gametest.SurfaceDynamicsGameTests"
+			"com.bubbleshield.gametest.SurfaceDynamicsGameTests",
+			"com.bubbleshield.gametest.InteriorGameTests"
 		]
 	},
 	"mixins": [

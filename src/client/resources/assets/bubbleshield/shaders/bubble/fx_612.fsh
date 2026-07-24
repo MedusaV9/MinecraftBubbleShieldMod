@@ -138,7 +138,7 @@ vec3 thinFilm(float thickness) {
 // iq cosine palette, baked per effect; used ONLY for bounded accents
 vec3 accentPalette(float t) {
     return vec3(0.5) + vec3(0.5) * cos(6.2831853 * (vec3(1.1699, 0.6640, 0.6223) * t
-        + vec3(0.3745, 0.5669, 0.8038)));
+        + vec3(0.7647, 0.5688, 0.7685)));
 }
 
 // 3-stop shadow/body/highlight grade (two smoothstep segments): every
@@ -252,7 +252,7 @@ void main() {
     // baked primary->secondary relation (hue angle + sat/value ratios) --
     // the vertex format has no second color attribute, and deriving both
     // from the live vertexColor keeps the owner recolor authoritative.
-    vec3 secCol = clamp(satLift(clamp(hueSpin(baseCol, 0.4224), 0.0, 1.0), 1.1084) * 0.4185, 0.0, 1.0);
+    vec3 secCol = clamp(satLift(clamp(hueSpin(baseCol, -0.1391), 0.0, 1.0), 1.8992) * 0.4240, 0.0, 1.0);
 
     // [layer:deep:parallax3d_voro_x3]
     // Interior volume: correlated parallax PLANES of ONE deep field on

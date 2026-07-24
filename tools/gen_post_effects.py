@@ -626,7 +626,7 @@ EFFECTS = [
     # F88 "Spiritstorm Haunt" (crimson x ember)
     (0xFFF5652C, 0xFF674908, "spectral"),   # 440 Spiritstorm Sigh
     (0xFFE08655, 0xFF517BA8, "aberration"), # 441 Spiritstorm Cavalcade
-    (0xFFB85812, 0xFF4D3F00, "underwater"), # 442 Spiritstorm Garland
+    (0xFF36C9C6, 0xFF0E4A66, "underwater"), # 442 Aquarium (novelty retheme)
     (0xFFFABC82, 0xFF7475BB, "thermal"),    # 443 Spiritstorm Nocturne
     (0xFF99682B, 0xFF403E0C, "sketch"),     # 444 Spiritstorm Spark
     # F89 "Effigy Haunt" (crimson x ember)
@@ -727,7 +727,7 @@ EFFECTS = [
     (0xFF4C992B, 0xFF0C4011, "spectral"),   # 524 Athanor Gleam
     # F105 "Leviathan Vigil" (gold x gold)
     (0xFF90F52C, 0xFF126708, "aberration"), # 525 Leviathan Lament
-    (0xFF92E055, 0xFF9151A8, "underwater"), # 526 Leviathan Wake
+    (0xFFFFD447, 0xFF2E8BC0, "underwater"), # 526 Rubber Duck Pond (novelty retheme)
     (0xFF4FB812, 0xFF004D03, "thermal"),    # 527 Leviathan Crown
     (0xFFA6FA82, 0xFFBB74AD, "sketch"),     # 528 Leviathan Waltz
     (0xFF45992B, 0xFF0C4014, "starburst"),  # 529 Leviathan Embers
@@ -786,7 +786,7 @@ EFFECTS = [
     (0xFF82FAAB, 0xFFBB747F, "radialblur"), # 573 Cometfall Drift
     (0xFF2B9958, 0xFF0C4036, "glitch"),     # 574 Cometfall Kindling
     # F115 "Pollen Realm" (lime x verdant)
-    (0xFF2CF557, 0xFF086742, "duotone"),    # 575 Pollen Murmur
+    (0xFF00FF41, 0xFF003B12, "duotone"),    # 575 Matrix Rain (novelty retheme)
     (0xFF55E07C, 0xFFA85181, "kaleido"),    # 576 Pollen Pilgrimage
     (0xFF12B84C, 0xFF004D3A, "huedrift"),   # 577 Pollen Circlet
     (0xFF82FAB4, 0xFFBB747A, "dreamblur"),  # 578 Pollen Lullaby
@@ -830,7 +830,7 @@ EFFECTS = [
     # F122 "Owllight Rite" (verdant x teal)
     (0xFF2CF5BB, 0xFF085C67, "underwater"), # 610 Owllight Murmur
     (0xFF55E0C2, 0xFFA85155, "thermal"),    # 611 Owllight Pilgrimage
-    (0xFF12B89E, 0xFF003A4D, "sketch"),     # 612 Owllight Circlet
+    (0xFFD9B98C, 0xFF5C3A1E, "sketch"),     # 612 Whispering Library (novelty retheme)
     (0xFF82FAF0, 0xFFBB9274, "starburst"),  # 613 Owllight Lullaby
     (0xFF2B9997, 0xFF0C2C40, "vhs"),        # 614 Owllight Flare
     # F123 "Purgatory Rite" (verdant x teal)
@@ -855,7 +855,7 @@ EFFECTS = [
     (0xFF2CF5F5, 0xFF084167, "glitch"),     # 630 Eclipse Lament
     (0xFF55D7E0, 0xFFA86551, "duotone"),    # 631 Eclipse Wake
     (0xFF12A2B8, 0xFF00244D, "kaleido"),    # 632 Eclipse Crown
-    (0xFF82E2FA, 0xFFBBA674, "huedrift"),   # 633 Eclipse Waltz
+    (0xFFFFB03A, 0xFF8A3B12, "huedrift"),   # 633 Taco Fiesta (novelty retheme)
     (0xFF2B7C99, 0xFF0C1D40, "dreamblur"),  # 634 Eclipse Embers
     # F127 "Vineheart Rite" (teal x teal)
     (0xFF2CE6F5, 0xFF083A67, "moire"),      # 635 Vineheart Hush
@@ -956,7 +956,7 @@ EFFECTS = [
     # F143 "Genie Watch" (azure x indigo)
     (0xFF572CF5, 0xFF420867, "duotone"),    # 715 Genie Murmur
     (0xFF7C55E0, 0xFF81A851, "kaleido"),    # 716 Genie Pilgrimage
-    (0xFF4C12B8, 0xFF3A004D, "huedrift"),   # 717 Genie Circlet
+    (0xFFFF6A2A, 0xFF531B8C, "huedrift"),   # 717 Lava Lamp (novelty retheme)
     (0xFFB482FA, 0xFF7ABB74, "dreamblur"),  # 718 Genie Lullaby
     (0xFF602B99, 0xFF3A0C40, "moire"),      # 719 Genie Flare
     # F144 "Nightmare Veil" (azure x indigo)
@@ -969,7 +969,7 @@ EFFECTS = [
     (0xFF742CF5, 0xFF500867, "starburst"),  # 725 Gravehand Dirge
     (0xFF9055E0, 0xFF75A851, "vhs"),        # 726 Gravehand Retinue
     (0xFF6312B8, 0xFF45004D, "gloom"),      # 727 Gravehand Wreath
-    (0xFFC582FA, 0xFF74BB78, "tint"),       # 728 Gravehand Serenade
+    (0xFFF6EFE7, 0xFF86AFDD, "tint"),       # 728 Cat Cloud (novelty retheme)
     (0xFF702B99, 0xFF400C3F, "wobble"),     # 729 Gravehand Glimmer
     # F146 "Spiritwolf Veil" (azure x indigo)
     (0xFF822CF5, 0xFF570867, "vignette"),   # 730 Spiritwolf Plaint
@@ -1003,7 +1003,7 @@ EFFECTS = [
     (0xFF972B99, 0xFF400C2C, "vhs"),        # 754 Meteorveil Flare
     # F151 "Fairyring Veil" (indigo x violet)
     (0xFFCA2CF5, 0xFF670855, "gloom"),      # 755 Fairyring Sigh
-    (0xFFCC55E0, 0xFF51A852, "tint"),       # 756 Fairyring Cavalcade
+    (0xFFF77FBE, 0xFF8A5A2B, "tint"),       # 756 Donut Drift (novelty retheme)
     (0xFFAA12B8, 0xFF4D0035, "wobble"),     # 757 Fairyring Garland
     (0xFFF882FA, 0xFF74BB97, "vignette"),   # 758 Fairyring Nocturne
     (0xFF992B93, 0xFF400C28, "chroma"),     # 759 Fairyring Spark
@@ -1066,7 +1066,7 @@ EFFECTS = [
     (0xFFE05592, 0xFF51A891, "underwater"), # 806 Ossuary Wake
     (0xFFB8124F, 0xFF4D0300, "thermal"),    # 807 Ossuary Crown
     (0xFFFA82A6, 0xFF74ADBB, "sketch"),     # 808 Ossuary Waltz
-    (0xFF992B45, 0xFF40140C, "starburst"),  # 809 Ossuary Embers
+    (0xFFDCD6F5, 0xFF8A0FBF, "starburst"),  # 809 Disco Dome (novelty retheme)
     # F162 "Constellation Chorus" (magenta x magenta)
     (0xFFF52C82, 0xFF67080B, "vhs"),        # 810 Constellation Hush
     (0xFFE05588, 0xFF51A897, "gloom"),      # 811 Constellation Cortege
@@ -1102,7 +1102,7 @@ EFFECTS = [
     (0xFFE05556, 0xFF519AA8, "sketch"),     # 836 Aegis Vanguard
     (0xFFB81D12, 0xFF4D2400, "starburst"),  # 837 Aegis Chaplet
     (0xFFFA9182, 0xFF748FBB, "vhs"),        # 838 Aegis Berceuse
-    (0xFF99402B, 0xFF402B0C, "gloom"),      # 839 Aegis Gleam
+    (0xFF0D0714, 0xFF02000A, "gloom"),      # 839 Void Absolute (novelty retheme)
 ]
 
 # Per-family knob packing (see the module docstring). Each entry maps the

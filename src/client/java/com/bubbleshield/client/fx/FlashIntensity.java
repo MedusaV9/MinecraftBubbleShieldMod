@@ -3,11 +3,12 @@ package com.bubbleshield.client.fx;
 /**
  * Static holder for the contact-flash intensity multiplier applied by
  * {@code ShieldFlashElement} (0 disables the overlay entirely, 1 is the authored
- * strength).
+ * strength). Also scales the interior blink envelope ({@code InteriorRenderer}),
+ * so photosensitive players can damp every pulsing visual with one option.
  *
- * <p>TODO(WP-Cfg): a {@code BubbleShieldClientConfig} does not exist yet; when the
- * config work package lands, this holder should be backed by (or replaced with) its
- * persisted {@code flashIntensity} option instead of the hardcoded default.
+ * <p>Backed by the persisted {@code flashIntensity} option:
+ * {@code BubbleShieldClientConfig.load()} pushes the configured value here during
+ * client init (closing WP-Evt's wiring TODO).
  */
 public final class FlashIntensity {
 	private static float value = 1.0F;

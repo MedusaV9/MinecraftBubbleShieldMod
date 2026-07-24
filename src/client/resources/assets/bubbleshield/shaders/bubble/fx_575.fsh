@@ -150,7 +150,7 @@ float caustic3(vec3 p, float t) {
 // iq cosine palette, baked per effect; used ONLY for bounded accents
 vec3 accentPalette(float t) {
     return vec3(0.5) + vec3(0.5) * cos(6.2831853 * (vec3(0.9557, 0.6579, 0.5295) * t
-        + vec3(0.0888, 0.7585, 0.5710)));
+        + vec3(0.0025, 0.7781, 0.5279)));
 }
 
 // 3-stop shadow/body/highlight grade (two smoothstep segments): every
@@ -263,7 +263,7 @@ void main() {
     // baked primary->secondary relation (hue angle + sat/value ratios) --
     // the vertex format has no second color attribute, and deriving both
     // from the live vertexColor keeps the owner recolor authoritative.
-    vec3 secCol = clamp(satLift(clamp(hueSpin(baseCol, 0.4153), 0.0, 1.0), 1.1242) * 0.4204, 0.0, 1.0);
+    vec3 secCol = clamp(satLift(clamp(hueSpin(baseCol, 0.0526), 0.0, 1.0), 1.0000) * 0.3000, 0.0, 1.0);
 
     // [layer:deep:parallax3d_caustic_x3]
     // Interior volume: correlated parallax PLANES of ONE deep field on
